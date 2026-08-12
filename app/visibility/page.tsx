@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getVisibility } from "@/lib/api";
+import { getVisibility } from "@/lib/engine";
 
 const badgeStyles = {
   warn: "bg-amber-50 text-amber-700",

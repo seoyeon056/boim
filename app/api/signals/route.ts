@@ -1,12 +1,11 @@
 import {NextResponse } from "next/server";
-import {transactions } from "@/data/transactions";
 import {getCorseHeaders } from "@/lib/cors";
-import{calculateSignals } from "@/lib/signals";
+import{getSignals } from "@/lib/engine";
 
 export async function GET(){
-    // /api/signals로 주소 정보 요청하면 실행 
-    const signals = calculateSignals(transactions); 
-    // 합성 거래 10건을 성장 신호 계산기에 넣기 
+    // /api/signals로 주소 정보 요청하면 실행
+    // 합성 거래 10건을 성장 신호 계산기에 넣기 (lib/engine.ts)
+    const signals = await getSignals();
     return NextResponse.json(signals,{
         headers: getCorseHeaders(), 
     },);

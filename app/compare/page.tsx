@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSignals, getVisibility } from "@/lib/api";
+import { getSignals, getVisibility } from "@/lib/engine";
 
 const signalBadgeStyles = {
   positive: "bg-emerald-50 text-emerald-700",

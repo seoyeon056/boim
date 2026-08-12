@@ -1,41 +1,12 @@
-export type CompanyResult = {
-  id: string;
-  name: string;
-  description: string;
-  region: string;
-  industry: string;
-  employees: number;
-};
+import type { Company } from "@/data/companies";
 
-export type VisibilityResult = {
-  company: string;
-  newsCount: number;
-  patentCount: number;
-  jobCount: number;
-  visibilityScore: number;
-};
+export type CompanyResult = Company;
 
-export type SignalResult = {
-  customerCount: number;
-  previousCustomersCount: number;
-  customerGrowthRate: number;
-  repeatPurchaseRate: number;
-  topCustomerConcentration: number;
-  topCustomerName: string;
-};
-
-const ENGINE_URL = process.env.NEXT_PUBLIC_ENGINE_URL;
-
-function getEngineUrl(): string {
-  if (!ENGINE_URL) {
-    throw new Error("NEXT_PUBLIC_ENGINE_URL이 설정되지 않았습니다.");
-  }
-
-  return ENGINE_URL;
-}
-
+// 클라이언트 컴포넌트에서 쓰는 API 클라이언트.
+// 페이지와 API가 같은 앱에서 서빙되므로 상대 경로로 호출한다.
+// 서버 컴포넌트는 이 파일 대신 lib/engine.ts 를 직접 쓴다.
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${getEngineUrl()}${path}`, {
+  const response = await fetch(path, {
     cache: "no-store",
   });
 
@@ -55,15 +26,5 @@ export function searchCompanies(query: string) {
 
   const encodedQuery = encodeURIComponent(normalizedQuery);
 
-  return request<CompanyResult[]>(
-    `/api/companies?q=${encodedQuery}`,
-  );
-}
-
-export function getVisibility() {
-  return request<VisibilityResult>("/api/visibility");
-}
-
-export function getSignals() {
-  return request<SignalResult>("/api/signals");
+  return request<CompanyResult[]>(`/api/companies?q=${encodedQuery}`);
 }

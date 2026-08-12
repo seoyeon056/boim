@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSignals } from "@/lib/api";
+import { getSignals } from "@/lib/engine";
 
 const valueStyles = {
   positive: "text-emerald-600",
