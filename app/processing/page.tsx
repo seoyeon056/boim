@@ -9,6 +9,34 @@ import { useRouter } from "next/navigation";
 // "분석이 진행되는 것처럼" 보이는 합성(가짜) 진행 화면이다.
 // ─────────────────────────────────────────────
 
+function IconCheck({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M3 8.5l3 3 7-7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconWarning({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M8 5.2v3.6M8 11h.01"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 // 각 진행 단계가 가리키는 작업(=화면에 표시할 체크리스트 항목)
 const TASKS = [
   "거래명세서 분석",
@@ -51,15 +79,23 @@ const STEP_MS = 600; // 상태 하나당 약 0.6초 → 13단계 ≈ 7.8초
 const FINISH_HOLD_MS = 800; // 마지막 상태를 잠시 유지한 뒤 이동
 
 // /review 화면이 기대하는 합성 분석 결과.
+// 거래가 여러 건일 때도 검수 화면이 동작하는지 보여주기 위해 배열로 둔다.
 // 실제 분석 대신, 계약서에서 신뢰도 낮은 항목을 발견했다는
-// 이 화면의 이야기와 맞아떨어지도록 한 항목의 신뢰도를 낮게 둔다.
-const SYNTHETIC_RESULT = {
-  date: { value: "2026-03-15", confidence: 0.98 },
-  customer: { value: "대한상사", confidence: 0.97 },
-  item: { value: "산업용 부품 세트", confidence: 0.88 },
-  amount: { value: 12500000, confidence: 0.62 },
-  isFallback: false,
-};
+// 이 화면의 이야기와 맞아떨어지도록 일부 항목의 신뢰도를 낮게 둔다.
+const SYNTHETIC_RESULT = [
+  {
+    date: { value: "2026-03-15", confidence: 0.98 },
+    customer: { value: "대한상사", confidence: 0.97 },
+    item: { value: "산업용 부품 세트", confidence: 0.88 },
+    amount: { value: 12500000, confidence: 0.62 },
+  },
+  {
+    date: { value: "2026-04-02", confidence: 0.91 },
+    customer: { value: "미래모터스", confidence: 0.99 },
+    item: { value: "브레이크 센서", confidence: 0.7 },
+    amount: { value: 14000000, confidence: 0.55 },
+  },
+];
 
 // 각 작업(task)이 현재 어떤 상태인지 계산한다.
 type TaskState = "pending" | "processing" | "done" | "warning";
@@ -127,10 +163,13 @@ export default function ProcessingPage() {
   const progress = Math.round(((stepIndex + 1) / STEPS.length) * 100);
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-100 px-4 py-16">
+    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
       <div className="mx-auto w-full max-w-md">
         <main className="flex flex-col gap-3 text-center sm:text-left">
-          <p className="text-sm font-semibold text-blue-600">STEP 3.5</p>
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
+            STEP 3.5
+          </p>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             내부 문서 분석 중
           </h1>
@@ -142,19 +181,19 @@ export default function ProcessingPage() {
         </main>
 
         {/* 현재 진행 상태 배너 */}
-        <div className="mt-8 flex items-center gap-4 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mt-8 flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-6">
           {isFinished ? (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xl text-emerald-600">
-              ✅
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <IconCheck className="h-5 w-5" />
             </span>
           ) : current.phase === "warning" ? (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-xl text-amber-600">
-              ⚠
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <IconWarning className="h-5 w-5" />
             </span>
           ) : (
             <span
               aria-hidden
-              className="h-10 w-10 shrink-0 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600"
+              className="h-10 w-10 shrink-0 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900"
             />
           )}
           <div className="min-w-0">
@@ -168,7 +207,7 @@ export default function ProcessingPage() {
         </div>
 
         {/* 진행률 바 */}
-        <div className="mt-4 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-6">
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-sm text-zinc-500">진행률</span>
             <span className="text-base font-semibold text-zinc-900">
@@ -177,14 +216,14 @@ export default function ProcessingPage() {
           </div>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
             <div
-              className="h-full rounded-full bg-blue-600 transition-all duration-500 ease-out"
+              className="h-full rounded-full bg-zinc-900 transition-all duration-500 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
 
         {/* 항목별 체크리스트 */}
-        <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-6">
           {TASKS.map((task, index) => {
             const state = taskStateOf(index, stepIndex);
             const isCurrent = current.task === index && !isFinished;
@@ -193,19 +232,19 @@ export default function ProcessingPage() {
               <div
                 key={task}
                 className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${
-                  isCurrent ? "bg-blue-50" : "bg-transparent"
+                  isCurrent ? "bg-zinc-100" : "bg-transparent"
                 }`}
               >
                 {/* 상태 아이콘 */}
                 {state === "processing" && (
                   <span
                     aria-hidden
-                    className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600"
+                    className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900"
                   />
                 )}
                 {state === "done" && (
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-600">
-                    ✓
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                    <IconCheck className="h-3 w-3" />
                   </span>
                 )}
                 {state === "warning" && (
@@ -226,7 +265,7 @@ export default function ProcessingPage() {
                       : state === "warning"
                         ? "text-amber-700"
                         : isCurrent
-                          ? "text-blue-700"
+                          ? "text-zinc-900"
                           : "text-zinc-800"
                   }`}
                 >

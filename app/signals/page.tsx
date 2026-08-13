@@ -18,8 +18,8 @@ export default async function SignalsPage() {
     result = await getSignals();
   } catch {
     return (
-      <div className="flex flex-1 items-center justify-center bg-zinc-100 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-sm">
+      <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 text-center">
           <h1 className="text-xl font-bold text-zinc-900">
             성장 신호를 불러오지 못했습니다
           </h1>
@@ -30,7 +30,7 @@ export default async function SignalsPage() {
 
           <Link
             href="/review"
-            className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-blue-600 px-6 font-semibold text-white"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-zinc-900 px-6 font-semibold text-white"
           >
             이전으로
           </Link>
@@ -64,7 +64,7 @@ export default async function SignalsPage() {
   ];
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-100 px-4 py-16">
+    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
       <div className="mx-auto w-full max-w-md">
         <Link
           href="/review"
@@ -74,7 +74,10 @@ export default async function SignalsPage() {
         </Link>
 
         <main className="mt-8 flex flex-col gap-3 text-center sm:text-left">
-          <p className="text-sm font-semibold text-blue-600">STEP 5</p>
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
+            STEP 5
+          </p>
 
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             내부 성장 신호
@@ -89,7 +92,7 @@ export default async function SignalsPage() {
           {signals.map((signal) => (
             <div
               key={signal.label}
-              className="flex flex-col gap-2 rounded-2xl bg-white p-5 shadow-sm"
+              className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-5"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold text-zinc-700">
@@ -120,7 +123,7 @@ export default async function SignalsPage() {
 
         <Link
           href="/compare"
-          className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-700"
+          className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800"
         >
           외부와 내부 비교하기
         </Link>
