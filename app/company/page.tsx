@@ -56,7 +56,7 @@ export default function CompanyPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-100 px-4 py-16">
+    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
       <div className="mx-auto w-full max-w-md">
         <Link
           href="/"
@@ -66,7 +66,8 @@ export default function CompanyPage() {
         </Link>
 
         <main className="mt-8 flex flex-col gap-3 text-center sm:text-left">
-          <p className="text-sm font-semibold text-blue-600">
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
             STEP 1
           </p>
 
@@ -103,13 +104,13 @@ export default function CompanyPage() {
             }}
             placeholder="예: 한빛정밀"
             autoComplete="off"
-            className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-base text-zinc-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            className="h-12 w-full rounded-xl border border-zinc-200 bg-white px-4 text-base text-zinc-900 outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-200"
           />
 
           <button
             type="submit"
             disabled={isSearching || query.trim() === ""}
-            className="inline-flex h-12 items-center justify-center rounded-full bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500"
+            className="inline-flex h-12 items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
           >
             {isSearching ? "검색 중..." : "기업 검색"}
           </button>
@@ -117,7 +118,7 @@ export default function CompanyPage() {
 
         <div className="mt-5 flex flex-col gap-3">
           {errorMessage && (
-            <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+            <p className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-700">
               {errorMessage}
             </p>
           )}
@@ -126,7 +127,7 @@ export default function CompanyPage() {
             hasSearched &&
             !isSearching &&
             companies.length === 0 && (
-              <p className="rounded-2xl bg-white p-4 text-sm text-zinc-500 shadow-sm">
+              <p className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
                 정확히 일치하는 기업이 없습니다.
               </p>
             )}
@@ -140,10 +141,10 @@ export default function CompanyPage() {
                 key={company.id}
                 type="button"
                 onClick={() => setSelectedCompany(company)}
-                className={`w-full rounded-2xl border p-5 text-left shadow-sm transition ${
+                className={`w-full rounded-xl border p-5 text-left transition ${
                   isSelected
-                    ? "border-blue-500 bg-blue-50 ring-4 ring-blue-100"
-                    : "border-transparent bg-white hover:border-zinc-300"
+                    ? "border-zinc-900 bg-zinc-50 ring-4 ring-zinc-200"
+                    : "border-zinc-200 bg-white hover:border-zinc-400"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -157,7 +158,7 @@ export default function CompanyPage() {
                     </p>
                   </div>
 
-                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                  <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
                     검색 결과
                   </span>
                 </div>
@@ -181,7 +182,7 @@ export default function CompanyPage() {
         </div>
 
         {selectedCompany && (
-          <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
+          <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-5">
             <p className="text-sm text-zinc-500">
               선택한 기업
             </p>
@@ -192,7 +193,7 @@ export default function CompanyPage() {
 
             <Link
               href="/visibility"
-              className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-700"
+              className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800"
             >
               이 기업 진단하기
             </Link>

@@ -10,6 +10,7 @@ import type {
   StoredCategory,
   StoredUpload,
 } from "@/types/document";
+import { useUploadStore } from "./upload-store";
 
 // ─────────────────────────────────────────────
 // 파일 선택 제한값 (실제 서버 업로드는 하지 않지만,
@@ -19,15 +20,14 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 파일 한 개 최대 100MB
 const MAX_FILES_PER_CATEGORY = 5; // 카테고리당 최대 5개
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 전체 최대 500MB
 
-const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg"];
-const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
-
-// 카테고리별로 화면에서 관리하는 상태
-// (실제 File 객체는 오직 이 state 안에서만 관리한다.)
-interface CategoryState {
-  status: DocumentStatus;
-  files: File[];
-}
+const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel", // .xls
+];
 
 function isAllowedFile(file: File): boolean {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -48,15 +48,8 @@ function formatBytes(bytes: number): string {
 export default function UploadPage() {
   const router = useRouter();
 
-  // 모든 카테고리의 초기 상태는 "미선택(empty)"
-  const [states, setStates] = useState<Record<string, CategoryState>>(() =>
-    Object.fromEntries(
-      documentCategories.map((category) => [
-        category.id,
-        { status: "empty" as DocumentStatus, files: [] as File[] },
-      ]),
-    ),
-  );
+  // 모든 카테고리의 초기 상태는 "미선택(empty)" (upload-store.tsx에서 관리)
+  const { states, setStates } = useUploadStore();
 
   // 카테고리별 오류 메시지 (파일 제한 위반 시 표시)
   const [errors, setErrors] = useState<Record<string, string | null>>({});
@@ -91,30 +84,31 @@ export default function UploadPage() {
     // 파일 선택을 취소한 경우: 기존 선택을 그대로 둔다.
     if (!fileList || fileList.length === 0) return;
 
-    const files = Array.from(fileList);
+    const newFiles = Array.from(fileList);
+    const existingFiles = states[categoryId]?.files ?? [];
 
     // 1) 지원하지 않는 형식 검사
-    if (files.some((file) => !isAllowedFile(file))) {
+    if (newFiles.some((file) => !isAllowedFile(file))) {
       setCategoryError(
         categoryId,
-        "지원하지 않는 파일 형식입니다. PDF, PNG, JPG, JPEG 파일을 선택해 주세요.",
+        "지원하지 않는 파일 형식입니다. PDF, PNG, JPG, JPEG, xlsx, xls 파일을 선택해 주세요.",
       );
       input.value = "";
       return;
     }
 
-    // 2) 카테고리당 최대 개수 검사
-    if (files.length > MAX_FILES_PER_CATEGORY) {
+    // 2) 카테고리당 최대 개수 검사 (이미 추가된 파일 + 새로 선택한 파일)
+    if (existingFiles.length + newFiles.length > MAX_FILES_PER_CATEGORY) {
       setCategoryError(
         categoryId,
-        "한 문서 종류에는 최대 5개의 파일을 선택할 수 있습니다.",
+        `한 문서 종류에는 최대 5개의 파일을 선택할 수 있습니다. (현재 ${existingFiles.length}개 선택됨)`,
       );
       input.value = "";
       return;
     }
 
     // 3) 파일 한 개 최대 크기 검사
-    if (files.some((file) => file.size > MAX_FILE_SIZE)) {
+    if (newFiles.some((file) => file.size > MAX_FILE_SIZE)) {
       setCategoryError(
         categoryId,
         "파일 한 개는 최대 100MB까지 선택할 수 있습니다. 용량이 큰 문서는 연도별 또는 분기별로 나누어 선택하는 것을 권장합니다.",
@@ -123,9 +117,13 @@ export default function UploadPage() {
       return;
     }
 
-    // 4) 전체 선택 용량 검사
-    const newCategorySize = files.reduce((sum, file) => sum + file.size, 0);
-    if (totalSizeExcluding(categoryId) + newCategorySize > MAX_TOTAL_SIZE) {
+    // 4) 전체 선택 용량 검사 (이미 추가된 파일 포함)
+    const existingCategorySize = existingFiles.reduce((sum, file) => sum + file.size, 0);
+    const newCategorySize = newFiles.reduce((sum, file) => sum + file.size, 0);
+    if (
+      totalSizeExcluding(categoryId) + existingCategorySize + newCategorySize >
+      MAX_TOTAL_SIZE
+    ) {
       setCategoryError(
         categoryId,
         "전체 파일 크기는 최대 500MB까지 선택할 수 있습니다.",
@@ -134,12 +132,32 @@ export default function UploadPage() {
       return;
     }
 
-    // 검사를 모두 통과: 새 선택 결과로 교체하고 상태를 uploaded로 바꾼다.
+    // 검사를 모두 통과: 기존 선택에 새 파일을 추가하고 상태를 uploaded로 바꾼다.
     // (파일을 선택하면 "해당 문서 없음" 상태는 자동으로 해제된다.)
     setStates((prev) => ({
       ...prev,
-      [categoryId]: { status: "uploaded", files },
+      [categoryId]: { status: "uploaded", files: [...existingFiles, ...newFiles] },
     }));
+    setCategoryError(categoryId, null);
+    setIsSaved(false);
+    setNotice(null);
+    // 같은 파일을 다시 선택할 수 있도록 input 값을 초기화한다.
+    input.value = "";
+  }
+
+  // 파일 하나만 선택 목록에서 제거한다.
+  function removeFile(categoryId: string, fileIndex: number) {
+    setStates((prev) => {
+      const current = prev[categoryId];
+      const nextFiles = current.files.filter((_, index) => index !== fileIndex);
+      return {
+        ...prev,
+        [categoryId]: {
+          status: nextFiles.length > 0 ? "uploaded" : "empty",
+          files: nextFiles,
+        },
+      };
+    });
     setCategoryError(categoryId, null);
     setIsSaved(false);
     setNotice(null);
@@ -242,14 +260,14 @@ export default function UploadPage() {
     if (state.status === "uploaded") {
       return {
         text: `파일 ${state.files.length}개 선택 완료`,
-        className: "bg-blue-50 text-blue-700",
+        className: "bg-emerald-50 text-emerald-700",
       };
     }
-    return { text: "미선택", className: "bg-zinc-100 text-zinc-500" };
+    return { text: "미선택", className: "bg-slate-50 text-zinc-500" };
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-100 px-4 py-16">
+    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
       <div className="mx-auto w-full max-w-md">
         <Link
           href="/visibility"
@@ -259,7 +277,10 @@ export default function UploadPage() {
         </Link>
 
         <main className="mt-8 flex flex-col gap-3 text-center sm:text-left">
-          <p className="text-sm font-semibold text-blue-600">STEP 3</p>
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
+            STEP 3
+          </p>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             내부 문서 업로드
           </h1>
@@ -270,7 +291,7 @@ export default function UploadPage() {
         </main>
 
         {/* 상단 안내 */}
-        <div className="mt-8 rounded-2xl bg-red-50 p-5 text-sm leading-6 text-red-700">
+        <div className="mt-8 rounded-xl bg-red-50 p-5 text-sm leading-6 text-red-700">
           <p className="font-semibold">
             현재 공모전 시연 버전에서는 실제 기업 문서나 개인정보를 업로드하지
             마세요.
@@ -278,7 +299,7 @@ export default function UploadPage() {
           <p className="mt-2">합성 문서만 사용해 주세요.</p>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-amber-50 p-5 text-sm leading-6 text-amber-700">
+        <div className="mt-4 rounded-xl bg-amber-50 p-5 text-sm leading-6 text-amber-700">
           <p>
             실제 서비스에서는 기업이 공개 범위를 직접 정하며, 거래처명과 민감
             정보는 마스킹할 수 있습니다.
@@ -305,7 +326,7 @@ export default function UploadPage() {
             return (
               <div
                 key={category.id}
-                className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-sm"
+                className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-6"
               >
                 {/* 헤더: 문서 종류 + 상태 배지 */}
                 <div className="flex items-start justify-between gap-3">
@@ -325,52 +346,96 @@ export default function UploadPage() {
                 </div>
 
                 {/* 파일 선택 버튼 (label과 input을 연결해 접근성 확보) */}
-                <label
-                  htmlFor={inputId}
-                  className="flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dashed border-zinc-300 px-4 py-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-50"
-                >
-                  <span className="text-base font-semibold text-zinc-800">
-                    {category.name} 파일 선택
-                  </span>
-                  <span className="text-sm text-zinc-500">
-                    클릭하여 파일을 선택하세요 (여러 개 선택 가능)
-                  </span>
-                  <span className="mt-1 text-xs text-zinc-400">
-                    최대 5개 · 파일당 최대 100MB · PDF, PNG, JPG, JPEG
-                  </span>
-                  <input
-                    id={inputId}
-                    ref={(el) => {
-                      inputRefs.current[category.id] = el;
-                    }}
-                    type="file"
-                    multiple
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    aria-label={`${category.name} 파일 선택`}
-                    onChange={(event) => handleFileChange(category.id, event)}
-                    className="hidden"
-                  />
-                </label>
+                {/* 5개 미만이면 계속 추가로 선택할 수 있고, 5개에 도달하면 비활성화된다. */}
+                {(() => {
+                  const atMax = state.files.length >= MAX_FILES_PER_CATEGORY;
+                  return (
+                    <label
+                      htmlFor={inputId}
+                      className={`flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
+                        atMax
+                          ? "cursor-not-allowed border-zinc-200 bg-zinc-50"
+                          : "cursor-pointer border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
+                      }`}
+                    >
+                      <span
+                        className={`text-base font-semibold ${atMax ? "text-zinc-400" : "text-zinc-800"}`}
+                      >
+                        {atMax
+                          ? "최대 개수까지 선택했습니다"
+                          : state.files.length > 0
+                            ? `${category.name} 파일 더 추가`
+                            : `${category.name} 파일 선택`}
+                      </span>
+                      <span className="text-sm text-zinc-500">
+                        {atMax
+                          ? "먼저 파일을 취소한 뒤 다시 선택할 수 있습니다."
+                          : "클릭하여 파일을 선택하세요 (여러 개 선택 가능)"}
+                      </span>
+                      <span className="mt-1 text-xs text-zinc-400">
+                        최대 5개 · 파일당 최대 100MB · PDF, PNG, JPG, JPEG, XLSX
+                        {state.files.length > 0 && ` · 현재 ${state.files.length}개`}
+                      </span>
+                      <input
+                        id={inputId}
+                        ref={(el) => {
+                          inputRefs.current[category.id] = el;
+                        }}
+                        type="file"
+                        multiple
+                        disabled={atMax}
+                        accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"
+                        aria-label={`${category.name} 파일 선택`}
+                        onChange={(event) => handleFileChange(category.id, event)}
+                        className="hidden"
+                      />
+                    </label>
+                  );
+                })()}
 
-                {/* 선택된 파일 목록 + 개수 + 합계 용량 */}
+                {/* 선택된 파일: 파일마다 별도 행 + 개별 취소 버튼 */}
                 {state.status === "uploaded" && state.files.length > 0 && (
-                  <div className="flex flex-col gap-2 rounded-xl bg-zinc-100 px-4 py-3 text-sm">
-                    <ul className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-3">
+                    {state.files.some((file) => file.type.startsWith("image/")) && (
+                      <div className="flex flex-wrap gap-2">
+                        {state.files
+                          .filter((file) => file.type.startsWith("image/"))
+                          .map((file, index) => (
+                            <img
+                              key={`${file.name}-${index}`}
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="h-16 w-16 rounded-lg object-cover ring-1 ring-zinc-200"
+                            />
+                          ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-2">
                       {state.files.map((file, index) => (
-                        <li
+                        <div
                           key={`${file.name}-${index}`}
-                          className="flex justify-between gap-3 text-zinc-700"
+                          className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm"
                         >
-                          <span className="min-w-0 break-all font-medium text-zinc-900">
-                            {file.name}
-                          </span>
-                          <span className="shrink-0 text-zinc-500">
-                            {formatBytes(file.size)}
-                          </span>
-                        </li>
+                          <div className="flex min-w-0 flex-col">
+                            <span className="min-w-0 break-all font-medium text-zinc-900">
+                              {file.name}
+                            </span>
+                            <span className="text-zinc-500">{formatBytes(file.size)}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(category.id, index)}
+                            aria-label={`${file.name} 취소`}
+                            className="shrink-0 rounded-full p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       ))}
-                    </ul>
-                    <div className="flex justify-between gap-3 border-t border-zinc-200 pt-2 text-zinc-500">
+                    </div>
+
+                    <div className="flex justify-between gap-3 px-1 text-sm text-zinc-500">
                       <span>파일 {state.files.length}개</span>
                       <span>합계 {formatBytes(categorySize)}</span>
                     </div>
@@ -386,12 +451,24 @@ export default function UploadPage() {
 
                 {/* 하단 조작 영역: 해당 문서 없음 / 전체 취소 */}
                 <div className="flex items-center justify-between gap-3">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-600">
+                  <label
+                    className={`flex items-center gap-2 text-sm ${
+                      state.status === "uploaded"
+                        ? "cursor-not-allowed text-zinc-300"
+                        : "cursor-pointer text-zinc-600"
+                    }`}
+                    title={
+                      state.status === "uploaded"
+                        ? "파일을 먼저 전체 취소한 뒤 선택할 수 있습니다."
+                        : undefined
+                    }
+                  >
                     <input
                       type="checkbox"
                       checked={state.status === "missing"}
+                      disabled={state.status === "uploaded"}
                       onChange={() => toggleMissing(category.id)}
-                      className="h-4 w-4 rounded border-zinc-300 text-blue-600"
+                      className="h-4 w-4 rounded border-zinc-300 text-zinc-900 disabled:cursor-not-allowed"
                     />
                     해당 문서 없음
                   </label>
@@ -412,7 +489,7 @@ export default function UploadPage() {
         </div>
 
         {/* 전체 선택 용량 */}
-        <div className="mt-6 flex flex-col gap-2 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mt-6 flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-6">
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-sm text-zinc-500">전체 선택 용량</span>
             <span className="text-base font-semibold text-zinc-900">
@@ -437,7 +514,7 @@ export default function UploadPage() {
 
         {/* 저장 완료 메시지 */}
         {isSaved && (
-          <div className="mt-6 rounded-xl bg-blue-50 px-4 py-3 text-center text-sm font-semibold leading-6 text-blue-700">
+          <div className="mt-6 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-semibold leading-6 text-emerald-700">
             <p>문서 선택 정보가 저장되었습니다.</p>
             <p className="mt-1 font-medium">
               다음 단계에서 분석 진행 화면을 연결합니다.
@@ -456,7 +533,7 @@ export default function UploadPage() {
           type="button"
           onClick={handleAnalyze}
           disabled={!allHandled}
-          className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           내부 문서 분석 시작
         </button>

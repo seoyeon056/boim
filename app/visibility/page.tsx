@@ -13,8 +13,8 @@ export default async function VisibilityPage() {
     visibility = await getVisibility();
   } catch {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center bg-zinc-100 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-sm">
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 text-center">
           <h1 className="text-xl font-bold text-zinc-900">
             외부 정보를 불러오지 못했습니다
           </h1>
@@ -25,7 +25,7 @@ export default async function VisibilityPage() {
 
           <Link
             href="/company"
-            className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-blue-600 px-6 font-semibold text-white"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-zinc-900 px-6 font-semibold text-white"
           >
             이전으로
           </Link>
@@ -62,7 +62,7 @@ export default async function VisibilityPage() {
   ];
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-100 px-4 py-16">
+    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
       <div className="mx-auto w-full max-w-md">
         <Link
           href="/company"
@@ -72,6 +72,11 @@ export default async function VisibilityPage() {
         </Link>
 
         <main className="mt-8 flex flex-col gap-6 text-center sm:text-left">
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
+            STEP 2
+          </p>
+
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             외부 가시성 점수
           </h1>
@@ -80,7 +85,7 @@ export default async function VisibilityPage() {
             {metrics.map((metric) => (
               <div
                 key={metric.label}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-white p-5 shadow-sm"
+                className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-5"
               >
                 <div className="flex flex-col gap-1 text-left">
                   <span className="text-sm text-zinc-500">{metric.label}</span>
@@ -107,14 +112,14 @@ export default async function VisibilityPage() {
             정보가 적다는 사실이 성장하지 않는다는 뜻은 아닙니다.
           </p>
 
-          <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-700">
+          <p className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-700">
             가시성 점수는 기업의 성장성을 평가한 점수가 아니라, 외부에서 확인
             가능한 공개 정보의 수준을 나타냅니다.
           </p>
 
           <Link
             href="/upload"
-            className="inline-flex h-12 items-center justify-center rounded-full bg-blue-600 px-6 text-base font-semibold text-white transition-colors hover:bg-blue-700"
+            className="inline-flex h-12 items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800"
           >
             내부 거래로 증명하기
           </Link>
