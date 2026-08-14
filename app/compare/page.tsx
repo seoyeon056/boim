@@ -1,40 +1,47 @@
 import Link from "next/link";
 import { getSignals, getVisibility } from "@/lib/engine";
+import { readCompanyId, withCompany } from "@/lib/company-link";
+import { buildDiagnosis } from "@/lib/diagnosis";
 
 const externalBadgeStyles = {
-  warn: "bg-amber-500/20 text-amber-300 font-bold",
-  muted: "bg-zinc-700 text-zinc-300",
+  warn: "bg-amber-900/60 text-amber-400",
+  muted: "bg-zinc-700 text-zinc-400",
 };
 
 const signalBadgeStyles = {
-  positive: "bg-emerald-50 text-emerald-700 font-bold",
-  caution: "bg-amber-50 text-amber-700 font-bold",
+  positive: "bg-emerald-700 text-emerald-200",
+  caution: "bg-amber-900/60 text-amber-400",
 };
 
-export default async function ComparePage() {
+const statusLabel = {
+  positive: "긍정",
+  caution: "주의",
+};
+
+export default async function ComparePage(props: PageProps<"/compare">) {
+  const companyId = readCompanyId((await props.searchParams).company);
+
   let visibility;
   let signalResult;
 
   try {
     [visibility, signalResult] = await Promise.all([
-      getVisibility(),
-      getSignals(),
+      getVisibility(companyId),
+      getSignals(companyId),
     ]);
   } catch {
     return (
-      <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 text-center">
-          <h1 className="text-xl font-bold text-zinc-900">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-12">
+        <div className="rounded-lg border border-zinc-100 bg-white px-6 py-6 text-center">
+          <h1 className="text-lg font-semibold text-zinc-900">
             비교 정보를 불러오지 못했습니다
           </h1>
 
-          <p className="mt-3 text-sm leading-6 text-zinc-600">
-            잠시 후 다시 시도해 주세요.
-          </p>
+          <p className="mt-2 text-sm text-zinc-500">잠시 후 다시 시도해 주세요.</p>
 
           <Link
-            href="/signals"
-            className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-zinc-900 px-6 font-semibold text-white"
+            href={withCompany("/signals", companyId)}
+            className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
           >
             이전으로
           </Link>
@@ -43,219 +50,189 @@ export default async function ComparePage() {
     );
   }
 
-  // 외부 지표도 내부처럼 tone으로 긍정/부정 차이를 표시한다.
+  // 외부 지표는 lib/visibility.ts 에서 건수에 맞는 해석과 tone까지 계산해서 온다.
   // tone: "warn"(주황, 강조) = 정보 부족 / "muted"(회색) = 흔적 일부 확인
-  const externalMetrics = [
-    {
-      label: "뉴스",
-      value: `${visibility.newsCount}건`,
-      interpretation: "언론 노출 부족",
-      tone: "warn" as const,
-    },
-    {
-      label: "특허",
-      value: `${visibility.patentCount}건`,
-      interpretation: "공개 기술 흔적 일부 확인",
-      tone: "muted" as const,
-    },
-    {
-      label: "채용공고",
-      value: `${visibility.jobCount}건`,
-      interpretation: "공개 채용 활동 없음",
-      tone: "muted" as const,
-    },
-    {
-      label: "가시성 점수",
-      value: `${visibility.visibilityScore}점`,
-      interpretation: "외부 정보 부족",
-      tone: "warn" as const,
-    },
-  ];
+  const externalMetrics = visibility.metrics;
 
+  // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
   const internalSignals = [
     {
       label: "거래처 증가율",
-      value: `+${signalResult.customerGrowthRate}%`,
-      status: "긍정",
-      tone: "positive" as const,
+      value: `${signalResult.customerGrowthRate > 0 ? "+" : ""}${signalResult.customerGrowthRate}%`,
+      status: statusLabel[signalResult.statuses.customerGrowthRate],
+      tone: signalResult.statuses.customerGrowthRate,
     },
     {
       label: "재구매율",
       value: `${signalResult.repeatPurchaseRate}%`,
-      status: "긍정",
-      tone: "positive" as const,
+      status: statusLabel[signalResult.statuses.repeatPurchaseRate],
+      tone: signalResult.statuses.repeatPurchaseRate,
     },
     {
       label: "최대 거래처 집중도",
       value: `${signalResult.topCustomerConcentration}%`,
-      status: "주의",
-      tone: "caution" as const,
+      status: statusLabel[signalResult.statuses.topCustomerConcentration],
+      tone: signalResult.statuses.topCustomerConcentration,
     },
   ];
 
+  const diagnosis = buildDiagnosis(visibility, signalResult);
+
   const diagnosisEvidence = [
-    `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 거래처 ${signalResult.customerCount}곳`,
+    `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.customerCount}곳`,
     `재구매율 ${signalResult.repeatPurchaseRate}%`,
     `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
   ];
 
   return (
-    <div className="flex flex-1 flex-col bg-slate-50 px-4 pb-16 pt-10">
-      <div className="mx-auto w-full max-w-4xl">
-        <main className="flex flex-col gap-3 text-center sm:text-left">
-          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
-            <span className="h-px w-6 bg-zinc-900" aria-hidden="true" />
-            STEP 5
-          </p>
+    <div className="mx-auto w-full max-w-3xl px-6 py-12">
+      <Link
+        href={withCompany("/signals", companyId)}
+        className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
+      >
+        ← 이전으로
+      </Link>
 
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-            외부와 내부 비교
-          </h1>
+      <div className="mt-8 flex flex-col gap-1">
+        <span className="font-mono text-xs font-medium uppercase tracking-widest text-zinc-400">
+          Step 05
+        </span>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+          외부와 내부 비교
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          공개 데이터와 내부 분석 결과를 함께 비교합니다.
+        </p>
+      </div>
 
-          <p className="text-base leading-7 text-zinc-500">
-            공개 데이터와 내부 분석 결과를 함께 비교합니다.
-          </p>
-        </main>
-
-        {/* 외부 / 내부 카드 (모바일 세로, 데스크톱 가로) */}
-        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* 왼쪽: 외부에서 본 모습 (어두운 카드) */}
-          <div className="flex flex-col gap-5 rounded-2xl bg-zinc-900 p-6">
-            <h2 className="text-xl font-bold text-white">
-              외부에서 본 {visibility.company}
-            </h2>
-
-            <div className="flex flex-col gap-3">
-              {externalMetrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-zinc-800 p-4"
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm text-zinc-400">
-                      {metric.label}
-                    </span>
-
-                    <span className="text-lg font-bold text-white">
-                      {metric.value}
-                    </span>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs ${externalBadgeStyles[metric.tone]}`}
-                  >
-                    {metric.interpretation}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <p className="mt-auto rounded-xl bg-zinc-800 p-4 text-sm leading-6 text-zinc-300">
-              외부 데이터만으로는 최근 성장 활동을 확인하기 어렵습니다.
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* 왼쪽: 외부에서 본 모습 (어두운 카드) */}
+        <div className="flex flex-col gap-4 rounded-lg bg-zinc-900 p-5">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+              외부에서 본
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-white">
+              {visibility.company}
             </p>
           </div>
 
-          {/* 오른쪽: 내부에서 본 모습 (초록 카드 — 외부는 가려짐(검정), 내부는 성장(초록)이라는 대비) */}
-          <div className="flex flex-col gap-5 rounded-2xl bg-emerald-800 p-6">
-            <div className="flex flex-col gap-2">
-              <h2 className="text-xl font-bold text-white">
-                내부에서 본 {visibility.company}
-              </h2>
-
-              <p className="text-sm leading-6 text-emerald-100">
-                거래명세서·세금계산서·발주서 등 여러 내부 문서를 종합
-                분석했습니다.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {internalSignals.map((signal) => (
-                <div
-                  key={signal.label}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-emerald-700 px-4 py-3"
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm text-emerald-100">
-                      {signal.label}
-                    </span>
-
-                    <span className="text-lg font-bold text-white">
-                      {signal.value}
-                    </span>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      signalBadgeStyles[signal.tone]
-                    }`}
-                  >
-                    {signal.status}
-                  </span>
+          <div className="flex flex-col overflow-hidden rounded-md border border-zinc-700">
+            {externalMetrics.map((metric, i) => (
+              <div
+                key={metric.key}
+                className={`flex items-center justify-between gap-3 bg-zinc-800 px-4 py-3 ${
+                  i < externalMetrics.length - 1
+                    ? "border-b border-zinc-700"
+                    : ""
+                }`}
+              >
+                <div>
+                  <p className="text-[10px] text-zinc-500">{metric.label}</p>
+                  <p className="font-mono text-base font-semibold text-white">
+                    {metric.value}
+                  </p>
                 </div>
-              ))}
-            </div>
-
-            <p className="mt-auto rounded-xl bg-emerald-900 p-4 text-sm leading-6 text-emerald-50">
-              반복 거래와 거래처 확장 신호가 확인되었습니다.
-            </p>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    externalBadgeStyles[metric.tone]
+                  }`}
+                >
+                  {metric.interpretation}
+                </span>
+              </div>
+            ))}
           </div>
+
+          <p className="mt-auto text-xs leading-5 text-zinc-500">
+            {visibility.summary}
+          </p>
         </div>
 
-        <div className="mt-6 flex flex-col gap-5 rounded-xl border border-zinc-200 bg-white p-6">
-          <h2 className="text-xl font-bold text-zinc-900">BO:IM 진단</h2>
-
-          {/* 결론부: 테두리로 강조 */}
-          <div className="rounded-2xl border-2 border-zinc-900 bg-zinc-50 p-5">
-            <p className="text-base font-bold leading-7 text-zinc-900">
-              외부 정보는 부족하지만, 내부 거래에서는 뚜렷한 성장 신호가
-              확인되었습니다. 다만 특정 거래처 의존 위험은 함께 살펴봐야 합니다.
+        {/* 오른쪽: 내부에서 본 모습 (초록 카드 — 외부는 가려짐(검정), 내부는 성장(초록)이라는 대비) */}
+        <div className="flex flex-col gap-4 rounded-lg bg-emerald-900 p-5">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-600">
+              내부에서 본
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-white">
+              {visibility.company}
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 text-base leading-7 text-zinc-600">
-            <p>
-              외부에서는 공개 정보가 부족해 기업의 최근 성장 활동을 확인하기
-              어렵습니다.
-            </p>
-
-            <p>
-              내부 문서에서는 거래처 증가와 반복 거래 신호가 확인되었습니다.
-            </p>
-
-            <p>
-              다만 최대 거래처인 {signalResult.topCustomerName}가 전체 매출의{" "}
-              {signalResult.topCustomerConcentration}%를 차지해 특정 거래처 의존
-              위험을 함께 살펴봐야 합니다.
-            </p>
-          </div>
-
-          {/* 근거부: 진하게 표시해서 결론부와는 다른 톤으로 눈에 띄게 */}
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-semibold text-zinc-700">근거</span>
-
-            <ul className="flex flex-col gap-2">
-              {diagnosisEvidence.map((evidence) => (
-                <li
-                  key={evidence}
-                  className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-zinc-900"
+          <div className="flex flex-col overflow-hidden rounded-md border border-emerald-700">
+            {internalSignals.map((signal, i) => (
+              <div
+                key={signal.label}
+                className={`flex items-center justify-between gap-3 bg-emerald-800 px-4 py-3 ${
+                  i < internalSignals.length - 1
+                    ? "border-b border-emerald-700"
+                    : ""
+                }`}
+              >
+                <div>
+                  <p className="text-[10px] text-emerald-400">{signal.label}</p>
+                  <p className="font-mono text-base font-semibold text-white">
+                    {signal.value}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    signalBadgeStyles[signal.tone]
+                  }`}
                 >
-                  {evidence}
-                </li>
-              ))}
-            </ul>
+                  {signal.status}
+                </span>
+              </div>
+            ))}
           </div>
 
-          <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-700">
-            본 결과는 신용평가가 아닌 AI 기반 성장 진단 참고 자료입니다.
+          <p className="mt-auto text-xs leading-5 text-emerald-400">
+            {diagnosis.internalCardNote}
           </p>
-
-          <Link
-            href="/share"
-            className="inline-flex h-12 items-center justify-center rounded-lg bg-zinc-900 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800"
-          >
-            공개 범위 설정하기
-          </Link>
         </div>
+      </div>
+
+      {/* BO:IM 진단 */}
+      <div className="mt-4 rounded-lg border border-zinc-100 bg-white p-5">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+          BO:IM 진단
+        </p>
+
+        <p className="mt-3 text-sm font-medium leading-7 text-zinc-900">
+          {diagnosis.headline}
+        </p>
+
+        <div className="mt-3 flex flex-col gap-2 text-[13px] leading-[1.7] text-zinc-500">
+          <p>{diagnosis.external}</p>
+          <p>{diagnosis.internal}</p>
+          <p>{diagnosis.risk}</p>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-1.5">
+          {diagnosisEvidence.map((evidence) => (
+            <div
+              key={evidence}
+              className="flex items-center gap-2 rounded-md bg-zinc-50 px-3 py-2"
+            >
+              <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-400" />
+              <span className="font-mono text-xs text-zinc-600">{evidence}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-700">
+          본 결과는 신용평가가 아닌 AI 기반 성장 진단 참고 자료입니다.
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href={withCompany("/share", visibility.companyId)}
+          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+        >
+          공개 범위 설정하기
+        </Link>
       </div>
     </div>
   );

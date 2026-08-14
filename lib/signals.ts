@@ -47,7 +47,7 @@ export function calculateTopCustomerConcentration(items: Transaction[], ){
     if (totalSales === 0){
         return{
             topCustomerName: null,
-            topCustomerConcentrate: 0,
+            topCustomerConcentration: 0,
         };
     }
     let topCustomerName: string|null = null;
@@ -66,22 +66,41 @@ export function calculateTopCustomerConcentration(items: Transaction[], ){
     };
 }
 
+// 긍정/주의 판단 기준.
+const REPEAT_CAUTION = 50; // 재구매율이 이 값 미만이면 반복 거래가 약하다고 본다.
+const CONCENTRATION_CAUTION = 40; // 집중도가 이 값 이상이면 특정 거래처 의존 위험으로 본다.
+
+export type SignalTone = "positive" | "caution";
+
 export function calculateSignals(items: Transaction[],){
     const growth = calculateCustomerGrowthRate(items);
     const top = calculateTopCustomerConcentration(items);
+    const repeatPurchaseRate = calculateRepeatPurchaseRate(items);
+
     return {
         customerCount: countCustomers(items),
         previousCustomersCount: growth.previousCount,
         customerGrowthRate: growth.growthRate,
-        repeatPurchaseRate: growth.growthRate, 
+        repeatPurchaseRate,
         topCustomerConcentration: top.topCustomerConcentration,
         topCustomerName: top.topCustomerName,
 
+        // 기업마다 값이 다르므로 긍정/주의도 값에서 판단한다.
+        // (화면에서 "긍정"을 하드코딩하면 다른 기업에서 틀린 표시가 된다.)
         statuses: {
-            customerGrowthRate: "positive",
-            repeatPurchaseRate: "positive",
-            topCustomerConcentration: "cuation",
+            customerGrowthRate: (
+                growth.growthRate > 0 ? "positive" : "caution"
+            ) as SignalTone,
+            repeatPurchaseRate: (
+                repeatPurchaseRate >= REPEAT_CAUTION ? "positive" : "caution"
+            ) as SignalTone,
+            topCustomerConcentration: (
+                top.topCustomerConcentration >= CONCENTRATION_CAUTION
+                    ? "caution"
+                    : "positive"
+            ) as SignalTone,
         },
     };
 }
 
+export type Signals = ReturnType<typeof calculateSignals>;
