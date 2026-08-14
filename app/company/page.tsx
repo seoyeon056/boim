@@ -33,16 +33,9 @@ export default function CompanyPage() {
     try {
       setIsSearching(true);
 
-      const results = await searchCompanies(normalizedQuery);
-
-      // API가 비슷한 이름까지 보내더라도
-      // 사용자가 입력한 기업명과 정확히 같은 기업만 남긴다.
-      const exactMatches = results.filter(
-        (company) =>
-          company.name.trim().toLowerCase() === normalizedQuery.toLowerCase(),
-      );
-
-      setCompanies(exactMatches);
+      // 서버가 관련도 순으로 정렬해 보내주므로 그대로 표시한다.
+      // (여기서 다시 거르면 "한빛 정밀"이나 "lg" 같은 부분 검색이 막힌다.)
+      setCompanies(await searchCompanies(normalizedQuery));
     } catch {
       setCompanies([]);
       setErrorMessage(
@@ -70,7 +63,7 @@ export default function CompanyPage() {
           진단할 기업을 검색하세요
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          기업명을 정확하게 입력해 주세요.
+          기업명 전체가 아니어도 됩니다. 일부만 입력해 보세요.
         </p>
       </div>
 
@@ -120,9 +113,15 @@ export default function CompanyPage() {
           !isSearching &&
           companies.length === 0 && (
             <div className="rounded-md border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
-              정확히 일치하는 기업이 없습니다.
+              검색 결과가 없습니다. 다른 이름으로 찾아보세요.
             </div>
           )}
+
+        {companies.length > 0 && (
+          <p className="px-1 font-mono text-[11px] text-zinc-400">
+            검색 결과 {companies.length}곳
+          </p>
+        )}
 
         {companies.map((company) => {
           const isSelected = selectedCompany?.id === company.id;
