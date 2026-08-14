@@ -2,46 +2,55 @@
 // API 라우트와 서버 컴포넌트가 같은 함수를 쓰도록 한곳에 모아둔다.
 // 서버 컴포넌트는 자기 앱의 API를 HTTP로 다시 부르지 않고 여기서 바로 읽는다.
 import { companies, type Company } from "@/data/companies";
-import { transactions } from "@/data/transactions";
+import { transactions, type Transaction } from "@/data/transactions";
+import { findExternalPresence } from "@/data/visibility";
 import { calculateSignals } from "@/lib/signals";
+import { calculateVisibility, type Visibility } from "@/lib/visibility";
 
-export type Visibility = {
-  company: string;
-  newsCount: number;
-  patentCount: number;
-  jobCount: number;
-  visibilityScore: number;
-  interpretations: {
-    news: string;
-    patent: string;
-    job: string;
-    visibility: string;
-  };
-  notice: string;
-};
+export type { Visibility } from "@/lib/visibility";
 
-export async function getVisibility(): Promise<Visibility> {
-  return {
-    company: "한빛정밀",
+// 기업을 지정하지 않고 들어온 경우(직접 URL 진입, 파라미터 없는 API 호출)에는
+// 첫 기업을 기준으로 보여준다.
+const DEFAULT_COMPANY = companies[0];
 
-    newsCount: 0,
-    patentCount: 2,
-    jobCount: 0,
-    visibilityScore: 20,
+export async function getCompany(companyId?: string): Promise<Company> {
+  if (!companyId) {
+    return DEFAULT_COMPANY;
+  }
 
-    interpretations: {
-      news: "언론 노출 부족",
-      patent: "공개 기술 흔적 일부 확인",
-      job: "공개 채용 활동 없음",
-      visibility: "외부 정보 부족",
-    },
-    notice:
-      "가시성 점수는 성장성 점수가 아니라 외부에서 확인 가능한 공개 정보 수준입니다.",
-  };
+  const company = companies.find((item) => item.id === companyId);
+
+  return company ?? DEFAULT_COMPANY;
 }
 
-export async function getSignals() {
-  return calculateSignals(transactions);
+export async function getVisibility(companyId?: string): Promise<Visibility> {
+  const company = await getCompany(companyId);
+  const presence = findExternalPresence(company.id);
+
+  return calculateVisibility(company.name, presence);
+}
+
+// 기업의 내부 거래만 골라낸다. 거래가 없으면 첫 기업 것으로 대신한다.
+function transactionsOf(companyId: string): Transaction[] {
+  const owned = transactions.filter((item) => item.companyId === companyId);
+
+  return owned.length > 0
+    ? owned
+    : transactions.filter((item) => item.companyId === DEFAULT_COMPANY.id);
+}
+
+export async function getSignals(companyId?: string) {
+  const company = await getCompany(companyId);
+
+  return calculateSignals(transactionsOf(company.id));
+}
+
+// STEP 4(분석 결과 확인)에서 사용자가 검토할 표본.
+// 실제 거래에서 뽑아 와야 기업을 바꿨을 때 다른 기업 거래처가 보이지 않는다.
+export async function getReviewSample(companyId?: string) {
+  const company = await getCompany(companyId);
+
+  return transactionsOf(company.id).slice(0, 2);
 }
 
 // 입력한 기업명과 정확히 일치하는 기업만 반환한다.
