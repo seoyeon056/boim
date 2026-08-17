@@ -127,64 +127,66 @@ export default function CompanyPage() {
         {companies.map((company) => {
           const isSelected = selectedCompany?.id === company.id;
 
+          // 카드를 누르면 선택되고, 진단 버튼은 그 카드 안에서 열린다.
+          // (선택 패널이 목록 아래에 따로 있으면 어느 카드를 골랐는지 눈이 한 번 더 움직인다.)
           return (
-            <button
+            <div
               key={company.id}
-              type="button"
-              onClick={() => setSelectedCompany(company)}
-              className={`w-full rounded-lg border p-4 text-left transition-colors ${
+              className={`rounded-lg border p-4 transition-colors ${
                 isSelected
                   ? "border-zinc-900 bg-zinc-50"
                   : "border-zinc-100 bg-white hover:border-zinc-200 hover:bg-zinc-50"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-sm font-semibold text-zinc-900">
-                    {company.name}
-                  </p>
-                  <p className="text-xs text-zinc-500">{company.description}</p>
+              <button
+                type="button"
+                onClick={() => setSelectedCompany(company)}
+                className="w-full text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold text-zinc-900">
+                      {company.name}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {company.description}
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
+                      선택됨
+                    </span>
+                  )}
                 </div>
-                {isSelected && (
-                  <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
-                    선택됨
-                  </span>
-                )}
-              </div>
 
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {[
-                  company.region,
-                  company.industry,
-                  `직원 ${company.employees}명`,
-                ].map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </button>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {[
+                    company.region,
+                    company.industry,
+                    `직원 ${company.employees}명`,
+                  ].map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </button>
+
+              {isSelected && (
+                <Link
+                  href={withCompany("/visibility", company.id)}
+                  className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+                >
+                  이 기업 진단하기
+                </Link>
+              )}
+            </div>
           );
         })}
       </div>
-
-      {selectedCompany && (
-        <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50 p-4">
-          <p className="text-xs text-zinc-400">선택한 기업</p>
-          <p className="mt-0.5 text-sm font-semibold text-zinc-900">
-            {selectedCompany.name}
-          </p>
-          <Link
-            href={withCompany("/visibility", selectedCompany.id)}
-            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-          >
-            이 기업 진단하기
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

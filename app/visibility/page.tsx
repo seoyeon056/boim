@@ -67,7 +67,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       <div className="mt-8 rounded-lg border border-zinc-100 bg-white px-6 py-6">
         <div className="flex items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+            <span className="text-xs font-semibold tracking-tight text-zinc-400">
               가시성 점수
             </span>
             <div className="flex items-baseline gap-1.5">

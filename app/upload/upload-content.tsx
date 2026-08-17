@@ -215,9 +215,16 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   const allHandled = documentCategories.every(
     (category) => states[category.id].status !== "empty",
   );
-  const handledCount = documentCategories.filter(
-    (category) => states[category.id].status !== "empty",
+  const uploadedCount = documentCategories.filter(
+    (category) => states[category.id].status === "uploaded",
   ).length;
+  const missingCount = documentCategories.filter(
+    (category) => states[category.id].status === "missing",
+  ).length;
+  const handledCount = uploadedCount + missingCount;
+  const progressPercent = Math.round(
+    (handledCount / documentCategories.length) * 100,
+  );
 
   function handleAnalyze() {
     if (!allHandled) {
@@ -299,39 +306,41 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       </div>
 
       {/* 카테고리 진행 상황 */}
-      <div className="mt-5 flex items-center justify-between rounded-md border border-zinc-100 bg-white px-4 py-3">
-        <div className="flex items-center gap-2">
-          {documentCategories.map((category) => {
-            const status = states[category.id].status;
-            return (
-              <div
-                key={category.id}
-                title={category.name}
-                className={`h-1.5 w-6 rounded-full transition-colors duration-300 ${
-                  status === "uploaded"
-                    ? "bg-emerald-500"
-                    : status === "missing"
-                      ? "bg-amber-400"
-                      : "bg-zinc-100"
-                }`}
-              />
-            );
-          })}
+      {/* 막대를 두 겹으로 겹친다: 아래는 처리한 전체(파일 선택 + 해당 없음),
+          위는 실제로 파일을 올린 것. 두 값의 차이가 "없음"으로 표시한 몫이다. */}
+      <div className="mt-5 rounded-md border border-zinc-100 bg-white px-4 py-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span
+            className={`font-mono text-xs font-medium tabular-nums transition-colors ${
+              handledCount === documentCategories.length
+                ? "text-emerald-600"
+                : "text-zinc-900"
+            }`}
+          >
+            {progressPercent}%
+          </span>
+          <span className="text-[11px] text-zinc-400">
+            {handledCount}/{documentCategories.length} 항목 완료
+            {missingCount > 0 && (
+              <span className="ml-1.5 text-amber-500">
+                · 없음 {missingCount}건
+              </span>
+            )}
+          </span>
         </div>
-        <span className="font-mono text-[11px] text-zinc-400">
-          {handledCount}/{documentCategories.length} 완료
-        </span>
-      </div>
-
-      <div className="mt-6 flex flex-col gap-2">
-        <div className="rounded-md border border-red-100 bg-red-50 px-4 py-3 text-xs leading-5 text-red-600">
-          <span className="font-medium">시연 버전</span> — 실제 기업 문서나
-          개인정보를 업로드하지 마세요. 합성 문서만 사용해 주세요.
-        </div>
-        <div className="rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
-          실제 서비스에서는 기업이 공개 범위를 직접 정하며, 거래처명과 민감
-          정보는 마스킹할 수 있습니다. 용량이 큰 문서는 연도별 또는 분기별로
-          나누어 선택하면 더 안정적으로 분석할 수 있습니다.
+        <div className="relative h-1 w-full overflow-hidden rounded-full bg-zinc-100">
+          <div
+            className="absolute left-0 top-0 h-full rounded-full bg-amber-200/60 transition-all duration-500 ease-out"
+            style={{
+              width: `${(handledCount / documentCategories.length) * 100}%`,
+            }}
+          />
+          <div
+            className="absolute left-0 top-0 h-full rounded-full bg-zinc-900 transition-all duration-500 ease-out"
+            style={{
+              width: `${(uploadedCount / documentCategories.length) * 100}%`,
+            }}
+          />
         </div>
       </div>
 
@@ -355,13 +364,25 @@ export function UploadContent({ companyId }: { companyId?: string }) {
             >
               {/* 헤더: 문서 종류 + 상태 배지 */}
               <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-900">
+                {/* 문서 용도는 물음표에 마우스를 올렸을 때만 보여준다.
+                    카드가 3열이라 설명을 항상 펼쳐두면 제목이 밀린다. */}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <p className="truncate text-sm font-medium text-zinc-900">
                     {category.name}
                   </p>
-                  <p className="mt-0.5 text-xs leading-[1.5] text-zinc-400">
-                    {category.purpose}
-                  </p>
+                  <div className="group relative flex items-center">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-4 w-4 cursor-default items-center justify-center rounded-full bg-zinc-100 text-[10px] font-semibold text-zinc-400"
+                    >
+                      ?
+                    </span>
+                    <span className="sr-only">{category.purpose}</span>
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 w-44 -translate-x-1/2 rounded-md bg-zinc-900 px-3 py-2 text-[11px] leading-5 text-zinc-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                      {category.purpose}
+                      <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+                    </div>
+                  </div>
                 </div>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium ${badge.className}`}
