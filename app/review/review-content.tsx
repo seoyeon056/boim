@@ -292,13 +292,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                     </span>
                   )}
                   {tier !== "high" && isConfirmed && (
-                    <button
-                      type="button"
-                      onClick={() => reEditField(txIndex, key)}
-                      className="flex items-center gap-1 text-[11px] text-emerald-500 transition-colors hover:text-emerald-700"
-                    >
-                      <IconCheck /> 확인 완료 · 수정
-                    </button>
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-500">
+                      <IconCheck /> 확인 완료
+                    </span>
                   )}
                   {tier === "medium" && !isConfirmed && (
                     <span className="text-[11px] text-amber-500">확인 권장</span>
@@ -337,10 +333,23 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       이 값이 맞습니다
                     </button>
                   </div>
-                ) : (
+                ) : tier === "high" ? (
+                  // 자동 확인된 항목은 읽기 전용으로 둔다.
                   <p className="mt-1.5 font-mono text-sm font-medium text-zinc-900">
                     {displayValue(key, field.value)}
                   </p>
+                ) : (
+                  // 한 번 확인한 항목도 다시 만지면 바로 수정 상태로 돌아간다.
+                  // (수정 버튼을 따로 누르게 하면 오타를 발견해도 한 단계 더 걸린다.)
+                  <input
+                    type={type}
+                    value={field.value}
+                    onChange={(event) =>
+                      updateValue(txIndex, key, event.target.value)
+                    }
+                    onFocus={() => reEditField(txIndex, key)}
+                    className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-400"
+                  />
                 )}
               </div>
             );
