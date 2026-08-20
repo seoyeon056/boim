@@ -224,8 +224,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
           AI 분석 결과 확인
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          AI는 대부분의 항목을 자동으로 분석했습니다. 신뢰도가 낮은 항목만
-          확인해 주세요.
+          신뢰도가 낮은 항목만 직접 확인해 주세요.
         </p>
       </div>
 
@@ -292,9 +291,13 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                     </span>
                   )}
                   {tier !== "high" && isConfirmed && (
-                    <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                      <IconCheck /> 확인 완료
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => reEditField(txIndex, key)}
+                      className="flex items-center gap-1 text-[11px] text-emerald-500 transition-colors hover:text-emerald-700"
+                    >
+                      <IconCheck /> 확인 완료 · 수정
+                    </button>
                   )}
                   {tier === "medium" && !isConfirmed && (
                     <span className="text-[11px] text-amber-500">확인 권장</span>

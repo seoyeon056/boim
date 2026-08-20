@@ -11,7 +11,6 @@ export default function CompanyPage() {
   const [selectedCompany, setSelectedCompany] = useState<CompanyResult | null>(
     null,
   );
-
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -37,17 +36,15 @@ export default function CompanyPage() {
 
       // API가 비슷한 이름까지 보내더라도
       // 사용자가 입력한 기업명과 정확히 같은 기업만 남긴다.
-      const exactMatches = results.filter(
-        (company) =>
-          company.name.trim().toLowerCase() === normalizedQuery.toLowerCase(),
+      setCompanies(
+        results.filter(
+          (company) =>
+            company.name.trim().toLowerCase() === normalizedQuery.toLowerCase(),
+        ),
       );
-
-      setCompanies(exactMatches);
     } catch {
       setCompanies([]);
-      setErrorMessage(
-        "기업 검색 기능을 불러오지 못했습니다. 검색 API 준비 상태를 확인해 주세요.",
-      );
+      setErrorMessage("기업 검색을 불러오지 못했습니다.");
     } finally {
       setIsSearching(false);
     }
@@ -104,13 +101,13 @@ export default function CompanyPage() {
           disabled={isSearching || query.trim() === ""}
           className="h-10 rounded-md bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
         >
-          {isSearching ? "검색 중…" : "기업 검색"}
+          {isSearching ? "검색 중…" : "검색"}
         </button>
       </form>
 
       <div className="mt-4 flex flex-col gap-2">
         {errorMessage && (
-          <div className="rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+          <div className="rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
             {errorMessage}
           </div>
         )}
@@ -127,66 +124,65 @@ export default function CompanyPage() {
         {companies.map((company) => {
           const isSelected = selectedCompany?.id === company.id;
 
-          // 카드를 누르면 선택되고, 진단 버튼은 그 카드 안에서 열린다.
-          // (선택 패널이 목록 아래에 따로 있으면 어느 카드를 골랐는지 눈이 한 번 더 움직인다.)
           return (
-            <div
+            <button
               key={company.id}
-              className={`rounded-lg border p-4 transition-colors ${
+              type="button"
+              onClick={() => setSelectedCompany(company)}
+              className={`w-full rounded-lg border p-4 text-left transition-colors ${
                 isSelected
                   ? "border-zinc-900 bg-zinc-50"
                   : "border-zinc-100 bg-white hover:border-zinc-200 hover:bg-zinc-50"
               }`}
             >
-              <button
-                type="button"
-                onClick={() => setSelectedCompany(company)}
-                className="w-full text-left"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {company.name}
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      {company.description}
-                    </p>
-                  </div>
-                  {isSelected && (
-                    <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
-                      선택됨
-                    </span>
-                  )}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {company.name}
+                  </p>
+                  <p className="text-xs text-zinc-500">{company.description}</p>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {[
-                    company.region,
-                    company.industry,
-                    `직원 ${company.employees}명`,
-                  ].map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </button>
+                {isSelected && (
+                  <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
+                    선택됨
+                  </span>
+                )}
+              </div>
 
-              {isSelected && (
-                <Link
-                  href={withCompany("/visibility", company.id)}
-                  className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-                >
-                  이 기업 진단하기
-                </Link>
-              )}
-            </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {[
+                  company.region,
+                  company.industry,
+                  `직원 ${company.employees}명`,
+                ].map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </button>
           );
         })}
       </div>
+
+      {selectedCompany && (
+        <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50 p-4">
+          <p className="text-xs text-zinc-400">선택한 기업</p>
+          <p className="mt-0.5 text-sm font-semibold text-zinc-900">
+            {selectedCompany.name}
+          </p>
+          <Link
+            href={withCompany("/visibility", selectedCompany.id)}
+            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+          >
+            이 기업 진단하기
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

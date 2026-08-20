@@ -59,7 +59,8 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
           외부 가시성 점수
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {visibility.company}의 공개 정보 수준입니다.
+          {visibility.company}의 뉴스·특허·채용 공개 정보를 기반으로
+          측정합니다.
         </p>
       </div>
 
@@ -128,11 +129,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
         ))}
       </div>
 
-      <p className="mt-4 text-[13px] leading-[1.7] text-zinc-500">
-        {visibility.summary}
-      </p>
-
-      <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+      <div className="mt-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
         {visibility.notice} 정보가 적다는 것이 성장하지 않는다는 뜻은 아닙니다.
       </div>
 

@@ -7,6 +7,7 @@ import type { Visibility } from "@/lib/visibility";
 // 그래서 문장도 계산된 값에서 고른다.
 
 export type Diagnosis = {
+  grade: string; // 성장 잠재력 등급
   headline: string; // 결론 한 문장
   external: string; // 외부에서 본 모습
   internal: string; // 내부에서 본 모습
@@ -77,12 +78,27 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
         ? "내부 거래에서는 부분적인 성장 신호가 확인되었습니다."
         : "내부 거래에서도 뚜렷한 성장 신호는 확인되지 않았습니다.";
 
+  const topCustomer = signals.topCustomerName ?? "최대 거래처";
+
   const riskPart =
     signals.statuses.topCustomerConcentration === "caution"
-      ? " 다만 특정 거래처 의존 위험은 함께 살펴봐야 합니다."
-      : "";
+      ? ` 다만 ${topCustomer}에 대한 거래처 의존 위험은 함께 살펴봐야 합니다.`
+      : ` 최대 거래처인 ${topCustomer}의 비중은 ${signals.topCustomerConcentration}%로 부담이 크지 않습니다.`;
 
   return `${externalPart}, ${internalPart}${riskPart}`;
+}
+
+// 성장 잠재력 등급: 긍정 판정을 받은 신호 개수로 정한다.
+// (별도 기준을 새로 만들지 않고 statuses 판정을 그대로 집계한다.)
+function buildGrade(signals: Signals): string {
+  const positives = Object.values(signals.statuses).filter(
+    (tone) => tone === "positive",
+  ).length;
+
+  if (positives >= 3) return "A";
+  if (positives === 2) return "B+";
+  if (positives === 1) return "B";
+  return "C";
 }
 
 function buildInternalCardNote(signals: Signals): string {
@@ -109,6 +125,7 @@ export function buildDiagnosis(
   signals: Signals,
 ): Diagnosis {
   return {
+    grade: buildGrade(signals),
     headline: buildHeadline(visibility, signals),
     external: describeExternal(visibility.visibilityScore),
     internal: describeInternal(signals),
