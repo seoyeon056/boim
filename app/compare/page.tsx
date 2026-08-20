@@ -109,7 +109,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
         {/* 왼쪽: 외부에서 본 모습 (어두운 카드) */}
         <div className="flex flex-col gap-4 rounded-lg bg-zinc-900 p-5">
           <div>
-            <p className="text-xs font-semibold tracking-tight text-zinc-500">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
               외부에서 본
             </p>
             <p className="mt-0.5 text-sm font-semibold text-white">
@@ -117,7 +117,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             </p>
           </div>
 
-          <div className="flex flex-col overflow-hidden rounded-md border border-zinc-700">
+          <div className="flex flex-col gap-px overflow-hidden rounded-md border border-zinc-700">
             {externalMetrics.map((metric, i) => (
               <div
                 key={metric.key}
@@ -152,7 +152,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
         {/* 오른쪽: 내부에서 본 모습 (초록 카드 — 외부는 가려짐(검정), 내부는 성장(초록)이라는 대비) */}
         <div className="flex flex-col gap-4 rounded-lg bg-emerald-900 p-5">
           <div>
-            <p className="text-xs font-semibold tracking-tight text-emerald-600">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-600">
               내부에서 본
             </p>
             <p className="mt-0.5 text-sm font-semibold text-white">
@@ -160,7 +160,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             </p>
           </div>
 
-          <div className="flex flex-col overflow-hidden rounded-md border border-emerald-700">
+          <div className="flex flex-col gap-px overflow-hidden rounded-md border border-emerald-700">
             {internalSignals.map((signal, i) => (
               <div
                 key={signal.label}
@@ -195,7 +195,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
 
       {/* BO:IM 진단 */}
       <div className="mt-4 rounded-lg border border-zinc-100 bg-white p-5">
-        <p className="text-xs font-semibold tracking-tight text-zinc-400">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
           BO:IM 진단
         </p>
 

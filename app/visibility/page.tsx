@@ -67,7 +67,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       <div className="mt-8 rounded-lg border border-zinc-100 bg-white px-6 py-6">
         <div className="flex items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold tracking-tight text-zinc-400">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
               가시성 점수
             </span>
             <div className="flex items-baseline gap-1.5">
@@ -103,7 +103,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       </div>
 
       {/* 항목별 내역 */}
-      <div className="mt-3 flex flex-col overflow-hidden rounded-lg border border-zinc-100">
+      <div className="mt-3 flex flex-col gap-px overflow-hidden rounded-lg border border-zinc-100">
         {breakdown.map((metric, i) => (
           <div
             key={metric.key}
@@ -112,7 +112,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
             }`}
           >
             <div className="flex items-center gap-3">
-              <span className="w-14 text-xs text-zinc-400">{metric.label}</span>
+              <span className="w-12 text-xs text-zinc-400">{metric.label}</span>
               <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900">
                 {metric.value}
               </span>
