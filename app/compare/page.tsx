@@ -86,14 +86,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-12">
-      <Link
-        href={withCompany("/signals", companyId)}
-        className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
-      >
-        ← 이전으로
-      </Link>
-
-      <div className="mt-8 flex flex-col gap-1">
+      <div className="flex flex-col gap-1">
         <span className="font-mono text-xs font-medium uppercase tracking-widest text-zinc-400">
           Step 05
         </span>
@@ -109,7 +102,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
         {/* 왼쪽: 외부에서 본 모습 (어두운 카드) */}
         <div className="flex flex-col gap-4 rounded-lg bg-zinc-900 p-5">
           <div>
-            <p className="text-xs font-semibold tracking-tight text-zinc-500">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
               외부에서 본
             </p>
             <p className="mt-0.5 text-sm font-semibold text-white">
@@ -117,7 +110,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             </p>
           </div>
 
-          <div className="flex flex-col overflow-hidden rounded-md border border-zinc-700">
+          <div className="flex flex-col gap-px overflow-hidden rounded-md border border-zinc-700">
             {externalMetrics.map((metric, i) => (
               <div
                 key={metric.key}
@@ -144,7 +137,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             ))}
           </div>
 
-          <p className="mt-auto text-xs leading-5 text-zinc-500">
+          <p className="text-xs leading-5 text-zinc-500">
             {visibility.summary}
           </p>
         </div>
@@ -152,7 +145,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
         {/* 오른쪽: 내부에서 본 모습 (초록 카드 — 외부는 가려짐(검정), 내부는 성장(초록)이라는 대비) */}
         <div className="flex flex-col gap-4 rounded-lg bg-emerald-900 p-5">
           <div>
-            <p className="text-xs font-semibold tracking-tight text-emerald-600">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-600">
               내부에서 본
             </p>
             <p className="mt-0.5 text-sm font-semibold text-white">
@@ -160,7 +153,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             </p>
           </div>
 
-          <div className="flex flex-col overflow-hidden rounded-md border border-emerald-700">
+          <div className="flex flex-col gap-px overflow-hidden rounded-md border border-emerald-700">
             {internalSignals.map((signal, i) => (
               <div
                 key={signal.label}
@@ -187,7 +180,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
             ))}
           </div>
 
-          <p className="mt-auto text-xs leading-5 text-emerald-400">
+          <p className="text-xs leading-5 text-emerald-400">
             {diagnosis.internalCardNote}
           </p>
         </div>
@@ -195,36 +188,27 @@ export default async function ComparePage(props: PageProps<"/compare">) {
 
       {/* BO:IM 진단 */}
       <div className="mt-4 rounded-lg border border-zinc-100 bg-white p-5">
-        <p className="text-xs font-semibold tracking-tight text-zinc-400">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
           BO:IM 진단
         </p>
 
-        {/* 한 줄 요약 — 어두운 박스로 강조 */}
-        <div className="mt-3 rounded-md bg-zinc-900 px-4 py-3">
-          <p className="text-sm font-semibold leading-6 text-white">
-            {diagnosis.headline}
-          </p>
-        </div>
+        <p className="mt-3 text-sm font-medium leading-7 text-zinc-900">
+          {diagnosis.headline}
+        </p>
 
-        <div className="mt-3 flex flex-col gap-2 text-[13px] leading-[1.7] text-zinc-500">
-          <p>{diagnosis.external}</p>
-          <p>{diagnosis.internal}</p>
-          <p>{diagnosis.risk}</p>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-1.5">
+        <div className="mt-4 flex flex-col gap-1.5">
           {diagnosisEvidence.map((evidence) => (
             <div
               key={evidence}
               className="flex items-center gap-2 rounded-md bg-zinc-50 px-3 py-2"
             >
               <span className="h-1 w-1 shrink-0 rounded-full bg-zinc-400" />
-              <span className="text-xs font-medium text-zinc-700">{evidence}</span>
+              <span className="font-mono text-xs text-zinc-600">{evidence}</span>
             </div>
           ))}
         </div>
 
-        <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-700">
+        <div className="mt-4 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-700">
           본 결과는 신용평가가 아닌 AI 기반 성장 진단 참고 자료입니다.
         </div>
       </div>

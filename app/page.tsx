@@ -167,8 +167,8 @@ function DiagnosticVisual() {
   const isDrawnPhase = phase === "drawn";
 
   return (
-    <div className="flex items-center justify-center py-4 md:py-0">
-      <div className="relative" style={{ width: 360, height: 460 }}>
+    <div className="flex items-center justify-center py-8 md:py-0">
+      <div className="relative" style={{ width: 420, height: 560 }}>
         {Array.from({ length: TOTAL_CARDS }).map((_, i) => {
           const isDrawn = isDrawnPhase && i === drawnCard;
 
@@ -177,7 +177,7 @@ function DiagnosticVisual() {
               key={i}
               style={{
                 position: "absolute",
-                bottom: 16,
+                bottom: 20,
                 left: "50%",
                 width: 112,
                 height: 165,
@@ -424,11 +424,11 @@ function DiagnosticVisual() {
 export default function Home() {
   return (
     <>
-      <div className="mx-auto w-full max-w-5xl px-6 py-8 md:py-12">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 md:items-center">
+      <div className="mx-auto w-full max-w-5xl px-6 py-16 md:py-24">
+        <div className="grid grid-cols-1 gap-12 md:grid-cols-2 md:items-center">
           <div className="flex flex-col gap-6">
             <span
-              className="animate-fade-in-up text-xs font-semibold tracking-tight text-zinc-400"
+              className="animate-fade-in-up font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400"
               style={{ animationDelay: "0ms" }}
             >
               기업 성장 진단 서비스
@@ -471,9 +471,9 @@ export default function Home() {
         <div className="h-px bg-zinc-100" />
       </div>
 
-      <div className="mx-auto w-full max-w-5xl px-6 py-6">
-        <div className="flex flex-col gap-4">
-          <span className="text-xs font-bold tracking-tight text-zinc-500">
+      <div className="mx-auto w-full max-w-5xl px-6 py-16">
+        <div className="flex flex-col gap-5">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400">
             이런 기업에게 필요합니다
           </span>
           <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100 sm:grid-cols-2">

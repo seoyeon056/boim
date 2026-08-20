@@ -92,7 +92,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     if (newFiles.some((file) => !isAllowedFile(file))) {
       setCategoryError(
         categoryId,
-        "지원하지 않는 파일 형식입니다. PDF, PNG, JPG, JPEG, xlsx, xls 파일을 선택해 주세요.",
+        "지원하지 않는 파일 형식입니다. PDF, PNG, JPG, XLSX 파일을 선택해 주세요.",
       );
       input.value = "";
       return;
@@ -102,7 +102,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     if (existingFiles.length + newFiles.length > MAX_FILES_PER_CATEGORY) {
       setCategoryError(
         categoryId,
-        `한 문서 종류에는 최대 5개의 파일을 선택할 수 있습니다. (현재 ${existingFiles.length}개 선택됨)`,
+        `카테고리당 최대 5개까지 선택할 수 있습니다. (현재 ${existingFiles.length}개)`,
       );
       input.value = "";
       return;
@@ -112,7 +112,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     if (newFiles.some((file) => file.size > MAX_FILE_SIZE)) {
       setCategoryError(
         categoryId,
-        "파일 한 개는 최대 100MB까지 선택할 수 있습니다. 용량이 큰 문서는 연도별 또는 분기별로 나누어 선택하는 것을 권장합니다.",
+        "파일 한 개는 최대 100 MB까지 선택할 수 있습니다.",
       );
       input.value = "";
       return;
@@ -130,7 +130,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     ) {
       setCategoryError(
         categoryId,
-        "전체 파일 크기는 최대 500MB까지 선택할 수 있습니다.",
+        "전체 파일 크기는 최대 500 MB까지 선택할 수 있습니다.",
       );
       input.value = "";
       return;
@@ -300,8 +300,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           내부 문서 업로드
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          문서 종류별로 보유한 내부 문서를 선택하거나 ‘해당 문서 없음’을 표시해
-          주세요.
+          문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.
         </p>
       </div>
 
@@ -395,22 +394,20 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                 {/* 파일 선택 (label과 input을 연결해 접근성 확보) */}
                 <label
                   htmlFor={inputId}
-                  className={`flex flex-col gap-0.5 rounded-md border border-dashed px-4 py-3 text-xs transition-colors ${
+                  className={`flex items-center justify-between gap-2 rounded-md border border-dashed px-4 py-3 text-xs transition-colors ${
                     atMax
                       ? "cursor-not-allowed border-zinc-100 text-zinc-300"
                       : "cursor-pointer border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
                   }`}
                 >
-                  <span className="font-medium">
+                  <span>
                     {atMax
                       ? "최대 5개 도달"
                       : state.files.length > 0
                         ? "파일 더 추가"
                         : "파일 선택"}
                   </span>
-                  <span className="text-[11px] text-zinc-300">
-                    PDF · PNG · JPG · XLSX · 최대 5개 · 100MB
-                  </span>
+                  <span className="text-zinc-300">PDF · PNG · JPG · XLSX</span>
                   <input
                     id={inputId}
                     ref={(el) => {

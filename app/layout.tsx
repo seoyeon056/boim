@@ -4,7 +4,7 @@ import Header from "./header";
 import { UploadStoreProvider } from "./upload/upload-store";
 
 export const metadata: Metadata = {
-  title: "BO:IM — 안 보이던 기업을 데이터로 증명합니다",
+  title: "BO:IM — 기업 성장 진단",
   description:
     "공개 정보와 내부 거래 문서를 함께 분석해 보이지 않던 성장을 증명합니다.",
 };

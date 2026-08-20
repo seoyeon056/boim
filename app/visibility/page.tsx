@@ -59,7 +59,8 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
           외부 가시성 점수
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {visibility.company}의 공개 정보 수준입니다.
+          {visibility.company}의 뉴스·특허·채용 공개 정보를 기반으로
+          측정합니다.
         </p>
       </div>
 
@@ -67,7 +68,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       <div className="mt-8 rounded-lg border border-zinc-100 bg-white px-6 py-6">
         <div className="flex items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold tracking-tight text-zinc-400">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">
               가시성 점수
             </span>
             <div className="flex items-baseline gap-1.5">
@@ -103,7 +104,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       </div>
 
       {/* 항목별 내역 */}
-      <div className="mt-3 flex flex-col overflow-hidden rounded-lg border border-zinc-100">
+      <div className="mt-3 flex flex-col gap-px overflow-hidden rounded-lg border border-zinc-100">
         {breakdown.map((metric, i) => (
           <div
             key={metric.key}
@@ -112,7 +113,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
             }`}
           >
             <div className="flex items-center gap-3">
-              <span className="w-14 text-xs text-zinc-400">{metric.label}</span>
+              <span className="w-12 text-xs text-zinc-400">{metric.label}</span>
               <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900">
                 {metric.value}
               </span>
@@ -128,11 +129,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
         ))}
       </div>
 
-      <p className="mt-4 text-[13px] leading-[1.7] text-zinc-500">
-        {visibility.summary}
-      </p>
-
-      <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+      <div className="mt-4 rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
         {visibility.notice} 정보가 적다는 것이 성장하지 않는다는 뜻은 아닙니다.
       </div>
 
