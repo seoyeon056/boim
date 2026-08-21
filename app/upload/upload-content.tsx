@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import { documentCategories } from "@/data/documentCategories";
 import type {
@@ -11,6 +10,7 @@ import type {
   StoredUpload,
 } from "@/types/document";
 import { withCompany } from "@/lib/company-link";
+import StepShell from "@/app/step-shell";
 import { useUploadStore } from "./upload-store";
 
 // ─────────────────────────────────────────────
@@ -284,30 +284,17 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-12">
-      <Link
-        href={withCompany("/visibility", companyId)}
-        className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
-      >
-        ← 이전으로
-      </Link>
-
-      <div className="mt-8 flex flex-col gap-1">
-        <span className="font-mono text-xs font-medium uppercase tracking-widest text-zinc-400">
-          Step 03
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-          내부 문서 업로드
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.
-        </p>
-      </div>
+    <StepShell
+      step="Step 03"
+      title="내부 문서 업로드"
+      description="문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요."
+      backTo={withCompany("/visibility", companyId)}
+    >
 
       {/* 카테고리 진행 상황 */}
       {/* 막대를 두 겹으로 겹친다: 아래는 처리한 전체(파일 선택 + 해당 없음),
           위는 실제로 파일을 올린 것. 두 값의 차이가 "없음"으로 표시한 몫이다. */}
-      <div className="mt-5 rounded-md border border-zinc-100 bg-white px-4 py-3">
+      <div className="rounded-md border border-zinc-100 bg-white px-4 py-3">
         <div className="mb-2 flex items-center justify-between">
           <span
             className={`font-mono text-xs font-medium tabular-nums transition-colors ${
@@ -344,7 +331,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       </div>
 
       {/* 문서 카테고리 카드 목록 */}
-      <div className="mt-6 grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
         {documentCategories.map((category) => {
           const state = states[category.id];
           const badge = statusBadge(category.id);
@@ -558,6 +545,6 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           내부 문서 분석 시작
         </button>
       </div>
-    </div>
+    </StepShell>
   );
 }

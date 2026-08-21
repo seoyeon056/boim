@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { withCompany } from "@/lib/company-link";
+import StepShell from "@/app/step-shell";
 
 function IconCheck({ className = "h-2.5 w-2.5" }: { className?: string }) {
   return (
@@ -163,7 +164,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   if (status === "empty" || !transactions) {
     return (
       <div className="mx-auto w-full max-w-lg px-6 py-12">
-        <div className="flex flex-col gap-1">
+        <div className="mt-8 flex flex-col gap-1">
           <span className="font-mono text-xs font-medium uppercase tracking-widest text-zinc-400">
             Step 04
           </span>
@@ -208,28 +209,24 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   );
 
   return (
-    <div className="mx-auto w-full max-w-lg px-6 py-12">
-      <Link
-        href={withCompany("/upload", companyId)}
-        className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
-      >
-        ← 이전으로
-      </Link>
-
-      <div className="mt-8 flex flex-col gap-1">
-        <span className="font-mono text-xs font-medium uppercase tracking-widest text-zinc-400">
-          Step 04
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-          AI 분석 결과 확인
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          신뢰도가 낮은 항목만 직접 확인해 주세요.
-        </p>
-      </div>
-
+    <StepShell
+      step="Step 04"
+      title="AI 분석 결과 확인"
+      description="신뢰도가 낮은 항목만 직접 확인해 주세요."
+      backTo={withCompany("/upload", companyId)}
+      aside={
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={!allConfirmed}
+          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+        >
+          내용 확인 완료
+        </button>
+      }
+    >
       {/* 요약 통계 */}
-      <div className="mt-6 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100">
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100">
         {[
           {
             label: "총 분석 항목",
@@ -261,13 +258,14 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
       {/* 거래 여러 건을 순서대로 렌더링 */}
       {transactions.map((tx, txIndex) => (
-        <div key={txIndex} className="mt-6 flex flex-col gap-2">
+        <div key={txIndex} className="mt-6">
           {transactions.length > 1 && (
-            <p className="font-mono text-xs text-zinc-400">
+            <p className="mb-2 font-mono text-xs text-zinc-400">
               거래 {txIndex + 1} / {transactions.length}
             </p>
           )}
 
+          <div className="grid auto-rows-fr grid-cols-1 gap-2 md:grid-cols-2">
           {FIELD_META.map(({ key, label, type }) => {
             const field = tx[key];
             const tier = tierOf(field.confidence);
@@ -357,19 +355,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
               </div>
             );
           })}
+          </div>
         </div>
       ))}
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={!allConfirmed}
-          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-        >
-          내용 확인 완료
-        </button>
-      </div>
-    </div>
+    </StepShell>
   );
 }
