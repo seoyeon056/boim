@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSignals } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
+import { generateSignalsInsight } from "@/lib/llm/insights";
 
 const valueStyles = {
   positive: "text-emerald-600",
@@ -74,6 +75,15 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
   const isConcentrationRisky =
     result.statuses.topCustomerConcentration === "caution";
 
+  // 기존 규칙 기반 문장을 fallback으로 두고, LLM 호출이 성공하면 그걸로 대체한다.
+  const fallbackNotice = isConcentrationRisky
+    ? `${result.topCustomerName}에 대한 거래 집중도(${result.topCustomerConcentration}%)는 리스크 요인으로 관리가 필요합니다.`
+    : `${result.topCustomerName}에 대한 거래 집중도는 ${result.topCustomerConcentration}%로, 특정 거래처 의존 위험은 크지 않습니다.`;
+
+  const notice = await generateSignalsInsight(result).catch(
+    () => fallbackNotice,
+  );
+
   return (
     <StepShell
       step="Step 05"
@@ -129,9 +139,7 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
             : "border-zinc-100 bg-zinc-50 text-zinc-500"
         }`}
       >
-        {isConcentrationRisky
-          ? `${result.topCustomerName}에 대한 거래 집중도(${result.topCustomerConcentration}%)는 리스크 요인으로 관리가 필요합니다.`
-          : `${result.topCustomerName}에 대한 거래 집중도는 ${result.topCustomerConcentration}%로, 특정 거래처 의존 위험은 크지 않습니다.`}
+        {notice}
       </div>
     </StepShell>
   );

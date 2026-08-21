@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getVisibility } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
+import { generateVisibilityInsight } from "@/lib/llm/insights";
 
 const toneStyles = {
   warn: "bg-amber-50 text-amber-600",
@@ -35,6 +36,12 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       </div>
     );
   }
+
+  // LLM 호출이 실패해도(키 미등록, 네트워크 오류 등) 화면이 깨지지 않도록
+  // 기존 규칙 기반 문장(visibility.summary)을 fallback으로 둔다.
+  const summary = await generateVisibilityInsight(visibility).catch(
+    () => visibility.summary,
+  );
 
   const score = visibility.visibilityScore;
   const pct = Math.min(100, Math.max(0, score));
@@ -129,7 +136,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       </div>
 
       <p className="mt-4 max-w-3xl text-[13px] leading-[1.7] text-zinc-500">
-        {visibility.summary}
+        {summary}
       </p>
 
       <div className="mt-3 max-w-3xl rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
