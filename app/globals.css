@@ -1,14 +1,14 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css');
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Nanum+Myeongjo:wght@400;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #f7f7f8;
-  --foreground: #0a0a0a;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --border: #e4e4e7;
-  --border-subtle: #f4f4f5;
+  --background: #f4f2ed;
+  --foreground: #1b1917;
+  --muted: #ece8e1;
+  --muted-foreground: #6f6a62;
+  --border: #e2ddd4;
+  --border-subtle: #ece8e1;
 }
 
 @theme inline {
@@ -17,7 +17,7 @@
   --color-border: var(--border);
   --font-sans: 'Pretendard', sans-serif;
   --font-serif: 'Instrument Serif', serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', 'Pretendard', monospace;
 }
 
 html {
@@ -26,12 +26,28 @@ html {
 }
 
 body {
+  word-break: keep-all;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 430;
-  line-height: 1.5;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.65;
+  letter-spacing: -0.005em;
+}
+
+/* 숫자·영문은 모노, 한글은 Pretendard로 떨어지게 한다 */
+.font-mono { font-family: 'JetBrains Mono', 'Pretendard', monospace; }
+
+/* 작은 레이블 선명도 보정 */
+.text-xs, .text-\[10px\], .text-\[11px\], .text-\[12px\] {
+  font-weight: 500;
+}
+
+/* 한글에 자간 강제 적용 방지 — tracking-widest는 영문/숫자 전용 */
+.tracking-widest:lang(ko),
+[lang="ko"] .tracking-widest {
+  letter-spacing: 0.05em;
 }
 
 @keyframes fadeInUp {
@@ -58,19 +74,97 @@ body {
   animation: fadeIn 0.4s ease-out both;
 }
 
+@keyframes signalDrift {
+  0%   { transform: translate3d(0, 12px, 0); opacity: 0; }
+  15%  { opacity: 0.9; }
+  85%  { opacity: 0.9; }
+  100% { transform: translate3d(24px, -40px, 0); opacity: 0; }
+}
+
+.signal-word {
+  animation-name: signalDrift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-word { animation: none; opacity: 0.55; }
+}
+
 h1, h2, h3 {
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+  text-shadow: none;
 }
 
 p, span, a {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  text-shadow: none;
 }
 
 .rounded-lg.border,
 .rounded-md.border {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.07), 0 1px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
 }
 
 header {
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
+}
+
+/* ── 따뜻한 종이질 중성색으로 재정의 ── */
+.bg-white { background-color: #fffefc; }
+.bg-zinc-50 { background-color: #f3f0ea; }
+.bg-zinc-100 { background-color: #ebe7df; }
+.border-zinc-100 { border-color: #e5e0d7; }
+.border-zinc-200 { border-color: #d9d3c8; }
+.border-zinc-300 { border-color: #c8c1b4; }
+.text-zinc-400 { color: #9b958b; }
+.text-zinc-500 { color: #6f6a62; }
+.text-zinc-600 { color: #56514a; }
+.text-zinc-900 { color: #1b1917; }
+.bg-zinc-900 { background-color: #1b1917; }
+.hover\:bg-zinc-700:hover { background-color: #37322c; }
+.border-zinc-900 { border-color: #1b1917; }
+
+input[type="checkbox"], input[type="radio"] {
+  accent-color: #2f5d50;
+}
+
+:focus-visible {
+  outline: 2px solid #2f5d50;
+  outline-offset: 2px;
+}
+
+/* ── 색 재정의: emerald/amber/red를 차분한 계열로 대체 ── */
+:root {
+  --pine: #2f5d50;
+  --pine-soft: #eef3f0;
+  --bronze: #8a6a2f;
+  --bronze-soft: #f7f2e8;
+  --bronze-line: #ebe1cd;
+  --oxblood: #8c3a32;
+  --oxblood-soft: #f8efed;
+}
+
+.text-emerald-700, .text-emerald-600, .text-emerald-500 { color: var(--pine); }
+.text-emerald-400, .text-emerald-200 { color: #9db3aa; }
+.bg-emerald-50 { background-color: var(--pine-soft); }
+.bg-emerald-50\/30 { background-color: #f7faf8; }
+.bg-emerald-900 { background-color: #1e3c34; }
+.bg-emerald-800 { background-color: #244a40; }
+.bg-emerald-700 { background-color: #2f5d50; }
+.border-emerald-700 { border-color: #35695b; }
+
+.text-amber-700, .text-amber-600, .text-amber-500 { color: var(--bronze); }
+.text-amber-400 { color: #b39355; }
+.bg-amber-50 { background-color: var(--bronze-soft); }
+.bg-amber-400 { background-color: #a98b5b; }
+.bg-amber-200\/60 { background-color: #e6dcc6; }
+.bg-amber-900\/60 { background-color: rgba(74, 58, 26, 0.7); }
+.border-amber-100 { border-color: var(--bronze-line); }
+
+.text-red-500, .text-red-400 { color: var(--oxblood); }
+.bg-red-50 { background-color: var(--oxblood-soft); }
+
+@media print {
+  header {
+    display: none;
+  }
 }
