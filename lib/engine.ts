@@ -3,9 +3,9 @@
 // 서버 컴포넌트는 자기 앱의 API를 HTTP로 다시 부르지 않고 여기서 바로 읽는다.
 import { companies, type Company } from "@/data/companies";
 import { transactions, type Transaction } from "@/data/transactions";
-import { findExternalPresence } from "@/data/visibility";
 import { calculateSignals } from "@/lib/signals";
 import { calculateVisibility, type Visibility } from "@/lib/visibility";
+import { getExternalPresence } from "@/lib/external/presence";
 
 export type { Visibility } from "@/lib/visibility";
 
@@ -25,7 +25,7 @@ export async function getCompany(companyId?: string): Promise<Company> {
 
 export async function getVisibility(companyId?: string): Promise<Visibility> {
   const company = await getCompany(companyId);
-  const presence = findExternalPresence(company.id);
+  const presence = await getExternalPresence(company.id, company.name);
 
   return calculateVisibility(company.name, presence);
 }
