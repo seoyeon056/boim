@@ -53,17 +53,22 @@ export async function getReviewSample(companyId?: string) {
   return transactionsOf(company.id).slice(0, 2);
 }
 
-// 입력한 기업명과 정확히 일치하는 기업만 반환한다.
+// 검색어와 기업명을 비교 가능한 형태로 맞춘다.
+// 공백을 제거하고 소문자로 바꿔서 "한빛 정밀"과 "한빛정밀", "lg"와 "LG"가 같은 값으로 취급되게 한다.
+function normalizeCompanyName(value: string): string {
+  return value.replace(/\s+/g, "").toLowerCase();
+}
+
+// 입력한 기업명을 포함하는 기업을 모두 반환한다(공백/대소문자 무시).
+// 예: "LG"로 검색하면 "LG생활건강", "LG CNS"처럼 이름에 LG를 포함하는 계열사가 함께 나온다.
 export async function findCompaniesByName(query: string): Promise<Company[]> {
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeCompanyName(query.trim());
 
   if (normalizedQuery === "") {
     return [];
   }
 
-  const company = companies.find(
-    (item) => item.name.toLowerCase() === normalizedQuery,
+  return companies.filter((item) =>
+    normalizeCompanyName(item.name).includes(normalizedQuery),
   );
-
-  return company ? [company] : [];
 }

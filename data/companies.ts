@@ -248,5 +248,30 @@ export const companies: Company[] = [
     industry: "공장 자동화",
     employees: 58,
   },
+  // "LG" 검색 시 계열사가 함께 잡히는지 확인용 샘플(부분 일치 검색 데모 데이터).
+  {
+    id: "lg-household-health",
+    name: "LG생활건강",
+    description: "생활용품·화장품을 생산하는 소비재 기업",
+    region: "서울",
+    industry: "생활용품·화장품",
+    employees: 4200,
+  },
+  {
+    id: "lg-cns",
+    name: "LG CNS",
+    description: "기업용 IT 시스템 구축과 클라우드 서비스를 제공하는 IT 서비스 기업",
+    region: "서울",
+    industry: "IT 서비스",
+    employees: 11000,
+  },
+  {
+    id: "lg-uplus",
+    name: "LG유플러스",
+    description: "이동통신·인터넷 서비스를 제공하는 통신 기업",
+    region: "서울",
+    industry: "통신",
+    employees: 5300,
+  },
 ];
 

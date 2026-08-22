@@ -35,14 +35,10 @@ export default function CompanyPage() {
 
       const results = await searchCompanies(normalizedQuery);
 
-      // API가 비슷한 이름까지 보내더라도
-      // 사용자가 입력한 기업명과 정확히 같은 기업만 남긴다.
-      setCompanies(
-        results.filter(
-          (company) =>
-            company.name.trim().toLowerCase() === normalizedQuery.toLowerCase(),
-        ),
-      );
+      // 공백/대소문자 무시, 부분 일치 매칭은 API(lib/engine.ts)가 이미 처리한다.
+      // 여기서 다시 완전 일치로 걸러내면 "한빛 정밀"처럼 공백 섞인 입력이
+      // "한빛정밀"과 다르다고 판단돼 결과가 사라진다.
+      setCompanies(results);
     } catch {
       setCompanies([]);
       setErrorMessage("기업 검색을 불러오지 못했습니다.");
