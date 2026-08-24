@@ -282,21 +282,11 @@ export function ShareContent({
           끝.
         </p>
 
-        {/* 발신 명의 · 관인 */}
+        {/* 발신 명의 */}
         <div className="mt-10 border-t border-zinc-300 pt-8 text-center">
           <p className="text-[20px] font-bold tracking-[0.25em] text-zinc-900">
             BO : IM AI 진단 시스템
           </p>
-          <div className="mt-4 flex justify-center">
-            <div className="flex h-20 w-20 flex-col items-center justify-center rounded-full border-2 border-red-700/70 text-red-700/70">
-              <span className="font-mono text-[10px] font-bold tracking-widest">
-                BO:IM
-              </span>
-              <span className="mt-0.5 text-[10px] tracking-[0.2em]">
-                진단직인
-              </span>
-            </div>
-          </div>
         </div>
 
         {/* 유의사항 */}
