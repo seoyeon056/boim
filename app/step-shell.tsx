@@ -11,6 +11,7 @@ interface StepShellProps {
   backTo: string;
   backLabel?: string;
   aside?: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -30,6 +31,7 @@ export default function StepShell({
   backTo,
   backLabel = "이전으로",
   aside,
+  footer,
   children,
 }: StepShellProps) {
   const currentNo = step.replace(/[^0-9]/g, "").padStart(2, "0");
@@ -94,7 +96,14 @@ export default function StepShell({
           </p>
         </aside>
 
-        <div className="min-w-0">{children}</div>
+        <div className="flex min-w-0 flex-col">
+          <div className="min-w-0 flex-1">{children}</div>
+          {footer && (
+            <div className="mt-8 flex justify-end border-t border-zinc-200 pt-5">
+              {footer}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

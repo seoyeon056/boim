@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -47,6 +47,97 @@ const AUTO_CONFIRM = 0.95;
 const REVIEW_SUGGESTED = 0.8;
 
 type Tier = "high" | "medium" | "low";
+
+// 2026 / 2026-02 / 2026-02-08 세 형식만 허용한다.
+const DATE_RE = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/;
+
+function isValidDate(raw: string): boolean {
+  const value = raw.trim();
+  if (!DATE_RE.test(value)) return false;
+
+  const parts = value.split("-").map(Number);
+  if (parts[0] < 1900 || parts[0] > 2100) return false;
+
+  // 2026-02-31 처럼 실제로 없는 날짜를 걸러낸다.
+  if (parts.length === 3) {
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// 수기 입력과 달력 선택을 모두 허용하는 날짜 필드.
+function DateInput({
+  value,
+  invalid,
+  onChange,
+  onFocus,
+  tone = "plain",
+}: {
+  value: string;
+  invalid: boolean;
+  onChange: (value: string) => void;
+  onFocus?: () => void;
+  tone?: "plain" | "muted";
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+
+  function openPicker() {
+    const el = pickerRef.current;
+    if (!el) return;
+
+    onFocus?.();
+    el.value = isValidDate(value) && value.length === 10 ? value : "";
+
+    try {
+      if (typeof el.showPicker === "function") el.showPicker();
+      else el.focus();
+    } catch {
+      el.focus();
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        placeholder="2026-02-08"
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onFocus}
+        className={`h-10 w-full rounded-md border px-3 pr-10 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-500 ${
+          invalid ? "border-[#c9847c]" : "border-zinc-200"
+        } ${tone === "muted" ? "bg-zinc-50" : "bg-white"}`}
+      />
+      <button
+        type="button"
+        onClick={openPicker}
+        aria-label="달력에서 선택"
+        className="absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M2 6.75h12M5.5 2v2.5M10.5 2v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+      {/* 네이티브 달력. 0x0으로 숨기면 showPicker()가 동작하지 않아 아이콘 위에 겹쳐 둔다. */}
+      <input
+        ref={pickerRef}
+        type="date"
+        aria-label="달력 선택"
+        onChange={(event) => {
+          if (event.target.value) onChange(event.target.value);
+        }}
+        className="absolute right-1 top-1 cursor-pointer opacity-0"
+        style={{ width: 32, height: 32 }}
+      />
+    </div>
+  );
+}
 
 function tierOf(confidence: number): Tier {
   if (confidence >= AUTO_CONFIRM) return "high";
@@ -208,21 +299,33 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     ),
   );
 
+  const datesValid = transactions.every((tx) =>
+    isValidDate(String(tx.date.value)),
+  );
+  const canProceed = allConfirmed && datesValid;
+
   return (
     <StepShell
       step="Step 04"
       title="AI 분석 결과 확인"
       description="신뢰도가 낮은 항목만 직접 확인해 주세요."
       backTo={withCompany("/upload", companyId)}
-      aside={
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={!allConfirmed}
-          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-        >
-          내용 확인 완료
-        </button>
+      footer={
+        <div className="flex flex-col items-end gap-2">
+          {!datesValid && (
+            <p className="text-xs text-red-500">
+              거래 날짜 형식을 확인해 주세요.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canProceed}
+            className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+          >
+            내용 확인 완료
+          </button>
+        </div>
       }
     >
       {/* 요약 통계 */}
@@ -272,6 +375,8 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
             const isConfirmed = confirmed.has(confirmKey(txIndex, key));
             const editable =
               requiresConfirmation(field.confidence) && !isConfirmed;
+            const isDate = key === "date";
+            const dateBad = isDate && !isValidDate(String(field.value));
 
             return (
               <div
@@ -318,18 +423,32 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                         한 번 더 확인하는 것을 권장합니다.
                       </p>
                     )}
-                    <input
-                      type={type}
-                      value={field.value}
-                      onChange={(event) =>
-                        updateValue(txIndex, key, event.target.value)
-                      }
-                      className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400"
-                    />
+                    {isDate ? (
+                      <DateInput
+                        value={String(field.value)}
+                        invalid={dateBad}
+                        onChange={(next) => updateValue(txIndex, key, next)}
+                      />
+                    ) : (
+                      <input
+                        type={type}
+                        value={field.value}
+                        onChange={(event) =>
+                          updateValue(txIndex, key, event.target.value)
+                        }
+                        className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400"
+                      />
+                    )}
+                    {dateBad && (
+                      <p className="text-[11px] text-red-500">
+                        2026 / 2026-02 / 2026-02-08 형식으로 입력해 주세요.
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() => confirmField(txIndex, key)}
-                      className="h-9 rounded-md bg-zinc-900 text-xs font-medium text-white transition-colors hover:bg-zinc-700"
+                      disabled={dateBad}
+                      className="h-9 rounded-md bg-zinc-900 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
                     >
                       이 값이 맞습니다
                     </button>
@@ -342,15 +461,32 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                 ) : (
                   // 한 번 확인한 항목도 다시 만지면 바로 수정 상태로 돌아간다.
                   // (수정 버튼을 따로 누르게 하면 오타를 발견해도 한 단계 더 걸린다.)
-                  <input
-                    type={type}
-                    value={field.value}
-                    onChange={(event) =>
-                      updateValue(txIndex, key, event.target.value)
-                    }
-                    onFocus={() => reEditField(txIndex, key)}
-                    className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-400"
-                  />
+                  <div className="mt-1 flex flex-col gap-1.5">
+                    {isDate ? (
+                      <DateInput
+                        value={String(field.value)}
+                        invalid={dateBad}
+                        onChange={(next) => updateValue(txIndex, key, next)}
+                        onFocus={() => reEditField(txIndex, key)}
+                        tone="muted"
+                      />
+                    ) : (
+                      <input
+                        type={type}
+                        value={field.value}
+                        onChange={(event) =>
+                          updateValue(txIndex, key, event.target.value)
+                        }
+                        onFocus={() => reEditField(txIndex, key)}
+                        className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-400"
+                      />
+                    )}
+                    {dateBad && (
+                      <p className="text-[11px] text-red-500">
+                        2026 / 2026-02 / 2026-02-08 형식으로 입력해 주세요.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             );

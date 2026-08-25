@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSignals } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
+import { SignalsEvidence } from "./signals-evidence";
 import { generateSignalsInsight } from "@/lib/llm/insights";
 
 const valueStyles = {
@@ -90,10 +91,10 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
       title="내부 성장 신호"
       description="내부 거래 문서에서 확인된 핵심 지표입니다."
       backTo={withCompany("/review", companyId)}
-      aside={
+      footer={
         <Link
           href={withCompany("/compare", companyId)}
-          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+          className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
         >
           외부와 내부 비교하기
         </Link>
@@ -141,6 +142,12 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
       >
         {notice}
       </div>
+
+      <SignalsEvidence
+        customerCount={result.customerCount}
+        previousCustomersCount={result.previousCustomersCount}
+        repeatPurchaseRate={result.repeatPurchaseRate}
+      />
     </StepShell>
   );
 }

@@ -21,6 +21,11 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 파일 한 개 최대 100MB
 const MAX_FILES_PER_CATEGORY = 5; // 카테고리당 최대 5개
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 전체 최대 500MB
 
+// 진행 게이지 3상태 색
+const GAUGE_UPLOADED = "#1B1917";
+const GAUGE_MISSING = "#B9B1A3";
+const GAUGE_TRACK = "#EDE9E1";
+
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -289,44 +294,99 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       title="내부 문서 업로드"
       description="문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요."
       backTo={withCompany("/visibility", companyId)}
+      footer={
+        <div className="flex flex-col items-end gap-2">
+          {notice && <p className="text-xs text-red-500">{notice}</p>}
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={!allHandled}
+            className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+          >
+            내부 문서 분석 시작
+          </button>
+        </div>
+      }
     >
 
-      {/* 카테고리 진행 상황 */}
-      {/* 막대를 두 겹으로 겹친다: 아래는 처리한 전체(파일 선택 + 해당 없음),
-          위는 실제로 파일을 올린 것. 두 값의 차이가 "없음"으로 표시한 몫이다. */}
-      <div className="rounded-md border border-zinc-100 bg-white px-4 py-3">
-        <div className="mb-2 flex items-center justify-between">
+      {/* 카테고리 진행 상황 — 문서 순서대로 한 칸씩 채운다.
+          업로드 완료 / 해당 문서 없음 / 미선택이 색으로 구분된다. */}
+      <div className="rounded-md border border-zinc-100 bg-white px-4 py-3.5">
+        <div className="mb-2.5 flex items-center justify-between">
           <span
-            className={`font-mono text-xs font-medium tabular-nums transition-colors ${
+            className={`font-mono text-xs font-medium tabular-nums transition-colors duration-500 ${
               handledCount === documentCategories.length
-                ? "text-emerald-600"
-                : "text-zinc-900"
+                ? "text-zinc-900"
+                : "text-zinc-500"
             }`}
           >
             {progressPercent}%
           </span>
           <span className="text-[11px] text-zinc-400">
             {handledCount}/{documentCategories.length} 항목 완료
-            {missingCount > 0 && (
-              <span className="ml-1.5 text-amber-500">
-                · 없음 {missingCount}건
-              </span>
-            )}
           </span>
         </div>
-        <div className="relative h-1 w-full overflow-hidden rounded-full bg-zinc-100">
-          <div
-            className="absolute left-0 top-0 h-full rounded-full bg-amber-200/60 transition-all duration-500 ease-out"
-            style={{
-              width: `${(handledCount / documentCategories.length) * 100}%`,
-            }}
-          />
-          <div
-            className="absolute left-0 top-0 h-full rounded-full bg-zinc-900 transition-all duration-500 ease-out"
-            style={{
-              width: `${(uploadedCount / documentCategories.length) * 100}%`,
-            }}
-          />
+
+        <div className="flex gap-1.5">
+          {documentCategories.map((category) => {
+            const status = states[category.id].status;
+            const handled = status !== "empty";
+
+            return (
+              <div key={category.id} className="flex flex-1 flex-col gap-1.5">
+                <div
+                  className="h-1.5 overflow-hidden rounded-sm"
+                  style={{ backgroundColor: GAUGE_TRACK }}
+                >
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: handled ? "100%" : "0%",
+                      backgroundColor:
+                        status === "uploaded" ? GAUGE_UPLOADED : GAUGE_MISSING,
+                      transition:
+                        "width 420ms cubic-bezier(0.22,0.61,0.36,1), background-color 300ms ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className={`truncate text-[10px] transition-colors duration-300 ${
+                    status === "uploaded"
+                      ? "text-zinc-600"
+                      : status === "missing"
+                        ? "text-zinc-400"
+                        : "text-zinc-300"
+                  }`}
+                >
+                  {category.name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[10px] text-zinc-400">
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_UPLOADED }}
+            />
+            업로드 {uploadedCount}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_MISSING }}
+            />
+            해당 문서 없음 {missingCount}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_TRACK }}
+            />
+            미선택 {documentCategories.length - handledCount}
+          </span>
         </div>
       </div>
 
@@ -532,19 +592,6 @@ export function UploadContent({ companyId }: { companyId?: string }) {
         </p>
       )}
 
-      {/* 그 외 안내(예: 버튼 눌렀지만 미완료) */}
-      {notice && <p className="mt-3 text-xs text-red-500">{notice}</p>}
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={handleAnalyze}
-          disabled={!allHandled}
-          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-        >
-          내부 문서 분석 시작
-        </button>
-      </div>
     </StepShell>
   );
 }

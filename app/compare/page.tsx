@@ -77,10 +77,10 @@ export default async function ComparePage(props: PageProps<"/compare">) {
       title="외부와 내부 비교"
       description="공개 데이터와 내부 분석 결과를 함께 비교합니다."
       backTo={withCompany("/signals", companyId)}
-      aside={
+      footer={
         <Link
           href={withCompany("/share", visibility.companyId)}
-          className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+          className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
         >
           최종 진단 보기
         </Link>
@@ -95,10 +95,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500">
             External
           </p>
-          <p
-            className="mt-2 text-[20px] leading-tight text-white"
-            style={{ fontFamily: "Nanum Myeongjo, serif" }}
-          >
+          <p className="mt-2 text-[20px] font-semibold leading-tight tracking-tight text-white">
             외부에서 본 {visibility.company}
           </p>
           <div className="mt-6 flex flex-col">
@@ -148,10 +145,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
           >
             Internal
           </p>
-          <p
-            className="mt-2 text-[20px] leading-tight text-white"
-            style={{ fontFamily: "Nanum Myeongjo, serif" }}
-          >
+          <p className="mt-2 text-[20px] font-semibold leading-tight tracking-tight text-white">
             내부에서 본 {visibility.company}
           </p>
           <div className="mt-6 flex flex-col">
