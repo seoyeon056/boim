@@ -6,6 +6,10 @@ export type ExternalPresence = {
   companyId: string;
   newsCount: number;
   patentCount: number;
+  // KIPRIS는 한 번에 최대 500건만 내려준다. 이 값이 true면 patentCount는
+  // "정확한 수치"가 아니라 "적어도 이만큼은 있다"는 뜻이다. 합성 데이터는
+  // 처음부터 정확한 값이라 항상 false(미지정 시 기본값).
+  patentCountIsAtLeast?: boolean;
   jobCount: number;
 };
 
