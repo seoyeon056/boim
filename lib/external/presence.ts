@@ -12,7 +12,7 @@ export async function getExternalPresence(
 ): Promise<ExternalPresence> {
   const fallback = findExternalPresence(companyId);
 
-  const [newsCount, jobCount, patent] = await Promise.all([
+  const [news, jobCount, patent] = await Promise.all([
     fetchNewsCount(companyName),
     fetchJobCount(companyName),
     fetchPatentCount(companyName),
@@ -20,7 +20,8 @@ export async function getExternalPresence(
 
   return {
     companyId,
-    newsCount: newsCount ?? fallback.newsCount,
+    newsCount: news?.count ?? fallback.newsCount,
+    newsCountIsAtLeast: news ? news.isAtLeast : undefined,
     jobCount: jobCount ?? fallback.jobCount,
     patentCount: patent?.count ?? fallback.patentCount,
     patentCountIsAtLeast: patent ? patent.isAtLeast : undefined,

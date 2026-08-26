@@ -5,6 +5,9 @@
 export type ExternalPresence = {
   companyId: string;
   newsCount: number;
+  // 네이버 뉴스 검색도 한 번에 최대 100건만 내려준다. 이 값이 true면
+  // newsCount는 "적어도 이만큼은 있다"는 뜻이다.
+  newsCountIsAtLeast?: boolean;
   patentCount: number;
   // KIPRIS는 한 번에 최대 500건만 내려준다. 이 값이 true면 patentCount는
   // "정확한 수치"가 아니라 "적어도 이만큼은 있다"는 뜻이다. 합성 데이터는
