@@ -10,7 +10,7 @@ export async function generateVisibilityInsight(
   const prompt = `다음은 한 기업의 외부 가시성(공개 정보) 지표입니다. 이 수치만 근거로 2문장 이내로 해석 문장을 작성하세요. 숫자를 새로 만들지 마세요.
 
 가시성 점수: ${visibility.visibilityScore}점 (${visibility.interpretations.visibility})
-뉴스 ${visibility.newsCount}건 / 특허 ${visibility.patentCount}건 / 채용공고 ${visibility.jobCount}건`;
+뉴스 ${visibility.newsCount}건 / 특허 ${visibility.patentCount}${visibility.patentCountIsAtLeast ? "건 이상" : "건"} / 채용공고 ${visibility.jobCount}건`;
 
   return generateDiagnosisText(prompt);
 }

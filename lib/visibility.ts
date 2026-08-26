@@ -21,6 +21,7 @@ export type Visibility = {
 
   newsCount: number;
   patentCount: number;
+  patentCountIsAtLeast?: boolean;
   jobCount: number;
   visibilityScore: number;
 
@@ -139,6 +140,7 @@ export function calculateVisibility(
 
     newsCount: presence.newsCount,
     patentCount: presence.patentCount,
+    patentCountIsAtLeast: presence.patentCountIsAtLeast,
     jobCount: presence.jobCount,
     visibilityScore,
 
@@ -159,7 +161,9 @@ export function calculateVisibility(
       {
         key: "patent",
         label: "특허",
-        value: `${presence.patentCount}건`,
+        value: presence.patentCountIsAtLeast
+          ? `${presence.patentCount}건 이상`
+          : `${presence.patentCount}건`,
         ...patent,
       },
       {

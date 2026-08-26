@@ -33,9 +33,19 @@ function toKoreanLetterSpelling(value: string): string {
     .join("");
 }
 
+// KIPRIS가 한 번에 내려주는 최대 건수(500 초과 요청해도 500까지만 옴, 실측 확인).
+// 페이지가 이 값만큼 꽉 찼다는 건 뒤에 더 있을 수도 있다는 뜻이라, 그럴 땐
+// "정확히 N건"이 아니라 "N건 이상"으로 표시해야 한다.
+const MAX_DOCS_PER_PAGE = 500;
+
+export type PatentCountResult = {
+  count: number;
+  isAtLeast: boolean;
+};
+
 export async function fetchPatentCount(
   companyName: string,
-): Promise<number | null> {
+): Promise<PatentCountResult | null> {
   const serviceKey = process.env.KIPRIS_SERVICE_KEY;
 
   if (!serviceKey) {
@@ -55,11 +65,11 @@ export async function fetchPatentCount(
   url.searchParams.set("patent", "true");
   url.searchParams.set("utility", "true");
   url.searchParams.set("docsStart", "1");
-  url.searchParams.set("docsCount", "100");
+  url.searchParams.set("docsCount", String(MAX_DOCS_PER_PAGE));
   url.searchParams.set("accessKey", serviceKey);
 
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
 
     if (!response.ok) {
       return null;
@@ -73,7 +83,12 @@ export async function fetchPatentCount(
       normalizeCompanyName(name).includes(normalizedTarget),
     ).length;
 
-    return matchingCount;
+    // 필터링 전 원본 페이지 자체가 상한을 꽉 채웠으면, 다음 페이지에 검색어와
+    // 일치하는 항목이 더 있을 수도 있다는 뜻이라 "이상"으로 표시해야 정직하다.
+    return {
+      count: matchingCount,
+      isAtLeast: applicants.length >= MAX_DOCS_PER_PAGE,
+    };
   } catch {
     return null;
   }
