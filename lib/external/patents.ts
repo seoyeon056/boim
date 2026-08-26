@@ -1,11 +1,16 @@
 // KIPRIS Plus 특허 검색 오픈API. 셋 중 신청 절차가 제일 무겁다(문의 전화 안내까지 있음).
 // https://plus.kipris.or.kr
 //
-// getWordSearch는 출원인 전용 검색이 아니라 일반 키워드 검색이다. "LG CNS"처럼
-// 회사명에 흔한 영단어(CNS = 중추신경계)가 섞이면 전혀 무관한 제약 특허까지
-// 걸려서(실측: "CNS" 단독 검색만으로 무관 업체 다수 확인) <item> 개수를 그대로
-// 세면 노이즈가 심하다. 그래서 응답에 포함된 출원인명(applicantName)이 실제로
-// 회사명을 포함하는 항목만 걸러서 센다.
+// 처음엔 getWordSearch(일반 키워드 검색)를 썼는데, 이건 특허 전문(제목/초록)을
+// 뒤지는 거라 회사명이 흔한 한국어 단어로 이뤄지면("동일기연" → "동일") 완전히
+// 무관한 특허가 수백 건씩 걸리고, 정작 진짜 그 회사 특허는 노출 순위에 밀려
+// numOfRows=500까지 늘려도 안 잡히는 걸 실측으로 확인했다.
+//
+// applicantNameSearchInfo는 출원인 필드만 뒤지는 전용 오퍼레이션이라 훨씬
+// 깨끗하다("동일기연" 검색 시 실제 (주)동일기연의 특허가 바로 잡힘). 다만 이것도
+// 완전 정확 일치는 아니라("한빛정밀" 검색에 무관한 "한빛티앤아이"가 걸림, 아마
+// 형태소 단위로 느슨하게 매칭하는 듯) 응답의 Applicant 필드가 검색어를 실제로
+// 포함하는 항목만 다시 한번 걸러서 센다.
 function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, "").toLowerCase();
 }
@@ -44,13 +49,14 @@ export async function fetchPatentCount(
     : companyName;
 
   const url = new URL(
-    "https://plus.kipris.or.kr/kipo-api/kipi/patUtiModInfoSearchSevice/getWordSearch",
+    "http://plus.kipris.or.kr/openapi/rest/patUtiModInfoSearchSevice/applicantNameSearchInfo",
   );
-  url.searchParams.set("word", searchWord);
+  url.searchParams.set("applicant", searchWord);
   url.searchParams.set("patent", "true");
   url.searchParams.set("utility", "true");
-  url.searchParams.set("numOfRows", "100");
-  url.searchParams.set("ServiceKey", serviceKey);
+  url.searchParams.set("docsStart", "1");
+  url.searchParams.set("docsCount", "100");
+  url.searchParams.set("accessKey", serviceKey);
 
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -62,7 +68,7 @@ export async function fetchPatentCount(
     const xml = await response.text();
     const normalizedTarget = normalizeCompanyName(searchWord);
 
-    const applicants = [...xml.matchAll(/<applicantName>(.*?)<\/applicantName>/g)];
+    const applicants = [...xml.matchAll(/<Applicant>(.*?)<\/Applicant>/g)];
     const matchingCount = applicants.filter(([, name]) =>
       normalizeCompanyName(name).includes(normalizedTarget),
     ).length;
