@@ -1,9 +1,15 @@
 // KIPRIS Plus 특허 검색 오픈API. 셋 중 신청 절차가 제일 무겁다(문의 전화 안내까지 있음).
 // https://plus.kipris.or.kr
 //
-// getWordSearch는 출원인 전용 검색이 아니라 일반 키워드 검색이라, 기업명으로 찾으면
-// "이 기업명이 언급된 특허/실용신안 공보" 근사치가 나온다. 워크넷과 같은 이유로
-// XML의 <item> 개수를 센다.
+// getWordSearch는 출원인 전용 검색이 아니라 일반 키워드 검색이다. "LG CNS"처럼
+// 회사명에 흔한 영단어(CNS = 중추신경계)가 섞이면 전혀 무관한 제약 특허까지
+// 걸려서(실측: "CNS" 단독 검색만으로 무관 업체 다수 확인) <item> 개수를 그대로
+// 세면 노이즈가 심하다. 그래서 응답에 포함된 출원인명(applicantName)이 실제로
+// 회사명을 포함하는 항목만 걸러서 센다.
+function normalizeCompanyName(value: string): string {
+  return value.replace(/\s+/g, "").toLowerCase();
+}
+
 export async function fetchPatentCount(
   companyName: string,
 ): Promise<number | null> {
@@ -30,8 +36,14 @@ export async function fetchPatentCount(
     }
 
     const xml = await response.text();
-    const itemCount = (xml.match(/<item>/g) ?? []).length;
-    return itemCount;
+    const normalizedTarget = normalizeCompanyName(companyName);
+
+    const applicants = [...xml.matchAll(/<applicantName>(.*?)<\/applicantName>/g)];
+    const matchingCount = applicants.filter(([, name]) =>
+      normalizeCompanyName(name).includes(normalizedTarget),
+    ).length;
+
+    return matchingCount;
   } catch {
     return null;
   }
