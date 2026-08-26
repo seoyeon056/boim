@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 
 import {
+  fetchDiagnosis,
   fetchSignals,
   fetchVisibility,
   type SignalsResult,
@@ -39,6 +40,8 @@ export function ShareContent({
 }) {
   const [visibility, setVisibility] = useState<VisibilityResult | null>(null);
   const [signals, setSignals] = useState<SignalsResult | null>(null);
+  // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
+  const [llmDiagnosis, setLlmDiagnosis] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -53,6 +56,19 @@ export function ShareContent({
         if (!isActive) return;
         setVisibility(null);
         setSignals(null);
+      });
+
+    // 진단 문장은 지표와 별개로 받는다. LLM 호출이 느리거나 실패해도 리포트
+    // 본문(기업 요약·가시성·성장 신호)은 먼저 그려져야 한다.
+    fetchDiagnosis(companyId)
+      .then(({ diagnosis: text }) => {
+        if (!isActive) return;
+        const trimmed = text.trim();
+        if (trimmed) setLlmDiagnosis(trimmed);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setLlmDiagnosis(null);
       });
 
     return () => {
@@ -253,11 +269,20 @@ export function ShareContent({
             3. 종합 진단
           </h2>
           <div className="space-y-2 text-[13px] leading-7 text-zinc-900">
+            {/*
+              가/나/다는 축별(외부·내부·리스크) 규칙 기반 문장이라 항상 같은
+              수치에서 같은 결론이 나온다. 공문서 양식에는 이 재현성이 필요하다.
+              LLM 문장은 그걸 대체하는 게 아니라 "라. 종합 의견"으로 덧붙인다.
+              그래야 LLM이 실패해도 문서 구조가 바뀌지 않는다.
+            */}
             {diagnosis ? (
               <>
                 <p className="-indent-4 pl-4">가. {diagnosis.external}</p>
                 <p className="-indent-4 pl-4">나. {diagnosis.internal}</p>
                 <p className="-indent-4 pl-4">다. {diagnosis.risk}</p>
+                {llmDiagnosis && (
+                  <p className="-indent-4 pl-4">라. {llmDiagnosis}</p>
+                )}
               </>
             ) : (
               <p className="-indent-4 pl-4">진단 결과를 불러오는 중입니다.</p>
