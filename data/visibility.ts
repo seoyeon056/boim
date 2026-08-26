@@ -1,5 +1,5 @@
 // 기업별 외부 공개 정보 수집 결과(합성 데이터).
-// 뉴스·특허·채용공고 "건수"만 원본 데이터로 두고,
+// 뉴스·특허·채용공고·공시 "건수"만 원본 데이터로 두고,
 // 가시성 점수와 해석 문구는 lib/visibility.ts 에서 계산한다.
 // data/transactions.ts 에서 성장 신호를 계산하는 방식과 같은 구조다.
 export type ExternalPresence = {
@@ -15,6 +15,10 @@ export type ExternalPresence = {
   // 처음부터 정확한 값이라 항상 false(미지정 시 기본값).
   patentCountIsAtLeast?: boolean;
   jobCount: number;
+  // DART 최근 1년 공시 건수. 공시는 법인 등록과 보고 의무가 있는 회사만 남기는
+  // 기록이라, 아래 합성 데이터의 소규모 법인들은 전부 0건이다. 30줄에 똑같이
+  // 0을 쓰는 대신 생략하고, 값이 없으면 0으로 읽는다.
+  disclosureCount?: number;
 };
 
 export const externalPresences: ExternalPresence[] = [
@@ -54,6 +58,7 @@ const EMPTY_PRESENCE: Omit<ExternalPresence, "companyId"> = {
   newsCount: 0,
   patentCount: 0,
   jobCount: 0,
+  disclosureCount: 0,
 };
 
 // 수집 결과가 없는 기업은 "외부에 아무 흔적이 없다"로 본다.
