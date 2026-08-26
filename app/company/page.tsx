@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CompanyResult, searchCompanies } from "@/lib/api";
 import { withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
@@ -12,40 +12,46 @@ export default function CompanyPage() {
   const [selectedCompany, setSelectedCompany] = useState<CompanyResult | null>(
     null,
   );
-  const [hasSearched, setHasSearched] = useState(false);
+
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const latestRequestId = useRef(0);
 
+  useEffect(() => {
     const normalizedQuery = query.trim();
 
-    setSelectedCompany(null);
-    setErrorMessage("");
-    setHasSearched(true);
-
-    if (normalizedQuery === "") {
+    if(normalizedQuery === ""){
       setCompanies([]);
+      setErrorMessage("");
       return;
     }
 
-    try {
-      setIsSearching(true);
+    const requestId = ++latestRequestId.current;
+    setIsSearching(true);
+    
+    const timer = setTimeout(async () => {
+      try{
+        const results = await searchCompanies(normalizedQuery);
 
-      const results = await searchCompanies(normalizedQuery);
+        if (requestId === latestRequestId.current){
+          setCompanies(results);
+          setErrorMessage("");
+        }
+      } catch{
+        if (requestId === latestRequestId.current){
+          setCompanies([]);
+          setErrorMessage("기업 검색을 불러오지 못했습니다.");
+        }
+      } finally {
+        if(requestId === latestRequestId.current) {
+          setIsSearching(false);
+        }
+      }
+    }, 300);
+    return() => clearTimeout(timer);
+  }, [query]);
 
-      // 공백/대소문자 무시, 부분 일치 매칭은 API(lib/engine.ts)가 이미 처리한다.
-      // 여기서 다시 완전 일치로 걸러내면 "한빛 정밀"처럼 공백 섞인 입력이
-      // "한빛정밀"과 다르다고 판단돼 결과가 사라진다.
-      setCompanies(results);
-    } catch {
-      setCompanies([]);
-      setErrorMessage("기업 검색을 불러오지 못했습니다.");
-    } finally {
-      setIsSearching(false);
-    }
-  }
 
   return (
     <StepShell
@@ -55,14 +61,19 @@ export default function CompanyPage() {
       backTo="/"
       backLabel="처음으로"
     >
-      <form onSubmit={handleSearch} className="flex max-w-2xl items-end gap-3">
+      <div className="flex max-w-2xl items-end gap-3">
         <div className="flex flex-1 flex-col gap-1.5">
-          <label
-            htmlFor="company-search"
-            className="text-xs font-medium text-zinc-600"
-          >
-            기업명
-          </label>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="company-search"
+              className="text-xs font-medium text-zinc-600"
+            >
+              기업명
+            </label>
+            {isSearching && (
+              <span className="text-xs text-zinc-400">검색 중…</span>
+            )}
+          </div>
           <input
             id="company-search"
             type="search"
@@ -71,7 +82,6 @@ export default function CompanyPage() {
               setQuery(event.target.value);
               setCompanies([]);
               setSelectedCompany(null);
-              setHasSearched(false);
               setErrorMessage("");
             }}
             placeholder="예: 한빛정밀"
@@ -79,14 +89,7 @@ export default function CompanyPage() {
             className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
           />
         </div>
-        <button
-          type="submit"
-          disabled={isSearching || query.trim() === ""}
-          className="h-10 shrink-0 rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-        >
-          {isSearching ? "검색 중…" : "검색"}
-        </button>
-      </form>
+      </div>
 
       <div className="mt-5 flex max-w-2xl flex-col gap-2">
         {errorMessage && (
@@ -96,7 +99,7 @@ export default function CompanyPage() {
         )}
 
         {!errorMessage &&
-          hasSearched &&
+          query.trim() !== "" &&
           !isSearching &&
           companies.length === 0 && (
             <div className="rounded-md border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
