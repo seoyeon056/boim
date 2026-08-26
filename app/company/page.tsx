@@ -13,43 +13,53 @@ export default function CompanyPage() {
     null,
   );
 
-  const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // 지금 화면의 결과가 어떤 검색어에 대한 것인지 기억한다.
+  // 입력한 검색어와 다르면 아직 결과를 못 받은 것이므로 "검색 중"으로 본다.
+  const [resolvedQuery, setResolvedQuery] = useState("");
 
   const latestRequestId = useRef(0);
 
-  useEffect(() => {
-    const normalizedQuery = query.trim();
+  const normalizedQuery = query.trim();
+  const hasQuery = normalizedQuery !== "";
 
-    if(normalizedQuery === ""){
-      setCompanies([]);
-      setErrorMessage("");
+  // 검색어가 비면 직전 결과를 화면에서 감춘다.
+  // 상태를 지우는 대신 파생값으로 계산해야 effect 안에서 setState 를 하지 않는다.
+  const visibleCompanies = hasQuery ? companies : [];
+  const visibleError = hasQuery ? errorMessage : "";
+  const isSearching = hasQuery && resolvedQuery !== normalizedQuery;
+
+  useEffect(() => {
+    const nextQuery = query.trim();
+
+    if (nextQuery === "") {
       return;
     }
 
     const requestId = ++latestRequestId.current;
-    setIsSearching(true);
-    
-    const timer = setTimeout(async () => {
-      try{
-        const results = await searchCompanies(normalizedQuery);
 
-        if (requestId === latestRequestId.current){
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchCompanies(nextQuery);
+
+        if (requestId === latestRequestId.current) {
           setCompanies(results);
           setErrorMessage("");
         }
-      } catch{
-        if (requestId === latestRequestId.current){
+      } catch {
+        if (requestId === latestRequestId.current) {
           setCompanies([]);
           setErrorMessage("기업 검색을 불러오지 못했습니다.");
         }
       } finally {
-        if(requestId === latestRequestId.current) {
-          setIsSearching(false);
+        if (requestId === latestRequestId.current) {
+          setResolvedQuery(nextQuery);
         }
       }
     }, 300);
-    return() => clearTimeout(timer);
+
+    return () => clearTimeout(timer);
   }, [query]);
 
 
@@ -92,22 +102,22 @@ export default function CompanyPage() {
       </div>
 
       <div className="mt-5 flex max-w-2xl flex-col gap-2">
-        {errorMessage && (
+        {visibleError && (
           <div className="rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-            {errorMessage}
+            {visibleError}
           </div>
         )}
 
-        {!errorMessage &&
-          query.trim() !== "" &&
+        {!visibleError &&
+          hasQuery &&
           !isSearching &&
-          companies.length === 0 && (
+          visibleCompanies.length === 0 && (
             <div className="rounded-md border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
               정확히 일치하는 기업이 없습니다.
             </div>
           )}
 
-        {companies.map((company) => {
+        {visibleCompanies.map((company) => {
           const isSelected = selectedCompany?.id === company.id;
 
           return (
