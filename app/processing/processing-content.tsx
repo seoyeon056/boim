@@ -163,14 +163,18 @@ export function ProcessingContent({
   }, []);
 
   useEffect(() => {
-    // 마지막 "분석 완료" 상태에 도달하면 합성 결과를 저장하고
+    // 마지막 "분석 완료" 상태에 도달하면 결과를 저장하고
     // 잠시 뒤 자동으로 /review 화면으로 이동한다.
     if (stepIndex < STEPS.length - 1) return;
 
+    // upload 화면에서 실제 OCR 추출에 성공했으면 그 결과를 쓰고,
+    // 없으면(키 미등록, 추출 실패, 거래명세서 미첨부 등) 합성 데이터로 대체한다.
+    const extracted = sessionStorage.getItem("boimExtractedTransactions");
     sessionStorage.setItem(
       "boimAnalysisResult",
-      JSON.stringify(toReviewResult(reviewSample)),
+      extracted ?? JSON.stringify(toReviewResult(reviewSample)),
     );
+    sessionStorage.removeItem("boimExtractedTransactions");
 
     const timer = setTimeout(() => {
       router.push(withCompany("/review", companyId));
@@ -299,7 +303,7 @@ export function ProcessingContent({
       </div>
 
       <p className="mt-6 text-center font-mono text-[10px] text-zinc-300">
-        시연 버전 · 실제 문서를 분석하지 않습니다
+        거래명세서는 업로드 시 실제로 분석됩니다 · 나머지 진행 화면은 시연용입니다
       </p>
     </div>
   );
