@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Signals } from "@/lib/signals";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
 import { describePaymentTerms, readDocumentTerms } from "@/lib/document-terms";
+import { grantAiConsent } from "@/lib/ai-consent";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
@@ -77,6 +78,8 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   }, []);
 
   async function requestAiNotice() {
+    // 여기서 한 번 동의하면 리포트에서 다시 묻지 않는다.
+    grantAiConsent();
     setAiState("loading");
     try {
       // 거래처명은 보내지 않는다. 비율 숫자만 나가고, 응답의 마스킹 라벨을
