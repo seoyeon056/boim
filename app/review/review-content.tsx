@@ -75,6 +75,7 @@ function isValidDate(raw: string): boolean {
 }
 
 // 수기 입력과 달력 선택을 모두 허용하는 날짜 필드.
+// 네이티브 date 피커는 브라우저마다 모양이 달라, 직접 만든 달력 팝업을 쓴다.
 function DateInput({
   value,
   invalid,
@@ -84,62 +85,141 @@ function DateInput({
 }: {
   value: string;
   invalid: boolean;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   onFocus?: () => void;
   tone?: "plain" | "muted";
 }) {
-  const pickerRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const base0 = isValidDate(value) && value.length === 10 ? new Date(value) : new Date();
+  const [view, setView] = useState({ y: base0.getFullYear(), m: base0.getMonth() });
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
 
   function openPicker() {
-    const el = pickerRef.current;
-    if (!el) return;
-
     onFocus?.();
-    el.value = isValidDate(value) && value.length === 10 ? value : "";
-
-    try {
-      if (typeof el.showPicker === "function") el.showPicker();
-      else el.focus();
-    } catch {
-      el.focus();
-    }
+    const b = isValidDate(value) && value.length === 10 ? new Date(value) : new Date();
+    setView({ y: b.getFullYear(), m: b.getMonth() });
+    setOpen((v) => !v);
   }
 
+  function pick(day: number) {
+    onChange(`${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    setOpen(false);
+  }
+
+  const firstDay = new Date(view.y, view.m, 1).getDay();
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array.from({ length: firstDay }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  const selected = isValidDate(value) && value.length === 10 ? new Date(value) : null;
+  const today = new Date();
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <input
         type="text"
         inputMode="numeric"
         value={value}
         placeholder="2026-02-08"
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
         className={`h-10 w-full rounded-md border px-3 pr-10 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-500 ${
-          invalid ? "border-[#c9847c]" : "border-zinc-200"
+          invalid ? "border-[#8a4a2e]" : "border-zinc-200"
         } ${tone === "muted" ? "bg-zinc-50" : "bg-white"}`}
       />
       <button
         type="button"
         onClick={openPicker}
         aria-label="달력에서 선택"
-        className="absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+        aria-expanded={open}
+        className={`absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-zinc-100 hover:text-zinc-700 ${open ? "bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}
       >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
           <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
           <path d="M2 6.75h12M5.5 2v2.5M10.5 2v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
         </svg>
       </button>
-      {/* 네이티브 달력. 0x0으로 숨기면 showPicker()가 동작하지 않아 아이콘 위에 겹쳐 둔다. */}
-      <input
-        ref={pickerRef}
-        type="date"
-        aria-label="달력 선택"
-        onChange={(event) => {
-          if (event.target.value) onChange(event.target.value);
-        }}
-        className="absolute right-1 top-1 cursor-pointer opacity-0"
-        style={{ width: 32, height: 32 }}
-      />
+      {open && (
+        <div className="absolute right-0 top-11 z-30 w-[248px] rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }))}
+              className="flex h-7 w-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+              aria-label="이전 달"
+            >
+              ‹
+            </button>
+            <span className="font-mono text-[13px] font-semibold text-zinc-900">
+              {view.y}. {String(view.m + 1).padStart(2, "0")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }))}
+              className="flex h-7 w-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+              aria-label="다음 달"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="mt-2.5 grid grid-cols-7 gap-y-0.5">
+            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+              <span key={d} className="flex h-6 items-center justify-center text-[10px] text-zinc-400">{d}</span>
+            ))}
+            {cells.map((day, i) => {
+              if (day === null) return <span key={`e${i}`} />;
+              const isSel = selected !== null && selected.getFullYear() === view.y && selected.getMonth() === view.m && selected.getDate() === day;
+              const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === day;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => pick(day)}
+                  className={`mx-auto flex h-7 w-7 items-center justify-center rounded font-mono text-[12px] transition-colors ${
+                    isSel
+                      ? "bg-zinc-900 font-semibold text-white"
+                      : isToday
+                        ? "font-semibold text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:bg-zinc-100"
+                        : "text-zinc-600 hover:bg-zinc-100"
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between border-t border-zinc-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const t = new Date();
+                onChange(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`);
+                setOpen(false);
+              }}
+              className="text-[11px] text-zinc-500 transition-colors hover:text-zinc-900"
+            >
+              오늘로 설정
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-zinc-400 transition-colors hover:text-zinc-700">
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -402,10 +482,10 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
         ].map((stat) => (
           <div
             key={stat.label}
-            className="flex flex-col gap-1 bg-white px-4 py-3 text-center"
+            className="flex flex-col gap-1 bg-white px-4 py-3.5 text-center"
           >
-            <span className="text-[10px] text-zinc-400">{stat.label}</span>
-            <span className={`font-mono text-lg font-semibold ${stat.color}`}>
+            <span className="text-[11px] text-zinc-400">{stat.label}</span>
+            <span className={`font-mono text-[20px] font-medium tabular-nums ${stat.color}`}>
               {stat.value}
             </span>
           </div>
@@ -441,10 +521,10 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
             return (
               <div
                 key={key}
-                className="rounded-lg border border-zinc-100 bg-white px-4 py-3"
+                className="rounded-lg border border-zinc-100 bg-white px-4 py-3 transition-colors hover:border-zinc-200"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-zinc-500">
+                  <span className="text-[13px] text-zinc-500">
                     {label}
                   </span>
 

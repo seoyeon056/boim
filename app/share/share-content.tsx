@@ -127,7 +127,8 @@ export function ShareContent({
     : [];
 
   return (
-    <div className="mx-auto w-full max-w-[840px] px-6 py-12 print:max-w-full print:px-0 print:py-0">
+    <div className="min-h-screen print:min-h-0" style={{ backgroundColor: "#E9E2DD" }}>
+      <div className="mx-auto w-full max-w-[840px] px-6 py-12 print:max-w-full print:px-0 print:py-0">
       {/* 화면 전용 네비 */}
       <div className="print:hidden">
         <Link
@@ -140,8 +141,12 @@ export function ShareContent({
 
       {/* ───── 문서 본체 ───── */}
       <div
-        className="report-sheet mt-8 border border-zinc-900 bg-white px-12 py-10 print:mt-0 print:border-0 print:px-0"
-        style={serif}
+        className="report-sheet mt-8 bg-white px-12 py-10 print:mt-0 print:border-0 print:px-0 print:shadow-none"
+        style={{
+          ...serif,
+          boxShadow:
+            "0 1px 2px rgba(27,25,23,0.06), 0 12px 32px rgba(27,25,23,0.10)",
+        }}
       >
         {/* 발신 기관 · 문서번호 */}
         <div className="flex items-end justify-between">
@@ -343,6 +348,7 @@ export function ShareContent({
           >
             처음으로
           </Link>
+        </div>
         </div>
       </div>
     </div>

@@ -3,17 +3,8 @@ import { getSignals } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
 import { SignalsEvidence } from "./signals-evidence";
+import { MetricCards, type MetricCardData } from "./metric-cards";
 import { generateSignalsInsight } from "@/lib/llm/insights";
-
-const valueStyles = {
-  positive: "text-emerald-600",
-  caution: "text-amber-500",
-};
-
-const badgeStyles = {
-  positive: "bg-emerald-50 text-emerald-600",
-  caution: "bg-amber-50 text-amber-600",
-};
 
 const statusLabel = {
   positive: "긍정",
@@ -49,27 +40,28 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
   }
 
   // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
-  const signals = [
+  const metrics: MetricCardData[] = [
     {
       label: "거래처 증가율",
-      value: `${result.customerGrowthRate > 0 ? "+" : ""}${result.customerGrowthRate}%`,
-      status: statusLabel[result.statuses.customerGrowthRate],
-      tone: result.statuses.customerGrowthRate,
+      target: result.customerGrowthRate,
+      prefix: result.customerGrowthRate > 0 ? "+" : "",
       description: `${result.previousCustomersCount}곳 → ${result.customerCount}곳`,
+      status: statusLabel[result.statuses.customerGrowthRate],
+      caution: result.statuses.customerGrowthRate === "caution",
     },
     {
       label: "재구매율",
-      value: `${result.repeatPurchaseRate}%`,
-      status: statusLabel[result.statuses.repeatPurchaseRate],
-      tone: result.statuses.repeatPurchaseRate,
+      target: result.repeatPurchaseRate,
       description: "두 번 이상 거래한 비율",
+      status: statusLabel[result.statuses.repeatPurchaseRate],
+      caution: result.statuses.repeatPurchaseRate === "caution",
     },
     {
       label: "최대 거래처 집중도",
-      value: `${result.topCustomerConcentration}%`,
-      status: statusLabel[result.statuses.topCustomerConcentration],
-      tone: result.statuses.topCustomerConcentration,
+      target: result.topCustomerConcentration,
       description: `${result.topCustomerName} 의존`,
+      status: statusLabel[result.statuses.topCustomerConcentration],
+      caution: result.statuses.topCustomerConcentration === "caution",
     },
   ];
 
@@ -100,48 +92,14 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
         </Link>
       }
     >
-      {/* 지표 카드 */}
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100 md:grid-cols-3">
-        {signals.map((signal) => (
-          <div
-            key={signal.label}
-            className={`flex flex-col justify-between gap-6 px-6 py-5 ${
-              signal.tone === "caution" ? "bg-amber-50/30" : "bg-white"
-            }`}
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-zinc-400">{signal.label}</span>
-              <span
-                className={`font-mono text-4xl font-semibold leading-none tabular-nums ${
-                  valueStyles[signal.tone]
-                }`}
-              >
-                {signal.value}
-              </span>
-              <span className="mt-1 text-[12px] text-zinc-400">
-                {signal.description}
-              </span>
-            </div>
-            <span
-              className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                badgeStyles[signal.tone]
-              }`}
-            >
-              {signal.status}
-            </span>
-          </div>
-        ))}
-      </div>
+      <MetricCards metrics={metrics} />
 
-      <div
-        className={`mt-3 max-w-3xl rounded-md border px-3 py-2.5 text-[11px] leading-5 ${
-          isConcentrationRisky
-            ? "border-amber-100 bg-amber-50 text-amber-700"
-            : "border-zinc-100 bg-zinc-50 text-zinc-500"
-        }`}
+      <p
+        className="mt-3 max-w-3xl text-[13px] leading-6"
+        style={{ color: isConcentrationRisky ? "#8A4A2E" : "#736861" }}
       >
         {notice}
-      </div>
+      </p>
 
       <SignalsEvidence
         customerCount={result.customerCount}
