@@ -25,6 +25,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   // 서버는 sessionStorage를 못 본다. 업로드·검수한 거래가 있으면 그걸 우선한다.
   const [signals, setSignals] = useState<Signals>(serverSignals);
   const [fromUpload, setFromUpload] = useState(false);
+  const [transactionCount, setTransactionCount] = useState(0);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [aiState, setAiState] = useState<"idle" | "loading" | "failed">("idle");
 
@@ -35,6 +36,8 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
     setSignals(uploaded.signals);
      
     setFromUpload(true);
+     
+    setTransactionCount(uploaded.transactionCount);
   }, []);
 
   async function requestAiNotice() {
@@ -46,11 +49,16 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          transactionCount,
           customerGrowthRate: signals.customerGrowthRate,
           previousCustomersCount: signals.previousCustomersCount,
           recentCustomersCount: signals.recentCustomersCount,
+          growthStatus: statusLabel[signals.statuses.customerGrowthRate],
           repeatPurchaseRate: signals.repeatPurchaseRate,
+          repeatStatus: statusLabel[signals.statuses.repeatPurchaseRate],
           topCustomerConcentration: signals.topCustomerConcentration,
+          concentrationStatus:
+            statusLabel[signals.statuses.topCustomerConcentration],
         }),
       });
       if (!response.ok) throw new Error(String(response.status));

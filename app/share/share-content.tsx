@@ -13,6 +13,10 @@ import {
 import { withCompany } from "@/lib/company-link";
 import { buildDiagnosis } from "@/lib/diagnosis";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
+import { restoreCustomerName } from "@/lib/llm/customer-mask";
+
+// LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
+const STATUS_TEXT = { positive: "긍정", caution: "주의" } as const;
 
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
@@ -56,27 +60,47 @@ export function ShareContent({
     Promise.all([fetchVisibility(companyId), fetchSignals(companyId)])
       .then(([visibilityResult, signalsResult]) => {
         if (!isActive) return;
+
+        const effective = uploaded ? uploaded.signals : signalsResult;
         setVisibility(visibilityResult);
-        setSignals(uploaded ? uploaded.signals : signalsResult);
+        setSignals(effective);
         setUploadedCount(uploaded ? uploaded.transactionCount : null);
+
+        // 종합 의견은 화면에 실제로 찍히는 수치로 쓴다. 예전에는 companyId만
+        // 보내고 서버가 합성 데이터로 다시 계산해서, 같은 리포트 안에서 표와
+        // 종합 의견의 숫자가 서로 달랐다.
+        return fetchDiagnosis({
+          companyName: visibilityResult.company,
+          period: PERIOD,
+          transactionCount: uploaded ? uploaded.transactionCount : 0,
+          visibilityScore: visibilityResult.visibilityScore,
+          visibilityInterpretation: visibilityResult.interpretations.visibility,
+          newsCount: visibilityResult.newsCount,
+          patentCount: visibilityResult.patentCount,
+          jobCount: visibilityResult.jobCount,
+          disclosureCount: visibilityResult.disclosureCount,
+          customerGrowthRate: effective.customerGrowthRate,
+          previousCustomersCount: effective.previousCustomersCount,
+          recentCustomersCount: effective.recentCustomersCount,
+          growthStatus: STATUS_TEXT[effective.statuses.customerGrowthRate],
+          repeatPurchaseRate: effective.repeatPurchaseRate,
+          repeatStatus: STATUS_TEXT[effective.statuses.repeatPurchaseRate],
+          topCustomerConcentration: effective.topCustomerConcentration,
+          concentrationStatus:
+            STATUS_TEXT[effective.statuses.topCustomerConcentration],
+        }).then(({ diagnosis: text }) => {
+          if (!isActive) return;
+          const restored = restoreCustomerName(
+            text.trim(),
+            effective.topCustomerName,
+          );
+          if (restored) setLlmDiagnosis(restored);
+        });
       })
       .catch(() => {
         if (!isActive) return;
         setVisibility(null);
         setSignals(null);
-      });
-
-    // 진단 문장은 지표와 별개로 받는다. LLM 호출이 느리거나 실패해도 리포트
-    // 본문(기업 요약·가시성·성장 신호)은 먼저 그려져야 한다.
-    fetchDiagnosis(companyId)
-      .then(({ diagnosis: text }) => {
-        if (!isActive) return;
-        const trimmed = text.trim();
-        if (trimmed) setLlmDiagnosis(trimmed);
-      })
-      .catch(() => {
-        if (!isActive) return;
-        setLlmDiagnosis(null);
       });
 
     return () => {
