@@ -270,32 +270,11 @@ export function UploadContent({ companyId }: { companyId?: string }) {
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
 
-    // 거래명세서 파일은 실제로 서버에 보내서 OCR 구조화 추출을 시도한다.
-    // 실패하거나 파일이 없으면 processing 화면이 기존처럼 합성 데이터로 대체한다.
-    const transactionFiles = states["transaction-statement"]?.files ?? [];
+    // 인식은 다음 화면(/processing)에서 한다. 파일은 UploadStoreProvider가
+    // 들고 있어서 라우트를 옮겨도 살아 있고, 진행률을 실제 인식 진척으로
+    // 보여줄 수 있다. 여기서 돌리면 사용자가 빈 화면에서 기다리게 된다.
     sessionStorage.removeItem("boimExtractedTransactions");
-
-    if (transactionFiles.length > 0) {
-      try {
-        const formData = new FormData();
-        transactionFiles.forEach((file) => formData.append("files", file));
-
-        const response = await fetch("/api/extract", {
-          method: "POST",
-          body: formData,
-        });
-        const result = await response.json();
-
-        if (result.transactions) {
-          sessionStorage.setItem(
-            "boimExtractedTransactions",
-            JSON.stringify(result.transactions),
-          );
-        }
-      } catch {
-        // 추출 실패 — processing 화면의 합성 데이터 fallback에 맡긴다.
-      }
-    }
+    sessionStorage.removeItem("boimExtractionOutcome");
 
     setIsSaved(true);
     setNotice(null);

@@ -103,9 +103,14 @@ export default function StepShell({
           {aside && (
             <div className="mt-5 border-t border-zinc-100 pt-4">{aside}</div>
           )}
+          {/*
+            예전 문구는 "외부에 공개되지 않습니다"였는데, 실제로는 업로드 파일을
+            외부 OCR API로 통째로 보내고 있어서 사실과 달랐다. 지금은 인식까지
+            브라우저에서 끝내므로 이 문장이 실제 동작과 일치한다.
+          */}
           <p className="mt-6 border-t border-zinc-100 pt-4 text-[11px] leading-5 text-zinc-400">
-            입력한 문서와 값은 진단서 발급 전까지만 보관되며, 외부에 공개되지
-            않습니다.
+            업로드한 문서는 이 브라우저 안에서 분석되며 서버로 전송되지 않습니다.
+            입력한 값은 진단서 발급 전까지만 보관됩니다.
           </p>
         </aside>
 

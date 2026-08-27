@@ -324,11 +324,15 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
   const [insight, setInsight] = useState<string | null>(null);
+  const [extractionOutcome, setExtractionOutcome] = useState<string | null>(null);
 
   useEffect(() => {
     const { status: nextStatus, result } = loadResult();
+    const outcome = sessionStorage.getItem("boimExtractionOutcome");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(nextStatus);
+     
+    setExtractionOutcome(outcome);
     if (!result) return;
 
     setTransactions(result);
@@ -496,6 +500,20 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       {insight && (
         <p className="mt-3 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3 text-[13px] leading-6 text-zinc-600">
           {insight}
+        </p>
+      )}
+
+      {/*
+        추출이 실패해 예시 데이터로 대체된 경우를 사용자에게 알린다. 예전에는
+        아무 표시 없이 바뀌어서, 자기 문서가 읽힌 줄 알게 됐다.
+      */}
+      {extractionOutcome && extractionOutcome !== "ok" && (
+        <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-700">
+          {extractionOutcome === "blank"
+            ? "제출한 PDF가 브라우저에서 백지로 열립니다. 한글 폰트가 파일에 포함되지 않은 경우입니다. 아래 값은 예시 데이터이니, 이미지로 다시 올려 주세요."
+            : extractionOutcome === "no-transactions"
+              ? "제출한 문서에서 거래 내역을 찾지 못했습니다. 아래 값은 예시 데이터입니다."
+              : "문서를 분석하지 못했습니다. 아래 값은 예시 데이터입니다."}
         </p>
       )}
 

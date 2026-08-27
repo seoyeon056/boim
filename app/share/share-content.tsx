@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { withCompany } from "@/lib/company-link";
 import { buildDiagnosis } from "@/lib/diagnosis";
+import { readUploadedSignals } from "@/lib/uploaded-signals";
 
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
@@ -40,17 +41,24 @@ export function ShareContent({
 }) {
   const [visibility, setVisibility] = useState<VisibilityResult | null>(null);
   const [signals, setSignals] = useState<SignalsResult | null>(null);
+  // 업로드·검수한 거래로 계산한 신호. 있으면 서버의 합성 데이터 대신 이걸 쓴다.
+  const [uploadedCount, setUploadedCount] = useState<number | null>(null);
   // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
   const [llmDiagnosis, setLlmDiagnosis] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
 
+    // 사용자가 올린 문서에서 계산한 신호가 있으면 그걸 우선한다.
+    // 서버는 sessionStorage를 볼 수 없어서 이 판단은 브라우저에서만 가능하다.
+    const uploaded = readUploadedSignals(companyId ?? "");
+
     Promise.all([fetchVisibility(companyId), fetchSignals(companyId)])
       .then(([visibilityResult, signalsResult]) => {
         if (!isActive) return;
         setVisibility(visibilityResult);
-        setSignals(signalsResult);
+        setSignals(uploaded ? uploaded.signals : signalsResult);
+        setUploadedCount(uploaded ? uploaded.transactionCount : null);
       })
       .catch(() => {
         if (!isActive) return;
@@ -107,7 +115,7 @@ export function ShareContent({
           label: "거래처 증가율",
           value: `${signals.customerGrowthRate > 0 ? "+" : ""}${signals.customerGrowthRate}%`,
           tone: signals.statuses.customerGrowthRate,
-          note: `이전 ${signals.previousCustomersCount}곳 → 현재 ${signals.customerCount}곳`,
+          note: `이전 ${signals.previousCustomersCount}곳 → 현재 ${signals.recentCustomersCount}곳`,
         },
         {
           no: "2",
@@ -266,6 +274,17 @@ export function ShareContent({
               )}
             </tbody>
           </table>
+          {/*
+            이 표의 수치가 무엇에서 나왔는지 밝힌다. 예전에는 업로드 문서가 없거나
+            추출이 실패해도 예시 데이터가 조용히 실제 분석 결과처럼 표시됐다.
+          */}
+          {signals && (
+            <p className="mt-2 text-[11px] leading-5 text-zinc-500">
+              {uploadedCount === null
+                ? "※ 제출된 거래명세서에서 거래 내역을 확인하지 못해, 위 수치는 예시 데이터로 산출되었습니다."
+                : `※ 위 수치는 제출된 거래명세서에서 확인된 거래 ${uploadedCount}건을 근거로 산출되었습니다.`}
+            </p>
+          )}
         </section>
 
         {/* 3. 종합 진단 */}
