@@ -56,9 +56,22 @@ function extractTag(entry: string, tag: string): string | undefined {
   return entry.match(new RegExp(`<${tag}>(.*?)</${tag}>`))?.[1]?.trim();
 }
 
+export type DartCorp = {
+  corpCode: string;
+  corpName: string;
+  stockCode: string;
+};
+
+type CorpCodeIndex = {
+  // 정확 일치 조회용(공시 건수). 동명 법인은 먼저 나온 쪽을 쓴다.
+  byName: Map<string, string>;
+  // 부분 일치 검색용(기업 검색 화면).
+  all: DartCorp[];
+};
+
 async function buildCorpCodeIndex(
   serviceKey: string,
-): Promise<Map<string, string>> {
+): Promise<CorpCodeIndex> {
   const url = new URL(CORP_CODE_URL);
   url.searchParams.set("crtfc_key", serviceKey);
 
@@ -69,7 +82,8 @@ async function buildCorpCodeIndex(
   }
 
   const xml = inflateSingleEntryZip(Buffer.from(await response.arrayBuffer()));
-  const index = new Map<string, string>();
+  const byName = new Map<string, string>();
+  const all: DartCorp[] = [];
 
   for (const [, entry] of xml.matchAll(/<list>([\s\S]*?)<\/list>/g)) {
     const name = extractTag(entry, "corp_name");
@@ -77,18 +91,25 @@ async function buildCorpCodeIndex(
     if (!name || !code) {
       continue;
     }
+
+    all.push({
+      corpCode: code,
+      corpName: name,
+      stockCode: extractTag(entry, "stock_code") ?? "",
+    });
+
     // 동명 법인이 여러 개면 먼저 나온 쪽을 쓴다. 파일이 고유번호 순이라
     // 대체로 오래된(= 상장사일 가능성이 높은) 법인이 앞에 온다.
     const key = normalizeCompanyName(name);
-    if (!index.has(key)) {
-      index.set(key, code);
+    if (!byName.has(key)) {
+      byName.set(key, code);
     }
   }
 
-  return index;
+  return { byName, all };
 }
 
-let indexPromise: Promise<Map<string, string>> | null = null;
+let indexPromise: Promise<CorpCodeIndex> | null = null;
 
 export async function findCorpCode(
   companyName: string,
@@ -105,9 +126,48 @@ export async function findCorpCode(
     // 부분 일치는 일부러 안 한다. "한빛정밀"을 부분 일치로 찾으면 전혀 다른
     // 법인인 "한빛"이 걸리고, 그 회사 공시 건수가 우리 회사 것으로 표시된다.
     // 못 찾으면 null을 돌려주고 호출부가 합성 데이터로 폴백하는 게 낫다.
-    return index.get(normalizeCompanyName(companyName)) ?? null;
+    return index.byName.get(normalizeCompanyName(companyName)) ?? null;
   } catch {
     // 실패한 프라미스를 그대로 캐시해두면 이후 모든 요청이 같이 죽는다.
+    indexPromise = null;
+    return null;
+  }
+}
+
+// 이름에 검색어가 들어간 기업을 찾는다(기업 검색 화면용).
+// findCorpCode 와 달리 부분 일치를 허용한다. 여기서는 사용자가 후보를 눈으로
+// 보고 고르기 때문에, 엉뚱한 법인이 섞여도 잘못된 수치로 이어지지 않는다.
+export async function searchCorps(
+  query: string,
+  limit = 20,
+): Promise<DartCorp[] | null> {
+  const serviceKey = process.env.DART_SEARCH_KEY;
+  if (!serviceKey) {
+    return null;
+  }
+
+  const normalizedQuery = normalizeCompanyName(query);
+  if (normalizedQuery === "") {
+    return [];
+  }
+
+  try {
+    indexPromise ??= buildCorpCodeIndex(serviceKey);
+    const index = await indexPromise;
+
+    return index.all
+      .filter((corp) =>
+        normalizeCompanyName(corp.corpName).includes(normalizedQuery),
+      )
+      // 상장사를 먼저, 그다음 이름이 짧은(= 검색어에 가까운) 순서로 보여준다.
+      .sort((a, b) => {
+        const listed =
+          Number(Boolean(b.stockCode.trim())) -
+          Number(Boolean(a.stockCode.trim()));
+        return listed !== 0 ? listed : a.corpName.length - b.corpName.length;
+      })
+      .slice(0, limit);
+  } catch {
     indexPromise = null;
     return null;
   }
