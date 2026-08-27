@@ -140,7 +140,7 @@ export function ShareContent({
 
       {/* ───── 문서 본체 ───── */}
       <div
-        className="mt-8 border border-zinc-900 bg-white px-12 py-10 print:mt-0 print:border-0 print:px-0"
+        className="report-sheet mt-8 border border-zinc-900 bg-white px-12 py-10 print:mt-0 print:border-0 print:px-0"
         style={serif}
       >
         {/* 발신 기관 · 문서번호 */}
