@@ -6,6 +6,7 @@ import { transactions, type Transaction } from "@/data/transactions";
 import { calculateSignals } from "@/lib/signals";
 import { calculateVisibility, type Visibility } from "@/lib/visibility";
 import { getExternalPresence } from "@/lib/external/presence";
+import { searchDartCompanies } from "@/lib/external/dart";
 
 export type { Visibility } from "@/lib/visibility";
 
@@ -60,12 +61,19 @@ function normalizeCompanyName(value: string): string {
 }
 
 // 입력한 기업명을 포함하는 기업을 모두 반환한다(공백/대소문자 무시).
-// 예: "LG"로 검색하면 "LG생활건강", "LG CNS"처럼 이름에 LG를 포함하는 계열사가 함께 나온다.
+// DART 인증키가 있으면 실제 기업 목록에서 찾고, 없으면 데모 데이터에서 찾는다.
+// 예: "LG"로 검색하면 이름에 LG를 포함하는 기업이 함께 나온다.
 export async function findCompaniesByName(query: string): Promise<Company[]> {
   const normalizedQuery = normalizeCompanyName(query.trim());
 
   if (normalizedQuery === "") {
     return [];
+  }
+
+  // 키가 없거나 DART 호출이 실패하면 null 이 와서 아래 데모 데이터로 넘어간다.
+  const fromDart = await searchDartCompanies(query.trim());
+  if (fromDart) {
+    return fromDart;
   }
 
   return companies.filter((item) =>

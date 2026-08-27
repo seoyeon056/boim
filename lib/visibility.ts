@@ -1,14 +1,14 @@
 import type { ExternalPresence } from "@/data/visibility";
 
 // 외부 가시성 계산 로직.
-// 뉴스·특허·채용공고 건수만 입력으로 받아서 점수와 해석 문구를 만든다.
+// 뉴스·특허·채용공고·공시 건수만 입력으로 받아서 점수와 해석 문구를 만든다.
 // 페이지가 문구를 직접 하드코딩하지 않도록 해석까지 여기서 책임진다.
 
 // tone: "warn"(주황, 강조) = 정보 없음/부족 / "muted"(회색) = 흔적 일부 확인
 export type MetricTone = "warn" | "muted";
 
 export type VisibilityMetric = {
-  key: "news" | "patent" | "job" | "visibility";
+  key: "news" | "patent" | "job" | "disclosure" | "visibility";
   label: string;
   value: string;
   interpretation: string;
@@ -24,12 +24,14 @@ export type Visibility = {
   patentCount: number;
   patentCountIsAtLeast?: boolean;
   jobCount: number;
+  disclosureCount: number;
   visibilityScore: number;
 
   interpretations: {
     news: string;
     patent: string;
     job: string;
+    disclosure: string;
     visibility: string;
   };
 
@@ -39,10 +41,13 @@ export type Visibility = {
 };
 
 // 뉴스가 가장 강한 외부 신호이고 채용공고가 가장 약하다고 보고 가중치를 둔다.
+// 공시는 회사가 의무적으로 내놓은 기록이라 홍보 여부에 좌우되지 않는다는 점에서
+// 특허와 같은 급으로 본다.
 const WEIGHTS = {
   news: 12,
   patent: 10,
   job: 8,
+  disclosure: 10,
 } as const;
 
 const NOTICE =
@@ -52,7 +57,8 @@ export function calculateVisibilityScore(presence: ExternalPresence): number {
   const rawScore =
     presence.newsCount * WEIGHTS.news +
     presence.patentCount * WEIGHTS.patent +
-    presence.jobCount * WEIGHTS.job;
+    presence.jobCount * WEIGHTS.job +
+    (presence.disclosureCount ?? 0) * WEIGHTS.disclosure;
 
   return Math.min(100, rawScore);
 }
@@ -99,6 +105,20 @@ function interpretJob(count: number) {
   return { interpretation: "공개 채용 활동 확인", tone: "muted" as const };
 }
 
+// 공시가 0건인 건 대부분 상장·보고 의무가 없는 소규모 법인이라 그런 것이지
+// 문제 신호가 아니다. 채용공고와 마찬가지로 warn(주황)을 쓰지 않는다.
+function interpretDisclosure(count: number) {
+  if (count === 0) {
+    return { interpretation: "공시 기록 없음", tone: "muted" as const };
+  }
+
+  if (count <= 10) {
+    return { interpretation: "공시 기록 소수 확인", tone: "muted" as const };
+  }
+
+  return { interpretation: "공시 기록 다수 확인", tone: "muted" as const };
+}
+
 function interpretScore(score: number) {
   if (score < 30) {
     return { interpretation: "외부 정보 부족", tone: "warn" as const };
@@ -133,6 +153,8 @@ export function calculateVisibility(
   const news = interpretNews(presence.newsCount);
   const patent = interpretPatent(presence.patentCount);
   const job = interpretJob(presence.jobCount);
+  const disclosureCount = presence.disclosureCount ?? 0;
+  const disclosure = interpretDisclosure(disclosureCount);
   const visibility = interpretScore(visibilityScore);
 
   return {
@@ -144,12 +166,14 @@ export function calculateVisibility(
     patentCount: presence.patentCount,
     patentCountIsAtLeast: presence.patentCountIsAtLeast,
     jobCount: presence.jobCount,
+    disclosureCount,
     visibilityScore,
 
     interpretations: {
       news: news.interpretation,
       patent: patent.interpretation,
       job: job.interpretation,
+      disclosure: disclosure.interpretation,
       visibility: visibility.interpretation,
     },
 
@@ -175,6 +199,12 @@ export function calculateVisibility(
         label: "채용공고",
         value: `${presence.jobCount}건`,
         ...job,
+      },
+      {
+        key: "disclosure",
+        label: "공시",
+        value: `${disclosureCount}건`,
+        ...disclosure,
       },
       {
         key: "visibility",

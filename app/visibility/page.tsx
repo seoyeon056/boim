@@ -46,7 +46,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const score = visibility.visibilityScore;
   const pct = Math.min(100, Math.max(0, score));
 
-  // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·채용만 나눠 보여준다.
+  // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·채용·공시로 나눠 보여준다.
   const scoreMetric = visibility.metrics.find((m) => m.key === "visibility");
   const breakdown = visibility.metrics.filter((m) => m.key !== "visibility");
 
@@ -54,7 +54,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     <StepShell
       step="Step 02"
       title="외부 가시성 점수"
-      description={`${visibility.company}의 뉴스·특허·채용 공개 정보를 기반으로 측정합니다.`}
+      description={`${visibility.company}의 뉴스·특허·채용·공시 공개 정보를 기반으로 측정합니다.`}
       backTo="/company"
       footer={
         <Link
