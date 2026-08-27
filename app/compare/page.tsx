@@ -66,7 +66,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
   const diagnosis = buildDiagnosis(visibility, signalResult);
 
   const diagnosisEvidence = [
-    `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.customerCount}곳`,
+    `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.recentCustomersCount}곳`,
     `재구매율 ${signalResult.repeatPurchaseRate}%`,
     `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
   ];

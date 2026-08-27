@@ -21,7 +21,7 @@ export async function generateSignalsInsight(
 ): Promise<string> {
   const prompt = `다음은 한 기업의 내부 거래 기반 성장 신호입니다. 이 수치만 근거로 2문장 이내로 해석 문장을 작성하세요. 숫자를 새로 만들지 마세요.
 
-거래처 증가율: ${signals.customerGrowthRate}% (${signals.previousCustomersCount}곳 → ${signals.customerCount}곳)
+거래처 증가율: ${signals.customerGrowthRate}% (${signals.previousCustomersCount}곳 → ${signals.recentCustomersCount}곳)
 재구매율: ${signals.repeatPurchaseRate}%
 최대 거래처 집중도: ${signals.topCustomerConcentration}% (${MASKED_CUSTOMER_LABEL})`;
 

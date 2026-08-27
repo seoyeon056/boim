@@ -80,6 +80,11 @@ export function calculateSignals(items: Transaction[],){
     return {
         customerCount: countCustomers(items),
         previousCustomersCount: growth.previousCount,
+        // 증가율은 "이전 기간 거래처 수"와 "최근 기간 거래처 수"를 비교해서 나온다.
+        // customerCount(전체 기간 고유 거래처 수)와는 다른 값이다. 화면이
+        // "이전 N곳 -> 현재 M곳"에 customerCount를 쓰는 바람에, 증가율 0%인데
+        // "2곳 -> 3곳"으로 표시되는 모순이 있었다.
+        recentCustomersCount: growth.recentCount,
         customerGrowthRate: growth.growthRate,
         repeatPurchaseRate,
         topCustomerConcentration: top.topCustomerConcentration,

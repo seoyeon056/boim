@@ -55,7 +55,7 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
       value: `${result.customerGrowthRate > 0 ? "+" : ""}${result.customerGrowthRate}%`,
       status: statusLabel[result.statuses.customerGrowthRate],
       tone: result.statuses.customerGrowthRate,
-      description: `${result.previousCustomersCount}곳 → ${result.customerCount}곳`,
+      description: `${result.previousCustomersCount}곳 → ${result.recentCustomersCount}곳`,
     },
     {
       label: "재구매율",
