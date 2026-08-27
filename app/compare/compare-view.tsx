@@ -36,7 +36,6 @@ export function CompareView({
     setFromUpload(true);
   }, [companyId]);
 
-  // 외부 지표는 lib/visibility.ts 에서 건수에 맞는 해석과 tone까지 계산해서 온다.
   const externalMetrics = visibility.metrics;
 
   // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
@@ -88,7 +87,7 @@ export function CompareView({
         {/* 외부 — 잉크 카드 */}
         <div
           className="flex flex-col rounded-lg p-7"
-          style={{ backgroundColor: "#1B1917" }}
+          style={{ backgroundColor: "#3A2C25" }}
         >
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500">
             External
@@ -115,7 +114,7 @@ export function CompareView({
                   <span
                     className="text-[11px]"
                     style={{
-                      color: metric.tone === "warn" ? "#C0A46B" : "#71717A",
+                      color: metric.tone === "warn" ? "#E8A87F" : "#ADA29A",
                     }}
                   >
                     {metric.interpretation}
@@ -135,11 +134,11 @@ export function CompareView({
         {/* 내부 — 파인 카드 */}
         <div
           className="flex flex-col rounded-lg p-7"
-          style={{ backgroundColor: "#1E3A33" }}
+          style={{ backgroundColor: "#1D4533" }}
         >
           <p
             className="font-mono text-[10px] font-bold uppercase tracking-[0.3em]"
-            style={{ color: "#7FA396" }}
+            style={{ color: "#9DB8A4" }}
           >
             Internal
           </p>
@@ -158,14 +157,14 @@ export function CompareView({
                       : "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                <span className="text-[12px]" style={{ color: "#A9C4B9" }}>
+                <span className="text-[12px]" style={{ color: "#A9C0AC" }}>
                   {signal.label}
                 </span>
                 <div className="flex items-baseline gap-3">
                   <span
                     className="text-[11px]"
                     style={{
-                      color: signal.tone === "positive" ? "#8FB3A6" : "#C0A46B",
+                      color: signal.tone === "positive" ? "#9DB8A4" : "#E8A87F",
                     }}
                   >
                     {statusLabel[signal.tone]}
@@ -177,7 +176,7 @@ export function CompareView({
               </div>
             ))}
           </div>
-          <p className="mt-6 text-[12px] leading-6" style={{ color: "#8FB3A6" }}>
+          <p className="mt-6 text-[12px] leading-6" style={{ color: "#A9C0AC" }}>
             {diagnosis.internalCardNote}
           </p>
         </div>

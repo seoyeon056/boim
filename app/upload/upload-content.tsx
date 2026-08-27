@@ -22,9 +22,9 @@ const MAX_FILES_PER_CATEGORY = 5; // 카테고리당 최대 5개
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 전체 최대 500MB
 
 // 진행 게이지 3상태 색
-const GAUGE_UPLOADED = "#1B1917";
-const GAUGE_MISSING = "#B9B1A3";
-const GAUGE_TRACK = "#EDE9E1";
+const GAUGE_UPLOADED = "#1D4533";
+const GAUGE_MISSING = "#BCB0A9";
+const GAUGE_TRACK = "#E9E2DD";
 
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
 const ALLOWED_TYPES = [
@@ -360,7 +360,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                   />
                 </div>
                 <span
-                  className={`truncate text-[10px] transition-colors duration-300 ${
+                  className={`truncate text-[11px] transition-colors duration-300 ${
                     status === "uploaded"
                       ? "text-zinc-600"
                       : status === "missing"
@@ -375,7 +375,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           })}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[10px] text-zinc-400">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[11px] text-zinc-400">
           <span className="flex items-center gap-1.5">
             <span
               className="h-1.5 w-4 rounded-sm"
@@ -416,7 +416,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           return (
             <div
               key={category.id}
-              className="rounded-lg border border-zinc-100 bg-white"
+              className="rounded-lg border border-zinc-100 bg-white transition-colors hover:border-zinc-200"
             >
               {/* 헤더: 문서 종류 + 상태 배지 */}
               <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3">
@@ -509,7 +509,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                           <p className="truncate text-xs font-medium text-zinc-700">
                             {file.name}
                           </p>
-                          <p className="font-mono text-[10px] text-zinc-400">
+                          <p className="font-mono text-[11px] text-zinc-400">
                             {formatBytes(file.size)}
                           </p>
                         </div>
@@ -536,7 +536,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                         </button>
                       </div>
                     ))}
-                    <p className="px-1 font-mono text-[10px] text-zinc-400">
+                    <p className="px-1 font-mono text-[11px] text-zinc-400">
                       합계 {formatBytes(categorySize)}
                     </p>
                   </div>

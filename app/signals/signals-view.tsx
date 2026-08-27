@@ -5,13 +5,12 @@ import type { Signals } from "@/lib/signals";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { SignalsEvidence } from "./signals-evidence";
+import { MetricCards, type MetricCardData } from "./metric-cards";
 
-const valueStyles = { positive: "text-emerald-600", caution: "text-amber-500" };
-const badgeStyles = {
-  positive: "bg-emerald-50 text-emerald-600",
-  caution: "bg-amber-50 text-amber-600",
+const statusLabel = {
+  positive: "긍정",
+  caution: "주의",
 };
-const statusLabel = { positive: "긍정", caution: "주의" };
 
 // 규칙 기반 문장. LLM을 부르지 않는 기본 상태에서 쓴다.
 function ruleNotice(signals: Signals): string {
@@ -65,56 +64,34 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
 
   const risky = signals.statuses.topCustomerConcentration === "caution";
 
-  const cards = [
+  const metrics: MetricCardData[] = [
     {
       label: "거래처 증가율",
-      value: `${signals.customerGrowthRate > 0 ? "+" : ""}${signals.customerGrowthRate}%`,
-      tone: signals.statuses.customerGrowthRate,
+      target: signals.customerGrowthRate,
+      prefix: signals.customerGrowthRate > 0 ? "+" : "",
       description: `${signals.previousCustomersCount}곳 → ${signals.recentCustomersCount}곳`,
+      status: statusLabel[signals.statuses.customerGrowthRate],
+      caution: signals.statuses.customerGrowthRate === "caution",
     },
     {
       label: "재구매율",
-      value: `${signals.repeatPurchaseRate}%`,
-      tone: signals.statuses.repeatPurchaseRate,
+      target: signals.repeatPurchaseRate,
       description: "두 번 이상 거래한 비율",
+      status: statusLabel[signals.statuses.repeatPurchaseRate],
+      caution: signals.statuses.repeatPurchaseRate === "caution",
     },
     {
       label: "최대 거래처 집중도",
-      value: `${signals.topCustomerConcentration}%`,
-      tone: signals.statuses.topCustomerConcentration,
+      target: signals.topCustomerConcentration,
       description: `${signals.topCustomerName ?? "최대 거래처"} 의존`,
+      status: statusLabel[signals.statuses.topCustomerConcentration],
+      caution: signals.statuses.topCustomerConcentration === "caution",
     },
   ];
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100 md:grid-cols-3">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className={`flex flex-col justify-between gap-6 px-6 py-5 ${
-              card.tone === "caution" ? "bg-amber-50/30" : "bg-white"
-            }`}
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-zinc-400">{card.label}</span>
-              <span
-                className={`font-mono text-4xl font-semibold leading-none tabular-nums ${valueStyles[card.tone]}`}
-              >
-                {card.value}
-              </span>
-              <span className="mt-1 text-[12px] text-zinc-400">
-                {card.description}
-              </span>
-            </div>
-            <span
-              className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[11px] font-medium ${badgeStyles[card.tone]}`}
-            >
-              {statusLabel[card.tone]}
-            </span>
-          </div>
-        ))}
-      </div>
+      <MetricCards metrics={metrics} />
 
       {/* 이 수치가 어디서 나왔는지 밝힌다. 예전에는 예시 데이터가 실제 분석
           결과인 것처럼 보였다. */}
@@ -124,15 +101,12 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
           : "제출한 문서에서 거래 내역을 확인하지 못해 예시 데이터로 산출한 수치입니다."}
       </p>
 
-      <div
-        className={`mt-3 max-w-3xl rounded-md border px-3 py-2.5 text-[11px] leading-5 ${
-          risky
-            ? "border-amber-100 bg-amber-50 text-amber-700"
-            : "border-zinc-100 bg-zinc-50 text-zinc-500"
-        }`}
+      <p
+        className="mt-3 max-w-3xl text-[13px] leading-6"
+        style={{ color: risky ? "#8A4A2E" : "#736861" }}
       >
         {aiNotice ?? ruleNotice(signals)}
-      </div>
+      </p>
 
       {/*
         AI 해석은 기본으로 부르지 않는다. 이 수치는 사용자가 올린 문서에서 나온
@@ -140,7 +114,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         숫자뿐이고 거래처명은 브라우저를 벗어나지 않는다.
       */}
       {!aiNotice && (
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={requestAiNotice}

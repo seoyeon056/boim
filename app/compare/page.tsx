@@ -35,6 +35,7 @@ export default async function ComparePage(props: PageProps<"/compare">) {
     );
   }
 
+  // 외부 지표는 lib/visibility.ts 에서 건수에 맞는 해석과 tone까지 계산해서 온다.
   return (
     <CompareView
       companyId={companyId}
