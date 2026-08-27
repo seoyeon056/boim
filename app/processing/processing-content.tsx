@@ -189,6 +189,16 @@ export function ProcessingContent({
       if (!isActive) return;
 
       sessionStorage.setItem("boimExtractionOutcome", outcome.status);
+      // 결제조건·납기일자는 거래 한 건이 아니라 문서 전체에 걸리는 값이라
+      // 거래 목록과 따로 보관한다.
+      if (outcome.status === "ok") {
+        sessionStorage.setItem(
+          "boimDocumentTerms",
+          JSON.stringify(outcome.terms),
+        );
+      } else {
+        sessionStorage.removeItem("boimDocumentTerms");
+      }
       sessionStorage.setItem(
         "boimAnalysisResult",
         outcome.status === "ok"

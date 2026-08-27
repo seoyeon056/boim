@@ -1,8 +1,11 @@
 "use client";
 
 // OCR 엔진과 PDF 래스터화를 감싼다. 전부 브라우저에서 돈다.
-import { rowsFromOcr } from "@/lib/ocr/local-extract";
-import type { ExtractedTransactionRow } from "@/lib/ocr/types";
+import { rowsFromOcr, termsFromOcr } from "@/lib/ocr/local-extract";
+import type {
+  DocumentTerms,
+  ExtractedTransactionRow,
+} from "@/lib/ocr/types";
 import type { Cell } from "@/lib/ocr/cells";
 import { cellsFromXlsx } from "@/lib/ocr/xlsx";
 import { cellsFromPdfText, openPdf, type PdfDocumentLike } from "@/lib/ocr/pdf-text";
@@ -126,7 +129,11 @@ function isBlank(canvas: HTMLCanvasElement): boolean {
 }
 
 export type LocalOcrOutcome =
-  | { status: "ok"; transactions: ExtractedTransactionRow[] }
+  | {
+      status: "ok";
+      transactions: ExtractedTransactionRow[];
+      terms: DocumentTerms;
+    }
   | { status: "blank" }
   | { status: "no-transactions" }
   | { status: "error"; message: string };
@@ -175,7 +182,15 @@ export async function extractTransactionsLocally(
   try {
     const transactions: ExtractedTransactionRow[] = [];
     const canvases: HTMLCanvasElement[] = [];
+    // 문서마다 결제조건이 다를 수 있다. 먼저 나온 값을 쓰고 빈 칸만 뒤 문서로 채운다.
+    const terms: DocumentTerms = {};
     let sawContent = false;
+
+    function collectTerms(found: DocumentTerms) {
+      terms.paymentTerms ??= found.paymentTerms;
+      terms.paymentDays ??= found.paymentDays;
+      terms.dueDate ??= found.dueDate;
+    }
 
     for (let i = 0; i < files.length; i += 1) {
       onPhase?.({ phase: "rendering", done: i, total: files.length });
@@ -185,6 +200,7 @@ export async function extractTransactionsLocally(
         if (read.lines.length > 0) {
           sawContent = true;
           transactions.push(...rowsFromOcr({ lines: read.lines }));
+          collectTerms(termsFromOcr({ lines: read.lines }));
         }
       } else {
         canvases.push(...read.canvases);
@@ -206,7 +222,7 @@ export async function extractTransactionsLocally(
     if (drawn.length === 0) {
       const unique = dedupe(transactions);
       return unique.length > 0
-        ? { status: "ok", transactions: unique }
+        ? { status: "ok", transactions: unique, terms }
         : { status: "no-transactions" };
     }
 
@@ -219,6 +235,7 @@ export async function extractTransactionsLocally(
       onPhase?.({ phase: "recognizing", done: index, total: drawn.length });
       const result = await service.recognize(drawn[index]);
       transactions.push(...rowsFromOcr(result as { lines: [] }));
+      collectTerms(termsFromOcr(result as { lines: [] }));
       onProgress?.(index + 1, drawn.length);
       // 페이지 사이에 렌더링을 한 번 양보한다. 안 그러면 진행률이 갱신되지 않고
       // 전부 끝난 뒤에 한꺼번에 튄다.
@@ -227,7 +244,7 @@ export async function extractTransactionsLocally(
 
     const unique = dedupe(transactions);
     return unique.length > 0
-      ? { status: "ok", transactions: unique }
+      ? { status: "ok", transactions: unique, terms }
       : { status: "no-transactions" };
   } catch (error) {
     return {
