@@ -163,8 +163,92 @@ input[type="checkbox"], input[type="radio"] {
 .text-red-500, .text-red-400 { color: var(--oxblood); }
 .bg-red-50 { background-color: var(--oxblood-soft); }
 
+/* ───────────────────────────────────────────────────────────────
+   인쇄 전용 스타일.
+
+   D13의 "리포트 인쇄(PDF 저장)"가 이 앱의 최종 산출물이라, 화면 레이아웃이
+   그대로 종이로 넘어가면 안 된다. 화면은 베이지 배경에 카드 UI지만 종이에서는
+   흰 바탕의 문서여야 한다.
+   ─────────────────────────────────────────────────────────────── */
 @media print {
-  header {
-    display: none;
+  /* 문서 여백을 직접 정한다. 리포트 컨테이너가 인쇄 시 px-0/py-0으로 패딩을
+     버리기 때문에, @page 여백이 없으면 내용이 종이 가장자리에 그대로 붙는다. */
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  /* 화면 배경은 베이지(--background)다. 그대로 두면 프린터가 페이지 전체를
+     칠하거나(잉크 낭비), 배경을 버리면서 배경 위에 얹힌 요소만 어색하게 남는다. */
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  header,
+  nav {
+    display: none !important;
+  }
+
+  /* 등장 애니메이션이 인쇄 시점에 중간 상태(opacity 0 등)로 굳으면 내용이
+     통째로 빠진 채 출력된다. 그림자도 종이에서는 얼룩으로만 나온다. */
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 화면에서 옅은 회색으로 둔 보조 텍스트는 종이에서 거의 안 읽힌다. */
+  .text-zinc-400,
+  .text-zinc-500 {
+    color: #3f3f46 !important;
+  }
+
+  .text-zinc-600 {
+    color: #27272a !important;
+  }
+
+  /* 표 머리글의 옅은 배경(bg-zinc-100)은 인쇄에서 사라진다. print-color-adjust로
+     강제해봤지만 Chrome print-to-pdf 실측에서 여전히 출력되지 않았다(배경 그래픽
+     옵션을 켠 경우에만 나온다). 옵션에 의존하지 않도록 배경 대신 굵은 아래선으로
+     머리글을 구분한다. */
+  thead th {
+    border-bottom-width: 2px !important;
+    border-bottom-color: #000 !important;
+  }
+
+  /* 표가 두 장에 걸치면 둘째 장에도 머리글을 반복하고, 행 하나가 장을 넘어
+     쪼개지지 않게 한다. */
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    break-inside: avoid;
+  }
+
+  /* 제목만 남고 본문이 다음 장으로 넘어가는 것을 막는다. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  /* 문단 첫/끝 줄만 혼자 다른 장에 남지 않게 한다. */
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* 리포트 본문은 화면에서 테두리 있는 카드지만 종이에서는 문서 자체가 된다.
+     @page 여백과 겹치지 않도록 자체 패딩을 없앤다. */
+  .report-sheet {
+    max-width: none !important;
+    padding: 0 !important;
+    border: 0 !important;
   }
 }
