@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { withCompany } from "@/lib/company-link";
+import { fetchReviewInsight } from "@/lib/api";
+import {
+  buildReviewFallback,
+  type ReviewStats,
+} from "@/lib/llm/review-insight";
 import StepShell from "@/app/step-shell";
 
 function IconCheck({ className = "h-2.5 w-2.5" }: { className?: string }) {
@@ -204,18 +209,66 @@ function confirmKey(txIndex: number, field: FieldKey) {
   return `${txIndex}:${field}`;
 }
 
+// LLM에 보낼 집계. 값(거래처명·금액 등)은 하나도 담지 않고 개수만 센다.
+function buildReviewStats(transactions: Transaction[]): ReviewStats {
+  const byField = FIELD_META.map(({ key, label }) => ({
+    label,
+    needReview: transactions.filter((tx) =>
+      requiresConfirmation(tx[key].confidence),
+    ).length,
+  }));
+
+  const needReview = byField.reduce((sum, field) => sum + field.needReview, 0);
+
+  const lowConfidenceCount = transactions.reduce(
+    (sum, tx) =>
+      sum +
+      FIELD_META.filter(({ key }) => tierOf(tx[key].confidence) === "low")
+        .length,
+    0,
+  );
+
+  return {
+    transactionCount: transactions.length,
+    totalFields: transactions.length * FIELD_META.length,
+    needReview,
+    lowConfidenceCount,
+    byField,
+  };
+}
+
 export function ReviewContent({ companyId }: { companyId?: string }) {
   const router = useRouter();
 
   const [status, setStatus] = useState<ViewStatus>("loading");
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  const [insight, setInsight] = useState<string | null>(null);
 
   useEffect(() => {
     const { status: nextStatus, result } = loadResult();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(nextStatus);
-    if (result) setTransactions(result);
+    if (!result) return;
+
+    setTransactions(result);
+
+    // 안내 문장은 처음 불러온 추출 결과 기준으로 한 번만 만든다. 사용자가 값을
+    // 고칠 때마다 다시 부르면 호출만 늘고 문장은 거의 그대로다.
+    let isActive = true;
+    const stats = buildReviewStats(result);
+
+    fetchReviewInsight(stats)
+      .then(({ insight: text }) => {
+        if (isActive) setInsight(text);
+      })
+      .catch(() => {
+        if (isActive) setInsight(buildReviewFallback(stats));
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   function updateValue(txIndex: number, key: FieldKey, raw: string) {
@@ -358,6 +411,13 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
           </div>
         ))}
       </div>
+
+      {/* AI 안내 문장. 도착 전에는 자리만 비워 두고 레이아웃은 흔들지 않는다. */}
+      {insight && (
+        <p className="mt-3 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3 text-[13px] leading-6 text-zinc-600">
+          {insight}
+        </p>
+      )}
 
       {/* 거래 여러 건을 순서대로 렌더링 */}
       {transactions.map((tx, txIndex) => (
