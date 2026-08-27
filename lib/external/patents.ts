@@ -85,9 +85,10 @@ export async function fetchPatentCount(
 
     // 필터링 전 원본 페이지 자체가 상한을 꽉 채웠으면, 다음 페이지에 검색어와
     // 일치하는 항목이 더 있을 수도 있다는 뜻이라 "이상"으로 표시해야 정직하다.
+    // 단, 매칭 건수가 0이면 "0건 이상"이라는 의미 없는 문구가 되니 표시하지 않는다.
     return {
       count: matchingCount,
-      isAtLeast: applicants.length >= MAX_DOCS_PER_PAGE,
+      isAtLeast: matchingCount > 0 && applicants.length >= MAX_DOCS_PER_PAGE,
     };
   } catch {
     return null;
