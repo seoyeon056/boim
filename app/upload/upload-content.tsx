@@ -63,6 +63,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   // 저장 완료 여부 / 하단 안내 메시지
   const [isSaved, setIsSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // 파일 input DOM을 기억해 두었다가 값 초기화(input.value = "")에 사용
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -231,13 +232,15 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     (handledCount / documentCategories.length) * 100,
   );
 
-  function handleAnalyze() {
+  async function handleAnalyze() {
     if (!allHandled) {
       setNotice(
         "모든 문서 종류에 대해 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
       );
       return;
     }
+
+    setIsAnalyzing(true);
 
     // sessionStorage에 저장할 메타데이터 구성
     // (실제 File 객체나 파일 내용은 저장하지 않는다.)
@@ -266,10 +269,38 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     };
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
+
+    // 거래명세서 파일은 실제로 서버에 보내서 OCR 구조화 추출을 시도한다.
+    // 실패하거나 파일이 없으면 processing 화면이 기존처럼 합성 데이터로 대체한다.
+    const transactionFiles = states["transaction-statement"]?.files ?? [];
+    sessionStorage.removeItem("boimExtractedTransactions");
+
+    if (transactionFiles.length > 0) {
+      try {
+        const formData = new FormData();
+        transactionFiles.forEach((file) => formData.append("files", file));
+
+        const response = await fetch("/api/extract", {
+          method: "POST",
+          body: formData,
+        });
+        const result = await response.json();
+
+        if (result.transactions) {
+          sessionStorage.setItem(
+            "boimExtractedTransactions",
+            JSON.stringify(result.transactions),
+          );
+        }
+      } catch {
+        // 추출 실패 — processing 화면의 합성 데이터 fallback에 맡긴다.
+      }
+    }
+
     setIsSaved(true);
     setNotice(null);
 
-    // 저장이 끝나면 합성 분석 진행 화면으로 이동한다.
+    // 저장이 끝나면 분석 진행 화면으로 이동한다.
     router.push(withCompany("/processing", companyId));
   }
 
@@ -300,10 +331,10 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           <button
             type="button"
             onClick={handleAnalyze}
-            disabled={!allHandled}
+            disabled={!allHandled || isAnalyzing}
             className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
           >
-            내부 문서 분석 시작
+            {isAnalyzing ? "문서 확인 중…" : "내부 문서 분석 시작"}
           </button>
         </div>
       }
