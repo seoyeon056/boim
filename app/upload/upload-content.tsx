@@ -10,7 +10,6 @@ import type {
   StoredUpload,
 } from "@/types/document";
 import { withCompany } from "@/lib/company-link";
-import { extractTransactionsLocally } from "@/lib/ocr/run-local-ocr";
 import StepShell from "@/app/step-shell";
 import { useUploadStore } from "./upload-store";
 
@@ -271,24 +270,11 @@ export function UploadContent({ companyId }: { companyId?: string }) {
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
 
-    // 거래명세서는 이 브라우저 안에서 인식한다. 파일은 서버로 전송되지 않는다.
-    // 인식 결과와 실패 사유를 함께 남겨서, processing 화면이 "예시 데이터로
-    // 대체했다"는 사실을 사용자에게 숨기지 않도록 한다.
-    const transactionFiles = states["transaction-statement"]?.files ?? [];
+    // 인식은 다음 화면(/processing)에서 한다. 파일은 UploadStoreProvider가
+    // 들고 있어서 라우트를 옮겨도 살아 있고, 진행률을 실제 인식 진척으로
+    // 보여줄 수 있다. 여기서 돌리면 사용자가 빈 화면에서 기다리게 된다.
     sessionStorage.removeItem("boimExtractedTransactions");
     sessionStorage.removeItem("boimExtractionOutcome");
-
-    if (transactionFiles.length > 0) {
-      const outcome = await extractTransactionsLocally(transactionFiles);
-      sessionStorage.setItem("boimExtractionOutcome", outcome.status);
-
-      if (outcome.status === "ok") {
-        sessionStorage.setItem(
-          "boimExtractedTransactions",
-          JSON.stringify(outcome.transactions),
-        );
-      }
-    }
 
     setIsSaved(true);
     setNotice(null);

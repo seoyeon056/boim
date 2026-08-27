@@ -28,6 +28,17 @@ const COLUMN_ALIASES = {
 // 거래처는 표 안이 아니라 표 위 라벨에 있는 경우가 대부분이다.
 const CUSTOMER_LABELS = ["공급받는자", "거래처", "수신", "귀하", "상호"];
 
+// "㈜"는 한 글자짜리 조합 문자라 OCR이 자주 흘린다. 실측에서 "(쥐)"로 읽히거나
+// 닫는 괄호가 통째로 빠져 "한빛금속("으로 끝나는 경우를 확인했다.
+// 신뢰도가 떨어져 검수 대상에는 걸리지만, 뻔한 오인식은 미리 되돌려 준다.
+export function cleanCompanyName(value: string): string {
+  return value
+    .replace(/\(\s*[쥐줘주]\s*\)/g, "㈜")
+    .replace(/[(（]\s*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function normalize(value: string): string {
   return value.replace(/\s+/g, "");
 }
@@ -111,12 +122,12 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
       // "거래처: 한빛금속(주) 담당자: 김OO"처럼 뒤에 다른 라벨이 이어지면 끊는다.
       const inline = valueAfterLabel(cell.text, CUSTOMER_LABELS);
       if (inline) {
-        return { value: inline, confidence: cell.confidence };
+        return { value: cleanCompanyName(inline), confidence: cell.confidence };
       }
       // 라벨 옆 셀에 값이 있는 경우
       const next = row[row.indexOf(cell) + 1];
       if (next) {
-        return { value: next.text.trim(), confidence: next.confidence };
+        return { value: cleanCompanyName(next.text), confidence: next.confidence };
       }
     }
   }
@@ -188,7 +199,7 @@ function labelRows(lines: Cell[][]): ExtractedTransactionRow[] {
     if (!customer) {
       const raw = valueAfterLabel(text, CUSTOMER_LABELS);
       if (raw) {
-        customer = raw;
+        customer = cleanCompanyName(raw);
         customerConfidence = confidences[i];
       }
     }

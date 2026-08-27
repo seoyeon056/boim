@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 
 import { withCompany } from "@/lib/company-link";
 import type { Transaction } from "@/data/transactions";
+import { useUploadStore } from "@/app/upload/upload-store";
+import { extractTransactionsLocally } from "@/lib/ocr/run-local-ocr";
 
 // ─────────────────────────────────────────────
-// 이 화면은 실제 OCR / AI / 서버 분석을 하지 않는다.
-// 아래 13개의 상태를 순서대로 자동으로 바꿔가며
-// "분석이 진행되는 것처럼" 보이는 합성(가짜) 진행 화면이다.
+// 실제 인식이 여기서 일어난다. 전부 이 브라우저 안에서 돌고 파일은 서버로
+// 전송되지 않는다.
+//
+// 예전에는 이 화면이 정해진 간격으로 상태만 바꾸는 가짜 진행 화면이었다. 지금은
+// 인식한 페이지 수에 맞춰 진행률이 움직인다. 문서가 많으면 실제로 더 오래 걸린다.
 // ─────────────────────────────────────────────
 
 function IconCheck({ className = "h-4 w-4" }: { className?: string }) {
@@ -144,49 +148,63 @@ export function ProcessingContent({
   reviewSample: Transaction[];
 }) {
   const router = useRouter();
+  const { states } = useUploadStore();
 
   const [stepIndex, setStepIndex] = useState(0);
+  const [pageProgress, setPageProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
 
   useEffect(() => {
-    // 상태를 일정 간격으로 다음 단계로 넘긴다.
-    const timer = setInterval(() => {
-      setStepIndex((prev) => {
-        if (prev >= STEPS.length - 1) {
-          clearInterval(timer);
-          return prev;
-        }
-        return prev + 1;
-      });
+    let isActive = true;
+
+    // 6개 분류에 올린 파일을 모두 인식 대상으로 삼는다. 예전에는 거래명세서
+    // 슬롯 하나만 처리해서, 나머지 5종은 파일명만 남고 내용은 버려졌다.
+    const files = Object.values(states).flatMap((state) => state.files);
+
+    // 인식이 끝나기 전에도 화면이 멈춰 보이지 않도록 상태 문구는 계속 돌린다.
+    const ticker = setInterval(() => {
+      setStepIndex((prev) => (prev >= STEPS.length - 2 ? prev : prev + 1));
     }, STEP_MS);
 
-    return () => clearInterval(timer);
+    (async () => {
+      const outcome = await extractTransactionsLocally(files, (done, total) => {
+        if (isActive) setPageProgress({ done, total });
+      });
+
+      if (!isActive) return;
+
+      sessionStorage.setItem("boimExtractionOutcome", outcome.status);
+      sessionStorage.setItem(
+        "boimAnalysisResult",
+        outcome.status === "ok"
+          ? JSON.stringify(outcome.transactions)
+          : JSON.stringify(toReviewResult(reviewSample)),
+      );
+
+      clearInterval(ticker);
+      setStepIndex(STEPS.length - 1);
+
+      setTimeout(() => {
+        if (isActive) router.push(withCompany("/review", companyId));
+      }, FINISH_HOLD_MS);
+    })();
+
+    return () => {
+      isActive = false;
+      clearInterval(ticker);
+    };
+    // 마운트 시점의 업로드 파일로 한 번만 돌린다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    // 마지막 "분석 완료" 상태에 도달하면 결과를 저장하고
-    // 잠시 뒤 자동으로 /review 화면으로 이동한다.
-    if (stepIndex < STEPS.length - 1) return;
-
-    // upload 화면에서 실제 OCR 추출에 성공했으면 그 결과를 쓰고,
-    // 없으면(키 미등록, 추출 실패, 거래명세서 미첨부 등) 합성 데이터로 대체한다.
-    const extracted = sessionStorage.getItem("boimExtractedTransactions");
-    sessionStorage.setItem(
-      "boimAnalysisResult",
-      extracted ?? JSON.stringify(toReviewResult(reviewSample)),
-    );
-    sessionStorage.removeItem("boimExtractedTransactions");
-
-    const timer = setTimeout(() => {
-      router.push(withCompany("/review", companyId));
-    }, FINISH_HOLD_MS);
-
-    return () => clearTimeout(timer);
-  }, [stepIndex, router, companyId, reviewSample]);
 
   const current = STEPS[stepIndex];
   const isFinished = stepIndex >= STEPS.length - 1;
   // 진행률: 마지막 단계에서 100%가 되도록 계산한다.
-  const progress = Math.round(((stepIndex + 1) / STEPS.length) * 100);
+  // 인식 중에는 실제 페이지 진척을, 그 전에는 상태 순서를 진행률로 쓴다.
+  const progress = pageProgress
+    ? Math.round((pageProgress.done / pageProgress.total) * 100)
+    : Math.round(((stepIndex + 1) / STEPS.length) * 100);
 
   return (
     <div className="mx-auto w-full max-w-lg px-6 py-12">
