@@ -8,6 +8,7 @@ import type { Transaction } from "@/data/transactions";
 import { useUploadStore } from "@/app/upload/upload-store";
 import {
   extractTransactionsLocally,
+  TRANSACTION_CATEGORIES,
   type OcrPhase,
 } from "@/lib/ocr/run-local-ocr";
 
@@ -162,9 +163,12 @@ export function ProcessingContent({
   useEffect(() => {
     let isActive = true;
 
-    // 6개 분류에 올린 파일을 모두 인식 대상으로 삼는다. 예전에는 거래명세서
-    // 슬롯 하나만 처리해서, 나머지 5종은 파일명만 남고 내용은 버려졌다.
-    const files = Object.values(states).flatMap((state) => state.files);
+    // 거래를 증명하는 문서(거래명세서·세금계산서·입금내역)만 인식한다.
+    // 예전에는 거래명세서 슬롯 하나만 처리했고, 그 뒤엔 6종을 다 넣었더니
+    // 같은 건이 견적서·명세서에 중복으로 잡혔다.
+    const files = TRANSACTION_CATEGORIES.flatMap(
+      (category) => states[category]?.files ?? [],
+    );
 
     // 인식이 끝나기 전에도 화면이 멈춰 보이지 않도록 상태 문구는 계속 돌린다.
     const ticker = setInterval(() => {

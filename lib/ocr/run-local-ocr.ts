@@ -3,6 +3,9 @@
 // OCR 엔진과 PDF 래스터화를 감싼다. 전부 브라우저에서 돈다.
 import { rowsFromOcr } from "@/lib/ocr/local-extract";
 import type { ExtractedTransactionRow } from "@/lib/ocr/types";
+import type { Cell } from "@/lib/ocr/cells";
+import { cellsFromXlsx } from "@/lib/ocr/xlsx";
+import { cellsFromPdfText, openPdf, type PdfDocumentLike } from "@/lib/ocr/pdf-text";
 
 // 모델은 첫 호출 때 한 번만 받고 이후 재사용한다(실측 6.9초 -> 이후 0초).
 let servicePromise: Promise<{ recognize: (canvas: HTMLCanvasElement) => Promise<unknown> }> | null =
@@ -51,14 +54,7 @@ function canvasFromBitmap(bitmap: ImageBitmap): HTMLCanvasElement {
 // 배율 2는 본문 글자가 인식되기에 충분한 해상도다(실측).
 const PDF_SCALE = 2;
 
-async function canvasesFromPdf(file: File): Promise<HTMLCanvasElement[]> {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
-    import.meta.url,
-  ).toString();
-
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+async function canvasesFromPdf(doc: PdfDocumentLike): Promise<HTMLCanvasElement[]> {
   const canvases: HTMLCanvasElement[] = [];
 
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo += 1) {
@@ -74,11 +70,41 @@ async function canvasesFromPdf(file: File): Promise<HTMLCanvasElement[]> {
   return canvases;
 }
 
-async function canvasesFromFile(file: File): Promise<HTMLCanvasElement[]> {
-  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    return canvasesFromPdf(file);
+function isPdf(file: File): boolean {
+  return (
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+  );
+}
+
+function isSpreadsheet(file: File): boolean {
+  return /\.xlsx$/i.test(file.name);
+}
+
+// 파일 한 개를 어떻게 읽을지 정한다.
+//
+// 엑셀과 텍스트가 살아 있는 PDF는 글자가 이미 문자로 들어 있다. 이걸 이미지로
+// 만들어 OCR을 돌리면 멀쩡한 값을 흐리게 만든 뒤 다시 알아맞히는 셈이다.
+// OCR은 스캔본과 사진에만 쓴다.
+type ReadResult =
+  | { kind: "cells"; lines: Cell[][] }
+  | { kind: "canvases"; canvases: HTMLCanvasElement[] };
+
+async function readFile(file: File): Promise<ReadResult> {
+  if (isSpreadsheet(file)) {
+    return { kind: "cells", lines: await cellsFromXlsx(file) };
   }
-  return [canvasFromBitmap(await createImageBitmap(file))];
+
+  if (isPdf(file)) {
+    const doc = await openPdf(file);
+    const lines = await cellsFromPdfText(doc);
+    if (lines.length > 0) {
+      return { kind: "cells", lines };
+    }
+    // 텍스트 레이어가 없다 = 스캔본. 그림으로 그려서 OCR로 넘긴다.
+    return { kind: "canvases", canvases: await canvasesFromPdf(doc) };
+  }
+
+  return { kind: "canvases", canvases: [canvasFromBitmap(await createImageBitmap(file))] };
 }
 
 // 캔버스에 실제로 그려진 게 있는지 본다.
@@ -110,6 +136,33 @@ export type OcrPhase =
   | { phase: "rendering"; done: number; total: number }
   | { phase: "recognizing"; done: number; total: number };
 
+// 실제로 일어난 거래를 증명하는 문서만 거래로 집계한다.
+//
+// 견적서는 아직 거래가 아니고(제안 단계), 계약서는 조건이지 거래 기록이 아니다.
+// 발주서도 주문이지 이행의 증거는 아니다. 이것들까지 세면 같은 건이 여러 번
+// 잡혀서 거래처 수와 금액이 부풀려진다 — 실제로 실측 5개 파일에서 동일한
+// 라이선스 건이 견적서·명세서에 중복으로 잡혔다.
+//
+// 나머지 문서도 읽기는 한다. 다만 "판단 근거 문서"로만 쓰고 거래로는 세지 않는다.
+export const TRANSACTION_CATEGORIES = [
+  "transaction-statement",
+  "tax-invoice",
+  "deposit-history",
+];
+
+// 같은 거래가 명세서와 세금계산서에 함께 들어 있는 경우를 한 건으로 본다.
+function dedupe(rows: ExtractedTransactionRow[]): ExtractedTransactionRow[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = `${row.date.value}|${row.amount.value}|${row.item.value.replace(/\s+/g, "")}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function extractTransactionsLocally(
   files: File[],
   onProgress?: (done: number, total: number) => void,
@@ -120,23 +173,48 @@ export async function extractTransactionsLocally(
   }
 
   try {
+    const transactions: ExtractedTransactionRow[] = [];
+    const canvases: HTMLCanvasElement[] = [];
+    let sawContent = false;
+
+    for (let i = 0; i < files.length; i += 1) {
+      onPhase?.({ phase: "rendering", done: i, total: files.length });
+      const read = await readFile(files[i]);
+
+      if (read.kind === "cells") {
+        if (read.lines.length > 0) {
+          sawContent = true;
+          transactions.push(...rowsFromOcr({ lines: read.lines }));
+        }
+      } else {
+        canvases.push(...read.canvases);
+      }
+    }
+
+    const drawn = canvases.filter((canvas) => !isBlank(canvas));
+    if (drawn.length > 0) {
+      sawContent = true;
+    }
+
+    // 읽을 내용이 아무 데도 없었다 = 전부 백지였다.
+    if (!sawContent) {
+      return { status: "blank" };
+    }
+
+    // 인식할 그림이 하나도 없으면 모델을 받을 이유가 없다. 엑셀이나 텍스트가
+    // 살아 있는 PDF만 올린 경우가 여기 해당한다(첫 방문 7초를 아낀다).
+    if (drawn.length === 0) {
+      const unique = dedupe(transactions);
+      return unique.length > 0
+        ? { status: "ok", transactions: unique }
+        : { status: "no-transactions" };
+    }
+
     // 모델 다운로드 구간. 첫 방문은 여기서 7초 가까이 걸리는데, 알리지 않으면
     // 진행률이 0에 멈춰 있어 고장처럼 보인다.
     onPhase?.({ phase: "preparing" });
     const service = await getService();
 
-    const canvases: HTMLCanvasElement[] = [];
-    for (let i = 0; i < files.length; i += 1) {
-      onPhase?.({ phase: "rendering", done: i, total: files.length });
-      canvases.push(...(await canvasesFromFile(files[i])));
-    }
-
-    const drawn = canvases.filter((canvas) => !isBlank(canvas));
-    if (drawn.length === 0) {
-      return { status: "blank" };
-    }
-
-    const transactions: ExtractedTransactionRow[] = [];
     for (let index = 0; index < drawn.length; index += 1) {
       onPhase?.({ phase: "recognizing", done: index, total: drawn.length });
       const result = await service.recognize(drawn[index]);
@@ -147,8 +225,9 @@ export async function extractTransactionsLocally(
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    return transactions.length > 0
-      ? { status: "ok", transactions }
+    const unique = dedupe(transactions);
+    return unique.length > 0
+      ? { status: "ok", transactions: unique }
       : { status: "no-transactions" };
   } catch (error) {
     return {
