@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { withCompany } from "@/lib/company-link";
 import type { Transaction } from "@/data/transactions";
 import { useUploadStore } from "@/app/upload/upload-store";
-import { extractTransactionsLocally } from "@/lib/ocr/run-local-ocr";
+import {
+  extractTransactionsLocally,
+  type OcrPhase,
+} from "@/lib/ocr/run-local-ocr";
 
 // ─────────────────────────────────────────────
 // 실제 인식이 여기서 일어난다. 전부 이 브라우저 안에서 돌고 파일은 서버로
@@ -154,6 +157,7 @@ export function ProcessingContent({
   const [pageProgress, setPageProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
+  const [phase, setPhase] = useState<OcrPhase | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -168,9 +172,15 @@ export function ProcessingContent({
     }, STEP_MS);
 
     (async () => {
-      const outcome = await extractTransactionsLocally(files, (done, total) => {
-        if (isActive) setPageProgress({ done, total });
-      });
+      const outcome = await extractTransactionsLocally(
+        files,
+        (done, total) => {
+          if (isActive) setPageProgress({ done, total });
+        },
+        (next) => {
+          if (isActive) setPhase(next);
+        },
+      );
 
       if (!isActive) return;
 
@@ -321,7 +331,13 @@ export function ProcessingContent({
       </div>
 
       <p className="mt-6 text-center font-mono text-[10px] text-zinc-300">
-        거래명세서는 업로드 시 실제로 분석됩니다 · 나머지 진행 화면은 시연용입니다
+        {phase?.phase === "preparing"
+          ? "분석 엔진을 준비하는 중입니다 · 처음 한 번만 걸립니다"
+          : phase?.phase === "rendering"
+            ? `문서를 여는 중입니다 (${phase.done + 1}/${phase.total})`
+            : pageProgress
+              ? `${pageProgress.done} / ${pageProgress.total}페이지 인식 완료 · 이 브라우저 안에서 처리 중입니다`
+              : "업로드한 문서는 이 브라우저 안에서 분석되며 서버로 전송되지 않습니다"}
       </p>
     </div>
   );
