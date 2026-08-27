@@ -61,14 +61,14 @@ export function SignalsEvidence({
   return (
     <>
       {/* 통계 요약 */}
-      <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100 md:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-zinc-100 md:grid-cols-4">
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="flex flex-col gap-1 bg-white px-4 py-3.5"
+            className="flex flex-col gap-1 bg-white px-5 py-4"
           >
             <span className="text-[11px] text-zinc-400">{stat.label}</span>
-            <span className="font-mono text-[19px] font-medium tabular-nums text-zinc-900">
+            <span className="font-mono text-[20px] font-medium tabular-nums text-zinc-900">
               {stat.value}
             </span>
           </div>
@@ -97,12 +97,12 @@ export function SignalsEvidence({
               return (
                 <li
                   key={doc.categoryId}
-                  className="flex items-center justify-between gap-4 border-b border-zinc-100 py-3"
+                  className="flex items-center justify-between gap-4 border-b border-zinc-100 py-3 transition-colors hover:bg-white"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span
                       className="h-1.5 w-4 shrink-0 rounded-sm"
-                      style={{ backgroundColor: used ? "#1B1917" : "#B9B1A3" }}
+                      style={{ backgroundColor: used ? "#1D4533" : "#BCB0A9" }}
                     />
                     <span
                       className={`text-[13px] ${

@@ -2,12 +2,8 @@ import Link from "next/link";
 import { getVisibility } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
+import { ScoreCard } from "./score-card";
 import { generateVisibilityInsight } from "@/lib/llm/insights";
-
-const toneStyles = {
-  warn: "bg-amber-50 text-amber-600",
-  muted: "bg-zinc-100 text-zinc-500",
-};
 
 export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const companyId = readCompanyId((await props.searchParams).company);
@@ -44,7 +40,6 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
   );
 
   const score = visibility.visibilityScore;
-  const pct = Math.min(100, Math.max(0, score));
 
   // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·채용·공시로 나눠 보여준다.
   const scoreMetric = visibility.metrics.find((m) => m.key === "visibility");
@@ -66,67 +61,33 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       }
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* 점수 카드 */}
-        <div className="rounded-lg border border-zinc-100 bg-white px-6 py-6">
-          <div className="flex items-end justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold tracking-tight text-zinc-400">
-                가시성 점수
-              </span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="font-mono text-5xl font-semibold tabular-nums text-zinc-900">
-                  {score}
-                </span>
-                <span className="text-sm text-zinc-400">/ 100</span>
-              </div>
-            </div>
-            {scoreMetric && (
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  toneStyles[scoreMetric.tone]
-                }`}
-              >
-                {scoreMetric.interpretation}
-              </span>
-            )}
-          </div>
-
-          {/* 점수 바 */}
-          <div className="mt-5 flex flex-col gap-1.5">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
-              <div
-                className="h-full rounded-full bg-amber-400 transition-all duration-700"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="flex justify-between">
-              <span className="font-mono text-[10px] text-zinc-300">0</span>
-              <span className="font-mono text-[10px] text-zinc-300">100</span>
-            </div>
-          </div>
-        </div>
+        <ScoreCard
+          score={score}
+          interpretation={scoreMetric?.interpretation ?? ""}
+        />
 
         {/* 항목별 내역 */}
-        <div className="flex flex-col gap-px overflow-hidden rounded-lg border border-zinc-100">
+        <div className="flex flex-col overflow-hidden rounded-lg bg-white">
           {breakdown.map((metric, i) => (
             <div
               key={metric.key}
-              className={`flex items-center justify-between gap-4 bg-white px-5 py-3.5 ${
+              className={`flex flex-1 items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-zinc-50 ${
                 i < breakdown.length - 1 ? "border-b border-zinc-100" : ""
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span className="w-12 text-xs text-zinc-400">
+              <div className="flex items-baseline gap-4">
+                <span className="w-14 text-[13px] text-zinc-500">
                   {metric.label}
                 </span>
-                <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900">
+                <span className="font-mono text-[20px] font-medium tabular-nums text-zinc-900">
                   {metric.value}
                 </span>
               </div>
               <span
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                  toneStyles[metric.tone]
-                }`}
+                className="text-[11px]"
+                style={{
+                  color: metric.tone === "warn" ? "#E8A87F" : "#ADA29A",
+                }}
               >
                 {metric.interpretation}
               </span>
@@ -135,13 +96,13 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
         </div>
       </div>
 
-      <p className="mt-4 max-w-3xl text-[13px] leading-[1.7] text-zinc-500">
+      <p className="mt-4 max-w-3xl text-[13px] leading-6 text-zinc-500">
         {summary}
       </p>
 
-      <div className="mt-3 max-w-3xl rounded-md border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+      <p className="mt-3 max-w-3xl text-[13px] leading-6 text-zinc-500">
         {visibility.notice} 정보가 적다는 것이 성장하지 않는다는 뜻은 아닙니다.
-      </div>
+      </p>
     </StepShell>
   );
 }

@@ -3,12 +3,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f2ed;
-  --foreground: #1b1917;
-  --muted: #ece8e1;
-  --muted-foreground: #6f6a62;
-  --border: #e2ddd4;
-  --border-subtle: #ece8e1;
+  --background: #f6f1ed;
+  --foreground: #2a211c;
+  --muted: #e9e2dd;
+  --muted-foreground: #736861;
+  --border: #ded5cf;
+  --border-subtle: #e9e2dd;
 }
 
 @theme inline {
@@ -108,147 +108,87 @@ header {
   box-shadow: none;
 }
 
-/* ── 따뜻한 종이질 중성색으로 재정의 ── */
-.bg-white { background-color: #fffefc; }
-.bg-zinc-50 { background-color: #f3f0ea; }
-.bg-zinc-100 { background-color: #ebe7df; }
-.border-zinc-100 { border-color: #e5e0d7; }
-.border-zinc-200 { border-color: #d9d3c8; }
-.border-zinc-300 { border-color: #c8c1b4; }
-.text-zinc-400 { color: #9b958b; }
-.text-zinc-500 { color: #6f6a62; }
-.text-zinc-600 { color: #56514a; }
-.text-zinc-900 { color: #1b1917; }
-.bg-zinc-900 { background-color: #1b1917; }
-.hover\:bg-zinc-700:hover { background-color: #37322c; }
-.border-zinc-900 { border-color: #1b1917; }
+/* ── 크림 + 포레스트 그린 + 피치 + 코코아 팔레트 ── */
+.bg-white { background-color: #ffffff; }
+.bg-zinc-50 { background-color: #f1ebe7; }
+.bg-zinc-100 { background-color: #e9e2dd; }
+.border-zinc-100 { border-color: #eae3de; }
+.border-zinc-200 { border-color: #ded5cf; }
+.border-zinc-300 { border-color: #bcb0a9; }
+.text-zinc-400 { color: #a29790; }
+.text-zinc-500 { color: #736861; }
+.text-zinc-600 { color: #55483f; }
+.text-zinc-900 { color: #2a211c; }
+.bg-zinc-900 { background-color: #1d4533; }
+.hover\:bg-zinc-700:hover { background-color: #163526; }
+.border-zinc-900 { border-color: #1d4533; }
 
 input[type="checkbox"], input[type="radio"] {
-  accent-color: #2f5d50;
+  accent-color: #1d4533;
+}
+
+@keyframes stepEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.step-enter { animation: stepEnter 340ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .step-enter { animation: none; }
 }
 
 :focus-visible {
-  outline: 2px solid #2f5d50;
+  outline: 2px solid #1d4533;
   outline-offset: 2px;
 }
 
-/* ── 색 재정의: emerald/amber/red를 차분한 계열로 대체 ── */
 :root {
-  --pine: #2f5d50;
-  --pine-soft: #eef3f0;
-  --bronze: #8a6a2f;
-  --bronze-soft: #f7f2e8;
-  --bronze-line: #ebe1cd;
-  --oxblood: #8c3a32;
-  --oxblood-soft: #f8efed;
+  --ink: #2a211c;
+  --ultra: #1d4533;
+  --ultra-bright: #9db8a4;
+  --ultra-soft: #e3ebe4;
+  --ultra-line: #c8d7c6;
+  --vermilion: #8a4a2e;
+  --vermilion-soft: #f7e5da;
+  --vermilion-line: #ebc6b0;
 }
 
-.text-emerald-700, .text-emerald-600, .text-emerald-500 { color: var(--pine); }
-.text-emerald-400, .text-emerald-200 { color: #9db3aa; }
-.bg-emerald-50 { background-color: var(--pine-soft); }
-.bg-emerald-50\/30 { background-color: #f7faf8; }
-.bg-emerald-900 { background-color: #1e3c34; }
-.bg-emerald-800 { background-color: #244a40; }
-.bg-emerald-700 { background-color: #2f5d50; }
-.border-emerald-700 { border-color: #35695b; }
+/* 긍정 = 포레스트 그린, 주의 = 코코아/피치 */
+.bg-emerald-100 { background-color: #dde7de; }
+.bg-emerald-200 { background-color: #c8d7c6; }
+.bg-amber-100 { background-color: #f2dccf; }
+.text-emerald-700, .text-emerald-600, .text-emerald-500 { color: var(--ultra); }
+.text-emerald-400, .text-emerald-200 { color: var(--ultra-bright); }
+.bg-emerald-50 { background-color: var(--ultra-soft); }
+.bg-emerald-50\/30 { background-color: #edf1ed; }
+.bg-emerald-900 { background-color: #173626; }
+.bg-emerald-800 { background-color: #1d4533; }
+.bg-emerald-700 { background-color: #23543e; }
+.border-emerald-700 { border-color: #2d5a45; }
 
-.text-amber-700, .text-amber-600, .text-amber-500 { color: var(--bronze); }
-.text-amber-400 { color: #b39355; }
-.bg-amber-50 { background-color: var(--bronze-soft); }
-.bg-amber-400 { background-color: #a98b5b; }
-.bg-amber-200\/60 { background-color: #e6dcc6; }
-.bg-amber-900\/60 { background-color: rgba(74, 58, 26, 0.7); }
-.border-amber-100 { border-color: var(--bronze-line); }
+.text-amber-700, .text-amber-600, .text-amber-500 { color: var(--vermilion); }
+.text-amber-400 { color: #d99a74; }
+.bg-amber-50 { background-color: #f7e5da; }
+.bg-amber-400 { background-color: #8a4a2e; }
+.bg-amber-200\/60 { background-color: #f2d3c1; }
+.bg-amber-900\/60 { background-color: rgba(94, 49, 34, 0.72); }
+.border-amber-100 { border-color: var(--vermilion-line); }
 
-.text-red-500, .text-red-400 { color: var(--oxblood); }
-.bg-red-50 { background-color: var(--oxblood-soft); }
+.text-red-500, .text-red-400 { color: var(--vermilion); }
+.bg-red-50 { background-color: var(--vermilion-soft); }
 
-/* ───────────────────────────────────────────────────────────────
-   인쇄 전용 스타일.
-
-   D13의 "리포트 인쇄(PDF 저장)"가 이 앱의 최종 산출물이라, 화면 레이아웃이
-   그대로 종이로 넘어가면 안 된다. 화면은 베이지 배경에 카드 UI지만 종이에서는
-   흰 바탕의 문서여야 한다.
-   ─────────────────────────────────────────────────────────────── */
 @media print {
-  /* 문서 여백을 직접 정한다. 리포트 컨테이너가 인쇄 시 px-0/py-0으로 패딩을
-     버리기 때문에, @page 여백이 없으면 내용이 종이 가장자리에 그대로 붙는다. */
-  @page {
-    size: A4;
-    margin: 18mm 16mm;
+  header {
+    display: none;
   }
+}
 
-  /* 화면 배경은 베이지(--background)다. 그대로 두면 프린터가 페이지 전체를
-     칠하거나(잉크 낭비), 배경을 버리면서 배경 위에 얹힌 요소만 어색하게 남는다. */
-  html,
-  body {
-    background: #fff;
-    color: #000;
-  }
+/* 액센트(번트 앰버)로 링크·강조에 색을 남긴다 */
+a { color: inherit; }
+a.accent, .text-accent { color: #8a4a2e; }
+a.accent:hover { color: #5e3122; }
 
-  header,
-  nav {
-    display: none !important;
-  }
-
-  /* 등장 애니메이션이 인쇄 시점에 중간 상태(opacity 0 등)로 굳으면 내용이
-     통째로 빠진 채 출력된다. 그림자도 종이에서는 얼룩으로만 나온다. */
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-    box-shadow: none !important;
-  }
-
-  /* 화면에서 옅은 회색으로 둔 보조 텍스트는 종이에서 거의 안 읽힌다. */
-  .text-zinc-400,
-  .text-zinc-500 {
-    color: #3f3f46 !important;
-  }
-
-  .text-zinc-600 {
-    color: #27272a !important;
-  }
-
-  /* 표 머리글의 옅은 배경(bg-zinc-100)은 인쇄에서 사라진다. print-color-adjust로
-     강제해봤지만 Chrome print-to-pdf 실측에서 여전히 출력되지 않았다(배경 그래픽
-     옵션을 켠 경우에만 나온다). 옵션에 의존하지 않도록 배경 대신 굵은 아래선으로
-     머리글을 구분한다. */
-  thead th {
-    border-bottom-width: 2px !important;
-    border-bottom-color: #000 !important;
-  }
-
-  /* 표가 두 장에 걸치면 둘째 장에도 머리글을 반복하고, 행 하나가 장을 넘어
-     쪼개지지 않게 한다. */
-  thead {
-    display: table-header-group;
-  }
-
-  tr,
-  img {
-    break-inside: avoid;
-  }
-
-  /* 제목만 남고 본문이 다음 장으로 넘어가는 것을 막는다. */
-  h1,
-  h2,
-  h3 {
-    break-after: avoid;
-  }
-
-  /* 문단 첫/끝 줄만 혼자 다른 장에 남지 않게 한다. */
-  p {
-    orphans: 3;
-    widows: 3;
-  }
-
-  /* 리포트 본문은 화면에서 테두리 있는 카드지만 종이에서는 문서 자체가 된다.
-     @page 여백과 겹치지 않도록 자체 패딩을 없앤다. */
-  .report-sheet {
-    max-width: none !important;
-    padding: 0 !important;
-    border: 0 !important;
-  }
+/* 카드 그림자를 종이 톤 그림자로 */
+.rounded-lg.border,
+.rounded-md.border {
+  box-shadow: 0 1px 2px rgba(42, 33, 28, 0.05);
 }
