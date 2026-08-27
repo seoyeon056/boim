@@ -49,6 +49,7 @@ export function ShareContent({
   const [uploadedCount, setUploadedCount] = useState<number | null>(null);
   // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
   const [llmDiagnosis, setLlmDiagnosis] = useState<string | null>(null);
+  const [llmState, setLlmState] = useState<"idle" | "loading" | "failed">("idle");
 
   useEffect(() => {
     let isActive = true;
@@ -66,36 +67,6 @@ export function ShareContent({
         setSignals(effective);
         setUploadedCount(uploaded ? uploaded.transactionCount : null);
 
-        // 종합 의견은 화면에 실제로 찍히는 수치로 쓴다. 예전에는 companyId만
-        // 보내고 서버가 합성 데이터로 다시 계산해서, 같은 리포트 안에서 표와
-        // 종합 의견의 숫자가 서로 달랐다.
-        return fetchDiagnosis({
-          companyName: visibilityResult.company,
-          period: PERIOD,
-          transactionCount: uploaded ? uploaded.transactionCount : 0,
-          visibilityScore: visibilityResult.visibilityScore,
-          visibilityInterpretation: visibilityResult.interpretations.visibility,
-          newsCount: visibilityResult.newsCount,
-          patentCount: visibilityResult.patentCount,
-          jobCount: visibilityResult.jobCount,
-          disclosureCount: visibilityResult.disclosureCount,
-          customerGrowthRate: effective.customerGrowthRate,
-          previousCustomersCount: effective.previousCustomersCount,
-          recentCustomersCount: effective.recentCustomersCount,
-          growthStatus: STATUS_TEXT[effective.statuses.customerGrowthRate],
-          repeatPurchaseRate: effective.repeatPurchaseRate,
-          repeatStatus: STATUS_TEXT[effective.statuses.repeatPurchaseRate],
-          topCustomerConcentration: effective.topCustomerConcentration,
-          concentrationStatus:
-            STATUS_TEXT[effective.statuses.topCustomerConcentration],
-        }).then(({ diagnosis: text }) => {
-          if (!isActive) return;
-          const restored = restoreCustomerName(
-            text.trim(),
-            effective.topCustomerName,
-          );
-          if (restored) setLlmDiagnosis(restored);
-        });
       })
       .catch(() => {
         if (!isActive) return;
@@ -107,6 +78,39 @@ export function ShareContent({
       isActive = false;
     };
   }, [companyId]);
+
+  // AI 종합 의견은 기본으로 부르지 않는다. 이 수치는 사용자가 올린 문서에서 나온
+  // 값이라, 외부 모델로 보낼지를 사용자가 정하게 한다. 기업명과 거래처명은 보내지
+  // 않지만 비율 자체가 그 회사의 영업 정보이기 때문이다.
+  async function requestLlmDiagnosis() {
+    if (!visibility || !signals) return;
+    setLlmState("loading");
+    try {
+      const { diagnosis: text } = await fetchDiagnosis({
+        period: PERIOD,
+        transactionCount: uploadedCount ?? 0,
+        visibilityScore: visibility.visibilityScore,
+        visibilityInterpretation: visibility.interpretations.visibility,
+        newsCount: visibility.newsCount,
+        patentCount: visibility.patentCount,
+        jobCount: visibility.jobCount,
+        disclosureCount: visibility.disclosureCount,
+        customerGrowthRate: signals.customerGrowthRate,
+        previousCustomersCount: signals.previousCustomersCount,
+        recentCustomersCount: signals.recentCustomersCount,
+        growthStatus: STATUS_TEXT[signals.statuses.customerGrowthRate],
+        repeatPurchaseRate: signals.repeatPurchaseRate,
+        repeatStatus: STATUS_TEXT[signals.statuses.repeatPurchaseRate],
+        topCustomerConcentration: signals.topCustomerConcentration,
+        concentrationStatus:
+          STATUS_TEXT[signals.statuses.topCustomerConcentration],
+      });
+      setLlmDiagnosis(restoreCustomerName(text.trim(), signals.topCustomerName));
+      setLlmState("idle");
+    } catch {
+      setLlmState("failed");
+    }
+  }
 
   const diagnosis =
     visibility && signals ? buildDiagnosis(visibility, signals) : null;
@@ -330,6 +334,24 @@ export function ShareContent({
                 <p className="-indent-4 pl-4">다. {diagnosis.risk}</p>
                 {llmDiagnosis && (
                   <p className="-indent-4 pl-4">라. {llmDiagnosis}</p>
+                )}
+                {/* 인쇄물에는 버튼이 남으면 안 된다. */}
+                {!llmDiagnosis && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
+                    <button
+                      type="button"
+                      onClick={requestLlmDiagnosis}
+                      disabled={!signals || llmState === "loading"}
+                      className="inline-flex h-8 items-center rounded-md border border-zinc-300 px-3 text-[12px] text-zinc-700 transition-colors hover:bg-zinc-50 disabled:text-zinc-300"
+                    >
+                      {llmState === "loading" ? "작성 중…" : "AI 종합 의견 추가"}
+                    </button>
+                    <span className="text-[11px] text-zinc-500">
+                      {llmState === "failed"
+                        ? "의견을 받지 못했습니다."
+                        : "비율 수치만 전송되며, 기업명·거래처명·문서는 전송되지 않습니다."}
+                    </span>
+                  </div>
                 )}
               </>
             ) : (

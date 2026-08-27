@@ -47,9 +47,11 @@ export function fetchSignals(companyId?: string) {
 //
 // 화면이 실제로 표시 중인 수치를 그대로 보낸다. 예전에는 companyId만 보내고 서버가
 // 합성 데이터로 다시 계산해서, 리포트 표와 종합 의견의 숫자가 서로 달랐다.
-// 거래처명은 담지 않는다 — 응답의 마스킹 라벨을 화면에서 실명으로 되돌린다.
+// 기업명도 담지 않는다. 비율 숫자만으로는 익명 통계지만, 실명과 묶이면 그 회사의
+// 재무 프로필이 된다("㈜한빛정밀 + 최대 거래처 의존도 95.4%"). 거래처 의존도는
+// 경쟁사가 알고 싶어 하는 영업 정보라 특히 그렇다.
+// 거래처명도 담지 않는다 — 응답의 마스킹 라벨을 화면에서 실명으로 되돌린다.
 export type DiagnosisInput = {
-  companyName: string;
   period: string;
   transactionCount: number;
   visibilityScore: number;

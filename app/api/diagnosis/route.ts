@@ -9,8 +9,9 @@ import { MASKED_CUSTOMER_LABEL } from "@/lib/llm/customer-mask";
 // 의견만 예시 데이터를 설명하는 상태였다. 같은 리포트 안에서 집중도가 72.7%와
 // 45%로 갈렸다.
 //
-// 이제 화면이 실제로 표시 중인 수치를 그대로 실어 보낸다. 거래처명은 담기지 않고
-// 마스킹 라벨만 오간다 — 실명 복원은 클라이언트가 한다.
+// 이제 화면이 실제로 표시 중인 수치를 그대로 실어 보낸다. 기업명과 거래처명은
+// 담기지 않는다. 비율만으로는 익명 통계지만 실명과 묶이면 그 회사의 재무
+// 프로필이 되기 때문이다. 마스킹 라벨의 실명 복원은 클라이언트가 한다.
 
 const MAX_TEXT = 60;
 
@@ -36,7 +37,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const companyName = label(body.companyName) || "이 기업";
   const period = label(body.period);
   const transactionCount = num(body.transactionCount);
 
@@ -47,7 +47,6 @@ export async function POST(request: NextRequest) {
 아래 지표만 근거로 종합 의견을 작성하세요. 숫자를 새로 만들거나 추정하지 마세요.
 
 [대상]
-기업: ${companyName}
 분석 기간: ${period || "미상"}
 분석에 사용한 내부 거래: ${transactionCount}건
 
