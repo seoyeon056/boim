@@ -107,8 +107,9 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
       if (!CUSTOMER_LABELS.some((label) => normalize(cell.text).includes(label))) {
         continue;
       }
-      // "공급받는자: 미래모터스(주)" 처럼 라벨과 값이 한 셀에 붙어 오는 경우
-      const inline = cell.text.split(/[:：]/).slice(1).join(":").trim();
+      // "공급받는자: 미래모터스(주)" 처럼 라벨과 값이 한 셀에 붙어 오는 경우.
+      // "거래처: 한빛금속(주) 담당자: 김OO"처럼 뒤에 다른 라벨이 이어지면 끊는다.
+      const inline = valueAfterLabel(cell.text, CUSTOMER_LABELS);
       if (inline) {
         return { value: inline, confidence: cell.confidence };
       }
@@ -122,12 +123,122 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
   return { value: "", confidence: 0 };
 }
 
+// ── 라벨 형식 문서 ─────────────────────────────────────────────
+// 모든 거래명세서가 표는 아니다. 팀 데모 데이터처럼 "거래일자: 2026-03-02",
+// "거래처: 한빛금속(주)", "공급가액 121,500,000원 / 총액 133,650,000원"처럼
+// 라벨과 값이 한 줄에 붙어 나오는 문서가 있다. 이런 문서는 헤더 열이 없어서
+// 표 매핑이 통하지 않는다. 문서 전체에서 라벨을 찾아 한 건으로 묶는다.
+const LABELS = {
+  date: ["거래일자", "거래일", "일자"],
+  amount: ["공급가액", "총액", "합계"],
+  item: ["거래내역", "품목", "품명"],
+} as const;
+
+// 한 줄에서 "라벨: 값" 또는 "라벨 값" 형태의 값을 꺼낸다.
+// 뒤에 다른 라벨이 이어지면(거래유형, 담당부서 등) 거기서 끊는다.
+function valueAfterLabel(text: string, aliases: readonly string[]): string | null {
+  for (const alias of aliases) {
+    const at = text.indexOf(alias);
+    if (at < 0) {
+      continue;
+    }
+    let rest = text.slice(at + alias.length).replace(/^\s*[:：]?\s*/, "");
+    // 같은 줄에 붙어 있는 다음 항목 라벨에서 자른다.
+    const nextLabel = rest.search(/[가-힣]{2,6}\s*[:：]/);
+    if (nextLabel > 0) {
+      rest = rest.slice(0, nextLabel);
+    }
+    const trimmed = rest.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function labelRows(lines: Cell[][]): ExtractedTransactionRow[] {
+  // 라벨 형식은 줄바꿈이 의미를 가지므로 셀을 줄 단위 문자열로 합친다.
+  const texts = lines.map((row) => row.map((cell) => cell.text).join(" "));
+  const confidences = lines.map(
+    (row) =>
+      row.reduce((sum, cell) => sum + cell.confidence, 0) / (row.length || 1),
+  );
+
+  let date: string | null = null;
+  let dateConfidence = 0;
+  let customer = "";
+  let customerConfidence = 0;
+  let item = "";
+  let itemConfidence = 0;
+  let amount = 0;
+  let amountConfidence = 0;
+
+  for (let i = 0; i < texts.length; i += 1) {
+    const text = texts[i];
+
+    if (!date) {
+      const raw = valueAfterLabel(text, LABELS.date);
+      const parsed = raw ? parseDate(raw) : null;
+      if (parsed) {
+        date = parsed;
+        dateConfidence = confidences[i];
+      }
+    }
+
+    if (!customer) {
+      const raw = valueAfterLabel(text, CUSTOMER_LABELS);
+      if (raw) {
+        customer = raw;
+        customerConfidence = confidences[i];
+      }
+    }
+
+    // 금액은 "공급가액 121,500,000원 / 부가세 ... / 총액 133,650,000원"처럼
+    // 한 줄에 여러 개가 온다. 총액이 있으면 총액을, 없으면 공급가액을 쓴다.
+    const totalRaw = valueAfterLabel(text, ["총액", "합계"]);
+    const supplyRaw = valueAfterLabel(text, ["공급가액"]);
+    const picked = parseAmount(totalRaw ?? "") ?? parseAmount(supplyRaw ?? "");
+    if (picked && picked > amount) {
+      amount = picked;
+      amountConfidence = confidences[i];
+    }
+
+    // 품목은 "거래내역" 라벨 다음 줄에 오는 경우가 많다.
+    if (!item && LABELS.item.some((alias) => normalize(text) === alias)) {
+      const next = texts[i + 1];
+      if (next) {
+        item = next.trim();
+        itemConfidence = confidences[i + 1] ?? 0;
+      }
+    }
+  }
+
+  if (!date || amount === 0) {
+    return [];
+  }
+
+  return [
+    {
+      date: { value: date, confidence: dateConfidence },
+      customer: { value: customer, confidence: customerConfidence },
+      item: { value: item, confidence: itemConfidence },
+      amount: { value: amount, confidence: amountConfidence },
+    },
+  ];
+}
+
 export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
   const lines = result.lines ?? [];
   const { index: headerIndex, columns } = findHeader(lines);
   const customer = findCustomer(lines);
 
-  const dataRows = headerIndex >= 0 ? lines.slice(headerIndex + 1) : lines;
+  // 헤더가 없으면 표가 아니다. 억지로 훑으면 "거래일자: 2026-03-02" 한 줄에서
+  // 날짜 숫자를 금액(20260302)으로 읽는 식으로 엉뚱한 값이 나온다.
+  if (headerIndex < 0) {
+    return labelRows(lines);
+  }
+
+  const dataRows = lines.slice(headerIndex + 1);
   const extracted: ExtractedTransactionRow[] = [];
 
   for (const row of dataRows) {
@@ -145,6 +256,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
     const amount =
       (amountCell ? parseAmount(amountCell.text) : null) ??
       row
+        .filter((cell) => cell !== dateCell && parseDate(cell.text) === null)
         .map((cell) => parseAmount(cell.text) ?? 0)
         .reduce((max, value) => Math.max(max, value), 0);
 
@@ -158,5 +270,6 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
     });
   }
 
-  return extracted;
+  // 표에서 한 건도 못 뽑았으면 라벨 형식 문서로 보고 다시 시도한다.
+  return extracted.length > 0 ? extracted : labelRows(lines);
 }
