@@ -12,13 +12,40 @@ const statusLabel = {
   caution: "주의",
 };
 
-// 규칙 기반 문장. LLM을 부르지 않는 기본 상태에서 쓴다.
-function ruleNotice(signals: Signals): string {
-  const risky = signals.statuses.topCustomerConcentration === "caution";
+// 규칙 기반 해석. LLM을 부르지 않는 기본 상태에서 쓴다.
+//
+// 세 지표를 나열하지 않고, 가장 눈에 띄는 것 하나를 골라 그게 무엇을 뜻하는지와
+// 무엇을 해야 하는지를 두 문장으로 쓴다. 사람이 읽고 다음 행동을 정할 수 있어야
+// 문장이 값을 한다.
+function pickNotable(signals: Signals): string {
+  const share = signals.topCustomerConcentration;
   const name = signals.topCustomerName ?? "최대 거래처";
-  return risky
-    ? `${name}에 대한 거래 집중도(${signals.topCustomerConcentration}%)는 리스크 요인으로 관리가 필요합니다.`
-    : `${name}에 대한 거래 집중도는 ${signals.topCustomerConcentration}%로, 특정 거래처 의존 위험은 크지 않습니다.`;
+  const growing = signals.statuses.customerGrowthRate === "positive";
+  const repeating = signals.statuses.repeatPurchaseRate === "positive";
+
+  // 집중도가 높으면 나머지가 좋아도 이게 먼저다.
+  if (share >= 70) {
+    return `매출의 ${share}%가 ${name} 한 곳에서 나옵니다. 이 거래처의 사정 변화가 곧 전체 매출의 변화가 되므로, 다음 분기에 다른 판로를 확보할 계획이 있는지부터 정리해 두시는 편이 좋습니다.`;
+  }
+
+  if (share >= 40) {
+    return `${name}의 비중이 ${share}%로 의존 위험 기준을 넘었습니다. 이 거래처와의 계약 조건과 갱신 시점을 확인해 두시면, 비중이 더 오를 때 대응할 여지가 생깁니다.`;
+  }
+
+  // 확보도 유지도 안 되는 상태가 그다음으로 급하다.
+  if (!growing && !repeating) {
+    return `거래처는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 바뀌었고 재구매율은 ${signals.repeatPurchaseRate}%입니다. 신규 확보와 관계 유지 어느 쪽도 확인되지 않으니, 이번 기간에 거래가 끊긴 거래처가 있었는지 먼저 살펴보시는 편이 좋습니다.`;
+  }
+
+  if (growing && !repeating) {
+    return `거래처는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘었지만 재구매율이 ${signals.repeatPurchaseRate}%에 그칩니다. 새로 들어온 거래처가 한 번에 그치지 않도록, 첫 거래 이후의 후속 접점을 만들어 두실 필요가 있습니다.`;
+  }
+
+  if (!growing && repeating) {
+    return `재구매율 ${signals.repeatPurchaseRate}%로 기존 거래처와의 관계는 이어지고 있지만, 거래처 수는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘지 않았습니다. 지금의 관계 유지 역량을 신규 확보로 옮길 수 있는지 살펴보실 만합니다.`;
+  }
+
+  return `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘고 재구매율도 ${signals.repeatPurchaseRate}%로 이어져, 확보와 유지가 함께 확인됩니다. 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
 }
 
 export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
@@ -113,7 +140,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         className="mt-3 max-w-3xl text-[13px] leading-6"
         style={{ color: risky ? "#8A4A2E" : "#736861" }}
       >
-        {aiNotice ?? ruleNotice(signals)}
+        {aiNotice ?? pickNotable(signals)}
       </p>
 
       {/*
@@ -134,7 +161,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
           <span className="text-[11px] text-zinc-400">
             {aiState === "failed"
               ? "해석을 받지 못했습니다. 위 문장은 규칙 기반입니다."
-              : "비율 수치만 전송되며, 거래처명은 전송되지 않습니다."}
+              : "누르면 위 비율 수치가 외부 AI로 전송됩니다. 기업명·거래처명·문서는 전송되지 않지만, 비율 자체도 이 기업의 영업 정보입니다."}
           </span>
         </div>
       )}

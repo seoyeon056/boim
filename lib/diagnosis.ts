@@ -1,3 +1,4 @@
+import { josa } from "@/lib/korean";
 import type { Signals } from "@/lib/signals";
 import type { Visibility } from "@/lib/visibility";
 
@@ -15,49 +16,103 @@ export type Diagnosis = {
   internalCardNote: string; // 비교 화면 내부(초록) 카드 하단 요약
 };
 
-// 외부: 가시성 점수 구간으로 나눈다. (lib/visibility.ts 의 구간과 동일)
-function describeExternal(score: number): string {
-  if (score < 30) {
-    return "외부에서는 공개 정보가 거의 없어 기업의 최근 성장 활동을 확인하기 어렵습니다.";
-  }
+// ── 외부에서 본 모습 ─────────────────────────────────────────
+// 점수 구간만 보고 문장을 고르면 어떤 기업이든 같은 말이 나온다. 어느 축에 흔적이
+// 남았고 어느 축이 비었는지를 실제 건수로 짚어야 기업마다 다른 문장이 된다.
+type Axis = { label: string; count: number; unit: string };
 
-  if (score < 60) {
-    return "외부에는 공개 정보가 일부 있지만, 최근 성장 활동을 판단하기에는 부족합니다.";
-  }
+function presentAxes(visibility: Visibility): { found: Axis[]; missing: Axis[] } {
+  const axes: Axis[] = [
+    { label: "뉴스", count: visibility.newsCount, unit: "건" },
+    { label: "특허", count: visibility.patentCount, unit: "건" },
+    { label: "채용 공고", count: visibility.jobCount, unit: "건" },
+    { label: "공시", count: visibility.disclosureCount, unit: "건" },
+  ];
 
-  return "외부에도 공개 정보가 어느 정도 남아 있지만, 그것만으로는 최근 성장 활동을 확인하기 어렵습니다.";
+  return {
+    found: axes.filter((axis) => axis.count > 0),
+    missing: axes.filter((axis) => axis.count === 0),
+  };
 }
 
-// 내부: 거래처 증가와 반복 거래를 조합해서 판단한다.
+function listAxes(axes: Axis[], withCount: boolean): string {
+  return axes
+    .map((axis) => (withCount ? `${axis.label} ${axis.count.toLocaleString()}${axis.unit}` : axis.label))
+    .join("·");
+}
+
+function describeExternal(visibility: Visibility): string {
+  const { found, missing } = presentAxes(visibility);
+
+  if (found.length === 0) {
+    return "외부에서는 뉴스·특허·채용 공고·공시 어디에서도 이 기업의 활동이 확인되지 않습니다.";
+  }
+
+  if (missing.length === 0) {
+    return `외부에서는 ${josa(listAxes(found, true), "이/가")} 모두 확인되어, 공개 정보만으로도 활동을 어느 정도 따라갈 수 있습니다.`;
+  }
+
+  const tail =
+    visibility.visibilityScore < 30
+      ? "다만 그 양이 적어 최근 성장 활동을 판단하기에는 부족합니다."
+      : visibility.visibilityScore < 60
+        ? "다만 이것만으로 최근 성장 활동을 판단하기에는 부족합니다."
+        : "다만 공개 정보는 활동의 결과가 드러난 뒤에야 쌓입니다.";
+
+  return `외부에서는 ${josa(listAxes(found, true), "이/가")} 확인되지만 ${josa(listAxes(missing, false), "은/는")} 남아 있지 않습니다. ${tail}`;
+}
+
+// ── 내부에서 본 모습 ─────────────────────────────────────────
+// 거래처 확보(증가율)와 관계 유지(재구매율)는 다른 이야기다. 네 조합을 각각 쓴다.
 function describeInternal(signals: Signals): string {
-  const isGrowing = signals.statuses.customerGrowthRate === "positive";
-  const isRepeating = signals.statuses.repeatPurchaseRate === "positive";
+  const growing = signals.statuses.customerGrowthRate === "positive";
+  const repeating = signals.statuses.repeatPurchaseRate === "positive";
+  const flow = `${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로`;
+  const repeat = `${signals.repeatPurchaseRate}%`;
 
-  if (isGrowing && isRepeating) {
-    return "내부 문서에서는 거래처 증가와 반복 거래 신호가 함께 확인되었습니다.";
+  if (growing && repeating) {
+    return `내부 거래에서는 거래처가 ${flow} 늘고 재구매율도 ${repeat}로 이어져, 새로 확보한 거래처와 기존 관계가 함께 유지되고 있습니다.`;
   }
 
-  if (isGrowing) {
-    return "내부 문서에서는 거래처가 늘었지만, 반복 거래 비중은 아직 낮습니다.";
+  if (growing) {
+    return `내부 거래에서는 거래처가 ${flow} 늘었지만 재구매율이 ${repeat}에 머물러, 새로 확보한 거래처가 반복 거래로 이어지는지는 아직 확인되지 않습니다.`;
   }
 
-  if (isRepeating) {
-    return "내부 문서에서는 거래처 수가 늘지는 않았지만, 반복 거래는 안정적으로 이어지고 있습니다.";
+  if (repeating) {
+    return `내부 거래에서는 거래처 수가 ${flow} 바뀌어 확장은 확인되지 않지만, 재구매율 ${repeat}로 기존 거래처와의 관계는 이어지고 있습니다.`;
   }
 
-  return "내부 문서에서도 뚜렷한 성장 신호는 확인되지 않았습니다.";
+  return `내부 거래에서는 거래처가 ${flow} 바뀌고 재구매율은 ${repeat}로, 신규 확보와 관계 유지 어느 쪽에서도 뚜렷한 신호가 확인되지 않습니다.`;
 }
 
-// 집중도: 위험 구간일 때만 경고 문장을 쓴다.
+// ── 거래처 의존 위험 ─────────────────────────────────────────
+// 40%를 한 줄로 자르면 39%와 41%가 전혀 다른 결론이 된다. 구간을 넓히고
+// 경계 근처는 경계라고 말한다.
 function describeRisk(signals: Signals): string {
-  const isRisky = signals.statuses.topCustomerConcentration === "caution";
+  const share = signals.topCustomerConcentration;
   const name = signals.topCustomerName ?? "최대 거래처";
 
-  if (isRisky) {
-    return `다만 최대 거래처인 ${name}가 전체 매출의 ${signals.topCustomerConcentration}%를 차지해 특정 거래처 의존 위험을 함께 살펴봐야 합니다.`;
+  if (share === 0) {
+    return "거래 금액이 확인되지 않아 거래처 의존 위험은 판단하지 않았습니다.";
   }
 
-  return `최대 거래처인 ${name}의 비중은 ${signals.topCustomerConcentration}%로, 특정 거래처 의존 위험은 크지 않습니다.`;
+  if (share >= 70) {
+    return `매출의 ${share}%가 ${name} 한 곳에서 나옵니다. 이 거래처의 사정이 바뀌면 그대로 전체 매출로 이어지므로, 다른 판로를 함께 살펴봐야 합니다.`;
+  }
+
+  if (share >= 50) {
+    return `${josa(name, "이/가")} 매출의 ${share}%를 차지해 절반을 넘습니다. 성장세와 별개로 거래처 구성이 한쪽으로 기울어 있습니다.`;
+  }
+
+  if (share >= 40) {
+    return `${name}의 비중이 ${share}%로 의존 위험 기준(40%)을 막 넘었습니다. 지금 당장 문제가 되는 수준은 아니지만 방향을 지켜볼 필요가 있습니다.`;
+  }
+
+  if (share >= 33) {
+    return `${name}의 비중은 ${share}%로 의존 위험 기준(40%)에 가깝습니다. 아직 여유가 있을 때 거래처 구성을 살펴두면 좋습니다.`;
+  }
+
+  return `매출이 여러 거래처에 나뉘어 있고 가장 큰 ${name}도 ${share}%에 그쳐, 특정 거래처 의존 위험은 낮습니다.`;
 }
 
 function buildHeadline(visibility: Visibility, signals: Signals): string {
@@ -127,7 +182,7 @@ export function buildDiagnosis(
   return {
     grade: buildGrade(signals),
     headline: buildHeadline(visibility, signals),
-    external: describeExternal(visibility.visibilityScore),
+    external: describeExternal(visibility),
     internal: describeInternal(signals),
     risk: describeRisk(signals),
     internalCardNote: buildInternalCardNote(signals),
