@@ -119,6 +119,11 @@ export default function CompanyPage() {
 
         {visibleCompanies.map((company) => {
           const isSelected = selectedCompany?.id === company.id;
+          const tags = [
+            company.region,
+            company.industry,
+            company.employees > 0 ? `직원 ${company.employees}명` : "",
+          ].filter((tag) => tag.trim() !== "");
 
           return (
             <div
@@ -149,20 +154,24 @@ export default function CompanyPage() {
                     </span>
                   )}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {[
-                    company.region,
-                    company.industry,
-                    `직원 ${company.employees}명`,
-                  ].map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                {/*
+                  DART에서 찾은 기업은 지역·업종·직원수를 내려주지 않아 이 세 값이
+                  빈 문자열과 0으로 온다(lib/external/dart.ts). 그대로 렌더하면
+                  내용 없는 태그가 뜨고, key가 둘 다 ""라 React key 중복 경고까지
+                  난다. 값이 있는 것만 보여준다.
+                */}
+                {tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="rounded-full border border-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </button>
 
               {isSelected && (
