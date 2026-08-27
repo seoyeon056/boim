@@ -10,6 +10,7 @@ import type {
   StoredUpload,
 } from "@/types/document";
 import { withCompany } from "@/lib/company-link";
+import { extractTransactionsLocally } from "@/lib/ocr/run-local-ocr";
 import StepShell from "@/app/step-shell";
 import { useUploadStore } from "./upload-store";
 
@@ -270,30 +271,22 @@ export function UploadContent({ companyId }: { companyId?: string }) {
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
 
-    // 거래명세서 파일은 실제로 서버에 보내서 OCR 구조화 추출을 시도한다.
-    // 실패하거나 파일이 없으면 processing 화면이 기존처럼 합성 데이터로 대체한다.
+    // 거래명세서는 이 브라우저 안에서 인식한다. 파일은 서버로 전송되지 않는다.
+    // 인식 결과와 실패 사유를 함께 남겨서, processing 화면이 "예시 데이터로
+    // 대체했다"는 사실을 사용자에게 숨기지 않도록 한다.
     const transactionFiles = states["transaction-statement"]?.files ?? [];
     sessionStorage.removeItem("boimExtractedTransactions");
+    sessionStorage.removeItem("boimExtractionOutcome");
 
     if (transactionFiles.length > 0) {
-      try {
-        const formData = new FormData();
-        transactionFiles.forEach((file) => formData.append("files", file));
+      const outcome = await extractTransactionsLocally(transactionFiles);
+      sessionStorage.setItem("boimExtractionOutcome", outcome.status);
 
-        const response = await fetch("/api/extract", {
-          method: "POST",
-          body: formData,
-        });
-        const result = await response.json();
-
-        if (result.transactions) {
-          sessionStorage.setItem(
-            "boimExtractedTransactions",
-            JSON.stringify(result.transactions),
-          );
-        }
-      } catch {
-        // 추출 실패 — processing 화면의 합성 데이터 fallback에 맡긴다.
+      if (outcome.status === "ok") {
+        sessionStorage.setItem(
+          "boimExtractedTransactions",
+          JSON.stringify(outcome.transactions),
+        );
       }
     }
 
