@@ -17,7 +17,7 @@ import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 
 // LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
-const STATUS_TEXT = { positive: "긍정", caution: "주의" } as const;
+const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" } as const;
 
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
@@ -33,7 +33,13 @@ const EVIDENCE_DOCS = [
   "입금내역",
 ];
 
-const serif = { fontFamily: "Nanum Myeongjo, Batang, serif" } as const;
+// 진단서 본문 서체. 나눔명조는 획이 굵고 예스러워 문서가 무거워 보인다.
+// Noto Serif KR 은 획이 가늘고 자간이 정돈돼 있어 같은 문서 톤을 유지하면서 덜 튄다.
+const serif = {
+  fontFamily: "var(--font-document)",
+  fontWeight: 400,
+  letterSpacing: "0.01em",
+} as const;
 
 export function ShareContent({
   companyId,
@@ -164,30 +170,15 @@ export function ShareContent({
   ];
 
   // 판정(긍정/주의)은 lib/signals.ts 계산 결과를 그대로 쓴다.
+  // 지표 정의는 lib/signals.ts 가 갖는다. 리포트는 계산 결과를 옮겨 적는다.
   const growthSignals = signals
-    ? [
-        {
-          no: "1",
-          label: "거래처 증가율",
-          value: `${signals.customerGrowthRate > 0 ? "+" : ""}${signals.customerGrowthRate}%`,
-          tone: signals.statuses.customerGrowthRate,
-          note: `이전 ${signals.previousCustomersCount}곳 → 현재 ${signals.recentCustomersCount}곳`,
-        },
-        {
-          no: "2",
-          label: "재구매율",
-          value: `${signals.repeatPurchaseRate}%`,
-          tone: signals.statuses.repeatPurchaseRate,
-          note: "두 번 이상 거래한 비율",
-        },
-        {
-          no: "3",
-          label: "최대 거래처 집중도",
-          value: `${signals.topCustomerConcentration}%`,
-          tone: signals.statuses.topCustomerConcentration,
-          note: `${signals.topCustomerName} 의존도`,
-        },
-      ]
+    ? signals.signals.map((item, index) => ({
+        no: String(index + 1),
+        label: item.label,
+        value: `${item.prefix}${item.value}${item.suffix}`,
+        tone: item.tone,
+        note: item.detail,
+      }))
     : [];
 
   return (
@@ -227,7 +218,7 @@ export function ShareContent({
 
         {/* 표제 */}
         <div className="mt-8 border-y-[3px] border-double border-zinc-900 py-6 text-center">
-          <h1 className="text-[26px] font-bold tracking-[0.3em] text-zinc-900">
+          <h1 className="text-[26px] font-medium tracking-[0.32em] text-zinc-900">
             기업성장진단보고서
           </h1>
           <p className="mt-2 text-[12px] tracking-[0.2em] text-zinc-500">
@@ -249,7 +240,7 @@ export function ShareContent({
 
         {/* 1. 기본 사항 */}
         <section className="mt-8">
-          <h2 className="mb-2 text-[14px] font-bold text-zinc-900">
+          <h2 className="mb-2 text-[14px] font-medium text-zinc-900">
             1. 기본 사항
           </h2>
           <table className="w-full border-collapse border border-zinc-900 text-[13px]">
@@ -258,7 +249,7 @@ export function ShareContent({
                 <tr key={row[0].label}>
                   {row.map((cell) => (
                     <Fragment key={cell.label}>
-                      <th className="w-[22%] border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-left text-[12px] font-bold text-zinc-600">
+                      <th className="w-[22%] border border-zinc-300 bg-zinc-50 px-3 py-2.5 text-left text-[12px] font-medium text-zinc-500">
                         {cell.label}
                       </th>
                       <td className="w-[28%] border border-zinc-300 px-3 py-2.5 font-medium text-zinc-900">
@@ -274,25 +265,25 @@ export function ShareContent({
 
         {/* 2. 내부 성장 신호 */}
         <section className="mt-7">
-          <h2 className="mb-2 text-[14px] font-bold text-zinc-900">
+          <h2 className="mb-2 text-[14px] font-medium text-zinc-900">
             2. 내부 성장 신호
           </h2>
           <table className="w-full border-collapse border border-zinc-900 text-[13px]">
             <thead>
               <tr className="bg-zinc-100">
-                <th className="w-10 border border-zinc-300 py-2 text-[12px] font-bold text-zinc-700">
+                <th className="w-10 border border-zinc-300 py-2 text-[12px] font-medium text-zinc-500">
                   연번
                 </th>
-                <th className="border border-zinc-300 py-2 text-[12px] font-bold text-zinc-700">
+                <th className="border border-zinc-300 py-2 text-[12px] font-medium text-zinc-500">
                   지　표
                 </th>
-                <th className="w-24 border border-zinc-300 py-2 text-[12px] font-bold text-zinc-700">
+                <th className="w-24 border border-zinc-300 py-2 text-[12px] font-medium text-zinc-500">
                   수　치
                 </th>
-                <th className="w-16 border border-zinc-300 py-2 text-[12px] font-bold text-zinc-700">
+                <th className="w-16 border border-zinc-300 py-2 text-[12px] font-medium text-zinc-500">
                   판정
                 </th>
-                <th className="w-[34%] border border-zinc-300 py-2 text-[12px] font-bold text-zinc-700">
+                <th className="w-[34%] border border-zinc-300 py-2 text-[12px] font-medium text-zinc-500">
                   비　고
                 </th>
               </tr>
@@ -310,13 +301,13 @@ export function ShareContent({
               ) : (
                 growthSignals.map((signal) => (
                   <tr key={signal.label}>
-                    <td className="border border-zinc-300 py-2.5 text-center font-mono text-[12px] text-zinc-500">
+                    <td className="border border-zinc-300 py-2.5 text-center text-[12px] tabular-nums text-zinc-500">
                       {signal.no}
                     </td>
-                    <td className="border border-zinc-300 px-3 py-2.5 font-bold text-zinc-900">
+                    <td className="border border-zinc-300 px-3 py-2.5 font-medium text-zinc-900">
                       {signal.label}
                     </td>
-                    <td className="border border-zinc-300 py-2.5 text-center font-mono text-[15px] font-bold text-zinc-900">
+                    <td className="border border-zinc-300 py-2.5 text-center text-[17px] font-medium tabular-nums text-zinc-900">
                       {signal.value}
                     </td>
                     <td className="border border-zinc-300 py-2.5 text-center text-[12px] font-bold text-zinc-900">
@@ -345,7 +336,7 @@ export function ShareContent({
 
         {/* 3. 종합 진단 */}
         <section className="mt-7">
-          <h2 className="mb-2 text-[14px] font-bold text-zinc-900">
+          <h2 className="mb-2 text-[14px] font-medium text-zinc-900">
             3. 종합 진단
           </h2>
           <div className="space-y-2 text-[13px] leading-7 text-zinc-900">
@@ -395,7 +386,7 @@ export function ShareContent({
 
         {/* 4. 분석 근거 문서 */}
         <section className="mt-7">
-          <h2 className="mb-2 text-[14px] font-bold text-zinc-900">
+          <h2 className="mb-2 text-[14px] font-medium text-zinc-900">
             4. 분석 근거 문서
           </h2>
           <p className="-indent-4 pl-4 text-[13px] leading-7 text-zinc-900">
@@ -406,13 +397,13 @@ export function ShareContent({
         </section>
 
         {/* 끝 표시 */}
-        <p className="mt-6 text-right text-[13px] font-bold text-zinc-900">
+        <p className="mt-6 text-right text-[13px] font-medium text-zinc-900">
           끝.
         </p>
 
         {/* 발신 명의 */}
         <div className="mt-10 border-t border-zinc-300 pt-8 text-center">
-          <p className="text-[20px] font-bold tracking-[0.25em] text-zinc-900">
+          <p className="text-[20px] font-medium tracking-[0.25em] text-zinc-900">
             BO : IM AI 진단 시스템
           </p>
         </div>

@@ -12,7 +12,9 @@ export type MetricCardData = {
   suffix?: string;
   description: string;
   status: string;
-  caution: boolean;
+  // 긍정 / 보통 / 주의. 예전에는 caution 하나로만 갈랐는데, 지표가 여섯으로
+  // 늘면서 "나쁘진 않지만 좋지도 않다"를 표현할 자리가 필요해졌다.
+  tone: "positive" | "neutral" | "caution";
 };
 
 function MetricCard({
@@ -22,7 +24,7 @@ function MetricCard({
   suffix = "%",
   description,
   status,
-  caution,
+  tone,
   delay = 0,
 }: MetricCardData & { delay?: number }) {
   const shown = useCountUp(target, 900 + delay);
@@ -30,13 +32,19 @@ function MetricCard({
   return (
     <div
       className="flex flex-col justify-between gap-8 px-6 py-6"
-      style={{ backgroundColor: caution ? "#F7E5DA" : "#FFFFFF" }}
+      style={{
+        backgroundColor:
+          tone === "caution" ? "#F7E5DA" : tone === "neutral" ? "#F5F3EF" : "#FFFFFF",
+      }}
     >
       <div className="flex flex-col">
         <span className="text-[11px] text-zinc-400">{label}</span>
         <span
           className="mt-1.5 font-mono text-[40px] font-medium leading-none tabular-nums"
-          style={{ color: caution ? "#8A4A2E" : "#2A211C" }}
+          style={{
+            color:
+              tone === "caution" ? "#8A4A2E" : tone === "neutral" ? "#5B554E" : "#2A211C",
+          }}
         >
           {prefix}
           {shown}
@@ -46,7 +54,10 @@ function MetricCard({
       </div>
       <span
         className="text-[11px] font-medium"
-        style={{ color: caution ? "#8A4A2E" : "#1D4533" }}
+        style={{
+          color:
+            tone === "caution" ? "#8A4A2E" : tone === "neutral" ? "#5B554E" : "#1D4533",
+        }}
       >
         {status}
       </span>

@@ -6,13 +6,24 @@ import { readUploadedSignals } from "@/lib/uploaded-signals";
 import { describePaymentTerms, readDocumentTerms } from "@/lib/document-terms";
 import { grantAiConsent } from "@/lib/ai-consent";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
+import { josa } from "@/lib/korean";
 import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
+import { LoadingSteps } from "@/app/loading-steps";
+import { GradeBadge } from "@/app/grade-badge";
+import { gradeFromSignals } from "@/lib/diagnosis";
 
 const statusLabel = {
   positive: "긍정",
+  neutral: "보통",
   caution: "주의",
 };
+
+const AI_STEPS = [
+  "지표를 정리하는 중",
+  "거래처명을 가리고 비율만 추리는 중",
+  "AI 가 해석을 쓰는 중",
+];
 
 // 규칙 기반 해석. LLM을 부르지 않는 기본 상태에서 쓴다.
 //
@@ -20,34 +31,31 @@ const statusLabel = {
 // 무엇을 해야 하는지를 두 문장으로 쓴다. 사람이 읽고 다음 행동을 정할 수 있어야
 // 문장이 값을 한다.
 function pickNotable(signals: Signals): string {
-  const share = signals.topCustomerConcentration;
-  const name = signals.topCustomerName ?? "최대 거래처";
-  const growing = signals.statuses.customerGrowthRate === "positive";
-  const repeating = signals.statuses.repeatPurchaseRate === "positive";
+  const caution = signals.signals.find((item) => item.tone === "caution");
 
-  // 집중도가 높으면 나머지가 좋아도 이게 먼저다.
-  if (share >= 70) {
-    return `매출의 ${share}%가 ${name} 한 곳에서 나옵니다. 이 거래처의 사정 변화가 곧 전체 매출의 변화가 되므로, 다음 분기에 다른 판로를 확보할 계획이 있는지부터 정리해 두시는 편이 좋습니다.`;
+  // 주의 신호가 있으면 그것부터 말한다. 좋은 소식보다 먼저 알아야 할 일이다.
+  if (caution) {
+    const action =
+      caution.key === "concentration"
+        ? "이 거래처와의 계약 조건과 갱신 시점을 확인해 두시면, 비중이 더 오를 때 대응할 여지가 생깁니다."
+        : caution.key === "continuity"
+          ? "거래가 끊긴 달에 무슨 일이 있었는지 먼저 확인해 보시면 좋습니다."
+          : caution.key === "trend"
+            ? "최근 달에 무엇이 줄었는지 품목별로 짚어 보시는 편이 좋습니다."
+            : caution.key === "repeatRate"
+              ? "첫 거래 이후의 후속 접점을 만들어 두실 필요가 있습니다."
+              : "이번 기간에 거래가 끊긴 곳이 있었는지 살펴보시는 편이 좋습니다.";
+
+    return `${josa(caution.label, "이/가")} ${caution.prefix}${caution.value}${caution.suffix}로 ${caution.note}에 해당합니다. ${action}`;
   }
 
-  if (share >= 40) {
-    return `${name}의 비중이 ${share}%로 의존 위험 기준을 넘었습니다. 이 거래처와의 계약 조건과 갱신 시점을 확인해 두시면, 비중이 더 오를 때 대응할 여지가 생깁니다.`;
+  // 주의가 없으면 가장 뚜렷한 긍정을 짚는다.
+  const best = signals.signals.find((item) => item.tone === "positive");
+  if (best) {
+    return `${best.label} ${best.prefix}${best.value}${best.suffix}로 ${best.note}가 확인됩니다. 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
   }
 
-  // 확보도 유지도 안 되는 상태가 그다음으로 급하다.
-  if (!growing && !repeating) {
-    return `거래처는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 바뀌었고 재구매율은 ${signals.repeatPurchaseRate}%입니다. 신규 확보와 관계 유지 어느 쪽도 확인되지 않으니, 이번 기간에 거래가 끊긴 거래처가 있었는지 먼저 살펴보시는 편이 좋습니다.`;
-  }
-
-  if (growing && !repeating) {
-    return `거래처는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘었지만 재구매율이 ${signals.repeatPurchaseRate}%에 그칩니다. 새로 들어온 거래처가 한 번에 그치지 않도록, 첫 거래 이후의 후속 접점을 만들어 두실 필요가 있습니다.`;
-  }
-
-  if (!growing && repeating) {
-    return `재구매율 ${signals.repeatPurchaseRate}%로 기존 거래처와의 관계는 이어지고 있지만, 거래처 수는 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘지 않았습니다. 지금의 관계 유지 역량을 신규 확보로 옮길 수 있는지 살펴보실 만합니다.`;
-  }
-
-  return `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘고 재구매율도 ${signals.repeatPurchaseRate}%로 이어져, 확보와 유지가 함께 확인됩니다. 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
+  return "여섯 지표 모두 뚜렷한 방향이 확인되지 않습니다. 거래 기록이 더 쌓인 뒤에 다시 보시는 편이 정확합니다.";
 }
 
 export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
@@ -89,15 +97,16 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transactionCount,
-          customerGrowthRate: signals.customerGrowthRate,
-          previousCustomersCount: signals.previousCustomersCount,
-          recentCustomersCount: signals.recentCustomersCount,
-          growthStatus: statusLabel[signals.statuses.customerGrowthRate],
-          repeatPurchaseRate: signals.repeatPurchaseRate,
-          repeatStatus: statusLabel[signals.statuses.repeatPurchaseRate],
-          topCustomerConcentration: signals.topCustomerConcentration,
-          concentrationStatus:
-            statusLabel[signals.statuses.topCustomerConcentration],
+          positiveCount: signals.positiveCount,
+          cautionCount: signals.cautionCount,
+          activityLevel: signals.activityLevel,
+          // 판정까지 코드가 끝낸 결과만 보낸다. 거래처명은 담지 않는다.
+          signals: signals.signals.map((item) => ({
+            label: item.label,
+            value: item.value,
+            tone: statusLabel[item.tone],
+            note: item.note,
+          })),
         }),
       });
       if (!response.ok) throw new Error(String(response.status));
@@ -111,34 +120,49 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
 
   const risky = signals.statuses.topCustomerConcentration === "caution";
 
-  const metrics: MetricCardData[] = [
-    {
-      label: "거래처 증가율",
-      target: signals.customerGrowthRate,
-      prefix: signals.customerGrowthRate > 0 ? "+" : "",
-      description: `${signals.previousCustomersCount}곳 → ${signals.recentCustomersCount}곳`,
-      status: statusLabel[signals.statuses.customerGrowthRate],
-      caution: signals.statuses.customerGrowthRate === "caution",
-    },
-    {
-      label: "재구매율",
-      target: signals.repeatPurchaseRate,
-      description: "두 번 이상 거래한 비율",
-      status: statusLabel[signals.statuses.repeatPurchaseRate],
-      caution: signals.statuses.repeatPurchaseRate === "caution",
-    },
-    {
-      label: "최대 거래처 집중도",
-      target: signals.topCustomerConcentration,
-      description: `${signals.topCustomerName ?? "최대 거래처"} 의존`,
-      status: statusLabel[signals.statuses.topCustomerConcentration],
-      caution: signals.statuses.topCustomerConcentration === "caution",
-    },
-  ];
+  // 지표 정의는 lib/signals.ts 가 갖는다. 화면은 계산 결과를 그리기만 한다.
+  const metrics: MetricCardData[] = signals.signals.map((item) => ({
+    label: item.label,
+    target: item.value,
+    prefix: item.prefix,
+    suffix: item.suffix,
+    description: item.detail,
+    status: statusLabel[item.tone],
+    tone: item.tone,
+  }));
+
+  // 등급은 세 지표의 긍정 개수로 정해지므로 이 화면에서도 그대로 보여준다.
+  const grade = gradeFromSignals(signals);
 
   return (
     <>
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <span className="text-[11px] text-zinc-400">
+          내부 거래에서 확인한 지표
+        </span>
+        <GradeBadge grade={grade} />
+      </div>
+
       <MetricCards metrics={metrics} />
+
+      {/* 여섯 신호를 세어 한 줄로 요약한다. LLM이 아니라 규칙이 정한 결론이다. */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-zinc-100 bg-zinc-50 px-4 py-3">
+        <span className="text-[13px] text-zinc-500">
+          긍정 신호{" "}
+          <span className="font-mono font-semibold text-emerald-600">
+            {signals.positiveCount}개
+          </span>
+        </span>
+        <span className="text-[13px] text-zinc-500">
+          주의 신호{" "}
+          <span className="font-mono font-semibold text-amber-600">
+            {signals.cautionCount}개
+          </span>
+        </span>
+        <span className="text-[13px] font-semibold text-zinc-900">
+          → 내부 거래 활동: {signals.activityLevel}
+        </span>
+      </div>
 
       {/* 이 수치가 어디서 나왔는지 밝힌다. 예전에는 예시 데이터가 실제 분석
           결과인 것처럼 보였다. */}
@@ -167,15 +191,20 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         값이라, 외부 모델로 보낼지를 사용자가 정하게 한다. 보내는 것은 비율
         숫자뿐이고 거래처명은 브라우저를 벗어나지 않는다.
       */}
-      {!aiNotice && (
+      {!aiNotice && aiState === "loading" && (
+        <div className="mt-2 max-w-md">
+          <LoadingSteps title="AI 해석을 받는 중" steps={AI_STEPS} />
+        </div>
+      )}
+
+      {!aiNotice && aiState !== "loading" && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={requestAiNotice}
-            disabled={aiState === "loading"}
-            className="inline-flex h-8 items-center rounded-md border border-zinc-200 px-3 text-[12px] text-zinc-600 transition-colors hover:bg-zinc-50 disabled:text-zinc-300"
+            className="inline-flex h-8 items-center rounded-md border border-zinc-200 px-3 text-[12px] text-zinc-600 transition-colors hover:bg-zinc-50"
           >
-            {aiState === "loading" ? "해석 중…" : "AI 해석 받기"}
+            AI 해석 받기
           </button>
           <span className="text-[11px] text-zinc-400">
             {aiState === "failed"
@@ -190,6 +219,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         previousCustomersCount={signals.previousCustomersCount}
         repeatPurchaseRate={signals.repeatPurchaseRate}
       />
+
     </>
   );
 }

@@ -41,6 +41,7 @@ export default async function SignalsPage(props: PageProps<"/signals">) {
       title="내부 성장 신호"
       description="내부 거래 문서에서 확인된 핵심 지표입니다."
       backTo={withCompany("/review", companyId)}
+      companyId={companyId}
       footer={
         <Link
           href={withCompany("/compare", companyId)}

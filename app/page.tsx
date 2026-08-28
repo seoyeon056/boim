@@ -9,21 +9,29 @@ const highlights = [
     title: "거래는 느는데 평가엔 반영되지 않는 기업",
     body: "신용평가는 여전히 공개 정보 중심이라 실제 성장이 가려집니다.",
   },
+  {
+    title: "거래 기록으로 성장을 보여야 하는 기업",
+    body: "거래명세서·세금계산서만 있으면 성장 근거를 문서로 정리해 드립니다.",
+  },
+  {
+    title: "투자·대출 앞두고 자료가 필요한 기업",
+    body: "외부 공개정보와 내부 거래를 함께 담은 진단서를 바로 발급합니다.",
+  },
 ];
 
 const SIGNAL_WORDS = [
-  { text: "거래명세서", top: 12, left: 6, size: 15, dur: 26, delay: 0 },
-  { text: "세금계산서", top: 68, left: 3, size: 13, dur: 34, delay: 3 },
-  { text: "재구매율 80%", top: 30, left: 78, size: 17, dur: 30, delay: 1 },
-  { text: "발주서", top: 82, left: 71, size: 14, dur: 24, delay: 5 },
-  { text: "거래처 +150%", top: 8, left: 62, size: 19, dur: 38, delay: 2 },
-  { text: "뉴스 0건", top: 46, left: 88, size: 13, dur: 28, delay: 6 },
-  { text: "입금내역", top: 88, left: 34, size: 14, dur: 32, delay: 4 },
-  { text: "특허 5건", top: 20, left: 40, size: 12, dur: 36, delay: 7 },
-  { text: "계약서", top: 58, left: 14, size: 16, dur: 22, delay: 2 },
-  { text: "견적서", top: 76, left: 52, size: 13, dur: 30, delay: 8 },
-  { text: "채용공고 1건", top: 40, left: 24, size: 12, dur: 34, delay: 5 },
-  { text: "거래 집중도 45%", top: 62, left: 84, size: 14, dur: 26, delay: 9 },
+  { text: "거래명세서", top: 12, left: 6, size: 15, dur: 14, delay: 0 },
+  { text: "세금계산서", top: 68, left: 3, size: 13, dur: 19, delay: 3 },
+  { text: "재구매율 80%", top: 30, left: 78, size: 17, dur: 16, delay: 1 },
+  { text: "발주서", top: 82, left: 71, size: 14, dur: 14, delay: 5 },
+  { text: "거래처 +150%", top: 8, left: 62, size: 19, dur: 21, delay: 2 },
+  { text: "뉴스 0건", top: 46, left: 88, size: 13, dur: 15, delay: 6 },
+  { text: "입금내역", top: 88, left: 34, size: 14, dur: 18, delay: 4 },
+  { text: "특허 5건", top: 20, left: 40, size: 12, dur: 20, delay: 7 },
+  { text: "계약서", top: 58, left: 14, size: 16, dur: 14, delay: 2 },
+  { text: "견적서", top: 76, left: 52, size: 13, dur: 16, delay: 8 },
+  { text: "채용공고 1건", top: 40, left: 24, size: 12, dur: 19, delay: 5 },
+  { text: "거래 집중도 45%", top: 62, left: 84, size: 14, dur: 14, delay: 9 },
 ];
 
 function SignalField() {
@@ -32,7 +40,7 @@ function SignalField() {
       {SIGNAL_WORDS.map((w) => (
         <span
           key={w.text}
-          className="signal-word absolute whitespace-nowrap font-mono text-zinc-300"
+          className="signal-word absolute whitespace-nowrap font-mono text-zinc-400"
           style={{
             top: `${w.top}%`,
             left: `${w.left}%`,
@@ -44,7 +52,7 @@ function SignalField() {
           {w.text}
         </span>
       ))}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/70 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/45 to-transparent" />
     </div>
   );
 }
@@ -68,8 +76,12 @@ export default function Home() {
               공개 정보만 보는 기존 평가와 달리, 내부 거래 문서까지 함께 분석해 보이지 않던 성장을 증명합니다.
             </p>
             <div className="animate-fade-in-up pt-1" style={{ animationDelay: "180ms" }}>
-              <Link href="/company" className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-6 text-sm font-medium text-white transition-all hover:bg-zinc-700 active:scale-[0.98]">
+              <Link
+                href="/company"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-zinc-900 px-7 text-[15px] font-semibold text-white shadow-sm transition-all hover:bg-zinc-700 active:scale-[0.98]"
+              >
                 기업 진단 시작하기
+                <span aria-hidden className="text-base leading-none">→</span>
               </Link>
             </div>
           </div>
