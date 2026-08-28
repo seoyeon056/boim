@@ -197,7 +197,10 @@ export function ShareContent({
     : [];
 
   return (
-    <div className="min-h-screen print:min-h-0" style={{ backgroundColor: "#E9E2DD" }}>
+    <div
+      className="report-page min-h-screen print:min-h-0"
+      style={{ backgroundColor: "#E9E2DD" }}
+    >
       <div className="mx-auto w-full max-w-[840px] px-6 py-12 print:max-w-full print:px-0 print:py-0">
       {/* 화면 전용 네비 */}
       <div className="print:hidden">

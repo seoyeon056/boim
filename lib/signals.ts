@@ -67,8 +67,9 @@ export function calculateTopCustomerConcentration(items: Transaction[], ){
 }
 
 // 긍정/주의 판단 기준.
-const REPEAT_CAUTION = 50; // 재구매율이 이 값 미만이면 반복 거래가 약하다고 본다.
-const CONCENTRATION_CAUTION = 40; // 집중도가 이 값 이상이면 특정 거래처 의존 위험으로 본다.
+// 화면에서 "무엇이 긍정인지" 안내할 때 같은 값을 쓰도록 내보낸다.
+export const REPEAT_CAUTION = 50; // 재구매율이 이 값 미만이면 반복 거래가 약하다고 본다.
+export const CONCENTRATION_CAUTION = 40; // 집중도가 이 값 이상이면 특정 거래처 의존 위험으로 본다.
 
 export type SignalTone = "positive" | "caution";
 

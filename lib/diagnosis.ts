@@ -1,5 +1,9 @@
 import { josa } from "@/lib/korean";
-import type { Signals } from "@/lib/signals";
+import {
+  CONCENTRATION_CAUTION,
+  REPEAT_CAUTION,
+  type Signals,
+} from "@/lib/signals";
 import type { Visibility } from "@/lib/visibility";
 
 // BO:IM 종합 진단 문장.
@@ -172,7 +176,17 @@ export const GRADE_CRITERIA = [
 ];
 
 export const GRADE_NOTE =
-  "거래처 증가율·재구매율·최대 거래처 집중도 세 지표 중 긍정 판정을 받은 개수로 매깁니다.";
+  "세 지표 중 긍정 판정을 받은 개수로 매깁니다.";
+
+// "긍정"이 무엇인지 밝히지 않으면 등급이 어디서 나온 값인지 알 수 없다.
+export const POSITIVE_CRITERIA = [
+  { label: "거래처 증가율", rule: "0%보다 크면 긍정" },
+  { label: "재구매율", rule: `${REPEAT_CAUTION}% 이상이면 긍정` },
+  {
+    label: "최대 거래처 집중도",
+    rule: `${CONCENTRATION_CAUTION}% 미만이면 긍정`,
+  },
+];
 
 export function gradeFromSignals(signals: Signals): string {
   const positives = Object.values(signals.statuses).filter(

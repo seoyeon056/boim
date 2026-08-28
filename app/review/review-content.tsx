@@ -333,11 +333,24 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     setInsight(buildReviewGuidance(buildReviewStats(result)));
   }, []);
 
+  // 금액은 자릿수가 커서 쉼표 없이는 5000000 이 얼마인지 바로 안 읽힌다.
+  // 입력창에는 쉼표를 넣어 보여주고, 상태에는 숫자만 저장한다.
+  function fieldText(key: FieldKey, value: string | number): string {
+    if (key !== "amount") {
+      return String(value);
+    }
+
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toLocaleString("ko-KR") : String(value);
+  }
+
   function updateValue(txIndex: number, key: FieldKey, raw: string) {
     setTransactions((prev) => {
       if (!prev) return prev;
       const next = [...prev];
-      const nextValue = key === "amount" ? (raw === "" ? 0 : Number(raw)) : raw;
+      // 쉼표를 지우고 숫자만 남긴다.
+      const digits = raw.replace(/[^\d]/g, "");
+      const nextValue = key === "amount" ? (digits === "" ? 0 : Number(digits)) : raw;
       next[txIndex] = {
         ...next[txIndex],
         [key]: { ...next[txIndex][key], value: nextValue },
@@ -527,7 +540,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
                   {tier === "high" && (
                     <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                      <IconCheck /> 자동 확인 · 수정 가능
+                      <IconCheck /> 자동 확인
                     </span>
                   )}
                   {tier !== "high" && isConfirmed && (
@@ -568,8 +581,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       />
                     ) : (
                       <input
-                        type={type}
-                        value={field.value}
+                        type={key === "amount" ? "text" : type}
+                        inputMode={key === "amount" ? "numeric" : undefined}
+                        value={fieldText(key, field.value)}
                         onChange={(event) =>
                           updateValue(txIndex, key, event.target.value)
                         }
@@ -605,8 +619,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       />
                     ) : (
                       <input
-                        type={type}
-                        value={field.value}
+                        type={key === "amount" ? "text" : type}
+                        inputMode={key === "amount" ? "numeric" : undefined}
+                        value={fieldText(key, field.value)}
                         onChange={(event) =>
                           updateValue(txIndex, key, event.target.value)
                         }
