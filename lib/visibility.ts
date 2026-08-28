@@ -1,4 +1,4 @@
-import type { ExternalPresence } from "@/data/visibility";
+import type { ExternalPresence, ExternalSource } from "@/data/visibility";
 
 // 외부 가시성 계산 로직.
 // 뉴스·특허·채용공고·공시 건수만 입력으로 받아서 점수와 해석 문구를 만든다.
@@ -18,6 +18,11 @@ export type VisibilityMetric = {
 export type Visibility = {
   companyId: string;
   company: string;
+
+  // 외부 API가 대답하지 않아 확인하지 못한 축. 여기 담긴 축의 건수는 0으로
+  // 채워져 있지만 "없다"는 뜻이 아니므로, 화면·점수·진단서 어디서도 0건으로
+  // 읽으면 안 된다.
+  unavailable: ExternalSource[];
 
   newsCount: number;
   newsCountIsAtLeast?: boolean;
@@ -76,15 +81,37 @@ function ratio(count: number, full: number): number {
   return Math.min(1, Math.log10(count + 1) / Math.log10(full + 1));
 }
 
+// 확인하지 못한 축은 배점에서 통째로 빼고, 남은 축의 배점만으로 100점을 만든다.
+// 0점으로 계산하면 "특허를 못 불러왔다"가 "특허가 없다"와 같은 감점이 되어,
+// 외부 API가 느린 날에 기업 평가가 낮아진다. 네 축이 다 살아 있으면 배점 합이
+// 100이라 예전과 같은 점수가 나온다.
 export function calculateVisibilityScore(presence: ExternalPresence): number {
-  const score =
-    ratio(presence.newsCount, METRICS.news.full) * METRICS.news.weight +
-    ratio(presence.patentCount, METRICS.patent.full) * METRICS.patent.weight +
-    ratio(presence.disclosureCount ?? 0, METRICS.disclosure.full) *
-      METRICS.disclosure.weight +
-    ratio(presence.jobCount, METRICS.job.full) * METRICS.job.weight;
+  const unavailable = new Set(presence.unavailable ?? []);
 
-  return Math.round(score);
+  const axes = [
+    ["news", presence.newsCount, METRICS.news],
+    ["patent", presence.patentCount, METRICS.patent],
+    ["disclosure", presence.disclosureCount ?? 0, METRICS.disclosure],
+    ["job", presence.jobCount, METRICS.job],
+  ] as const;
+
+  let earned = 0;
+  let possible = 0;
+
+  for (const [key, count, metric] of axes) {
+    if (unavailable.has(key)) {
+      continue;
+    }
+    earned += ratio(count, metric.full) * metric.weight;
+    possible += metric.weight;
+  }
+
+  // 네 축을 하나도 확인하지 못한 경우. 점수를 지어내지 않는다.
+  if (possible === 0) {
+    return 0;
+  }
+
+  return Math.round((earned / possible) * 100);
 }
 
 // 해석 문구는 세 구간(없음 / 소수 확인 / 다수 확인)을 공유한다.
@@ -145,6 +172,13 @@ function interpretDisclosure(count: number) {
   return { interpretation: "공시 기록 다수 확인", tone: "muted" as const };
 }
 
+// 확인하지 못한 축은 건수 해석 대신 이 문구를 쓴다.
+const UNAVAILABLE_METRIC = {
+  value: "확인 불가",
+  interpretation: "외부 서비스 응답 없음",
+  tone: "warn" as const,
+};
+
 function interpretScore(score: number) {
   if (score < 30) {
     return { interpretation: "외부 정보 부족", tone: "warn" as const };
@@ -175,6 +209,19 @@ export function calculateVisibility(
   presence: ExternalPresence,
 ): Visibility {
   const visibilityScore = calculateVisibilityScore(presence);
+  const unavailable = presence.unavailable ?? [];
+  const missing = new Set(unavailable);
+
+  // 확인한 축만 건수로 해석하고, 못 부른 축은 "확인 불가"로 덮어쓴다.
+  const metricFor = (
+    key: ExternalSource,
+    label: string,
+    value: string,
+    read: { interpretation: string; tone: MetricTone },
+  ): VisibilityMetric =>
+    missing.has(key)
+      ? { key, label, ...UNAVAILABLE_METRIC }
+      : { key, label, value, ...read };
 
   const news = interpretNews(presence.newsCount);
   const patent = interpretPatent(presence.patentCount);
@@ -186,6 +233,7 @@ export function calculateVisibility(
   return {
     companyId: presence.companyId,
     company: companyName,
+    unavailable,
 
     newsCount: presence.newsCount,
     newsCountIsAtLeast: presence.newsCountIsAtLeast,
@@ -196,42 +244,45 @@ export function calculateVisibility(
     visibilityScore,
 
     interpretations: {
-      news: news.interpretation,
-      patent: patent.interpretation,
-      job: job.interpretation,
-      disclosure: disclosure.interpretation,
+      // 해석 문구도 같이 덮는다. 여기만 "공개 기술 흔적 없음"으로 남으면
+      // LLM 프롬프트와 진단서가 그 문장을 사실로 받아 적는다.
+      news: missing.has("news")
+        ? UNAVAILABLE_METRIC.interpretation
+        : news.interpretation,
+      patent: missing.has("patent")
+        ? UNAVAILABLE_METRIC.interpretation
+        : patent.interpretation,
+      job: missing.has("job")
+        ? UNAVAILABLE_METRIC.interpretation
+        : job.interpretation,
+      disclosure: missing.has("disclosure")
+        ? UNAVAILABLE_METRIC.interpretation
+        : disclosure.interpretation,
       visibility: visibility.interpretation,
     },
 
     metrics: [
-      {
-        key: "news",
-        label: "뉴스",
-        value: presence.newsCountIsAtLeast
-          ? `${presence.newsCount}건 이상`
-          : `${presence.newsCount}건`,
-        ...news,
-      },
-      {
-        key: "patent",
-        label: "특허",
-        value: presence.patentCountIsAtLeast
-          ? `${presence.patentCount}건 이상`
-          : `${presence.patentCount}건`,
-        ...patent,
-      },
-      {
-        key: "job",
-        label: "채용공고",
-        value: `${presence.jobCount}건`,
-        ...job,
-      },
-      {
-        key: "disclosure",
-        label: "공시",
-        value: `${disclosureCount}건`,
-        ...disclosure,
-      },
+      // 실제 API를 붙이고 나서 건수가 수십만까지 올라간다. 자릿수 구분이 없으면
+      // "288510건"처럼 읽을 수 없는 숫자가 화면에 그대로 나온다.
+      metricFor(
+        "news",
+        "뉴스",
+        `${presence.newsCount.toLocaleString()}건${presence.newsCountIsAtLeast ? " 이상" : ""}`,
+        news,
+      ),
+      metricFor(
+        "patent",
+        "특허",
+        `${presence.patentCount.toLocaleString()}건${presence.patentCountIsAtLeast ? " 이상" : ""}`,
+        patent,
+      ),
+      metricFor("job", "채용공고", `${presence.jobCount.toLocaleString()}건`, job),
+      metricFor(
+        "disclosure",
+        "공시",
+        `${disclosureCount.toLocaleString()}건`,
+        disclosure,
+      ),
       {
         key: "visibility",
         label: "가시성 점수",

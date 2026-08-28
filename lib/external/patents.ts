@@ -17,20 +17,24 @@ function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, "").toLowerCase();
 }
 
-// 응답에 검색 총건수(TotalSearchCount)가 들어 있다. 건수만 필요하니 특허를
-// 통째로 받을 이유가 없다. 예전에는 500건을 받아 세느라 느려서 8초 제한에 자주
-// 걸렸고(실측: 삼성전자 500건 요청은 60초에도 응답 없음), 성공해도 상한인
-// 500건까지밖에 못 세서 "500건 이상"으로 나왔다. 실제 값은 32만 건이다.
+// 이 검색은 완전 정확일치가 아니라서 응답에 들어 있는 총건수(TotalSearchCount)를
+// 그대로 쓰면 안 된다. 실측:
 //
-// 다만 이 검색은 완전 정확일치가 아니라 총건수를 그냥 믿으면 안 된다(실측:
-// "한빛정밀"은 총 12건이 잡히지만 전부 무관한 출원인이라 실제로는 0건).
-// 그래서 뉴스 쪽과 같은 방식으로, 표본을 받아 그 표본이 깨끗한지 보고 판단한다.
+//   한빛정밀: 총 12건이 잡히지만 전부 무관한 출원인 → 실제 0건
+//   포스코:   총 52,561건, 앞 30건은 전부 일치하는데 끝 30건은 0건 일치
+//             (포스코플랜텍이 "주식회사 플랜텍"으로 등록돼 있다)
 //
-// 표본 30건이면 삼성전자도 4.8초에 온다(100건은 12.5초). 실측한 회사들은
-// LG생활건강·삼성전자·카카오 모두 표본 30건이 30건 다 일치했다.
-const SAMPLE_SIZE = 30;
+// 앞부분만 표본으로 보고 "나머지도 깨끗하겠지"라고 넘기면 포스코 특허가
+// 52,561건으로 나온다. 그래서 추론하지 않고 실제로 받아서 센다.
+//
+// 상한까지는 전부 받아 정확한 건수를 내고, 상한을 넘으면 받은 만큼만
+// "N건 이상"으로 말한다. 이 서비스의 대상인 중소기업은 대부분 상한 안에
+// 들어와서 추론 없는 정확한 값이 나온다(실측: 한빛정밀 12건 0.3초,
+// 동일기연 106건 9.5초 / 상한을 넘는 건 아모텍 885건·대기업 정도다).
+const PAGE_SIZE = 30;
+const MAX_COUNTED = 300;
 
-// 표본만 받으므로 예전 8초보다 여유가 있지만, KIPRIS 자체가 느린 날이 있다.
+// 페이지당 1~5초인데 느린 날이 있다. 상한까지 받아도 실측 10초 안쪽이었다.
 const REQUEST_TIMEOUT_MS = 15000;
 
 export type PatentCountResult = {
@@ -58,52 +62,66 @@ export async function fetchPatentCount(
   url.searchParams.set("applicant", searchWord);
   url.searchParams.set("patent", "true");
   url.searchParams.set("utility", "true");
-  url.searchParams.set("docsStart", "1");
-  url.searchParams.set("docsCount", String(SAMPLE_SIZE));
   url.searchParams.set("accessKey", serviceKey);
 
-  try {
-    const response = await fetch(url, {
+  const normalizedTarget = normalizeCompanyName(searchWord);
+
+  // 한 페이지를 받아 이 회사가 출원인인 건수와 검색 총건수를 돌려준다.
+  const readPage = async (
+    start: number,
+  ): Promise<{ matching: number; read: number; total: number }> => {
+    const pageUrl = new URL(url);
+    pageUrl.searchParams.set("docsStart", String(start));
+    pageUrl.searchParams.set("docsCount", String(PAGE_SIZE));
+
+    const response = await fetch(pageUrl, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-
     if (!response.ok) {
-      return null;
+      throw new Error(`KIPRIS HTTP ${response.status}`);
     }
 
     const xml = await response.text();
-    const normalizedTarget = normalizeCompanyName(searchWord);
-
     const applicants = [...xml.matchAll(/<Applicant>(.*?)<\/Applicant>/g)];
-    const matchingCount = applicants.filter(([, name]) =>
-      normalizeCompanyName(name).includes(normalizedTarget),
-    ).length;
 
-    const total = Number(
-      xml.match(/<TotalSearchCount>(\d+)<\/TotalSearchCount>/)?.[1],
-    );
+    return {
+      matching: applicants.filter(([, name]) =>
+        normalizeCompanyName(name).includes(normalizedTarget),
+      ).length,
+      read: applicants.length,
+      total: Number(
+        xml.match(/<TotalSearchCount>(\d+)<\/TotalSearchCount>/)?.[1],
+      ),
+    };
+  };
+
+  try {
+    const first = await readPage(1);
 
     // 총건수를 못 읽었으면 본 것만 말한다.
-    if (!Number.isFinite(total)) {
-      return { count: matchingCount, isAtLeast: applicants.length > 0 };
+    if (!Number.isFinite(first.total)) {
+      return { count: first.matching, isAtLeast: first.read > 0 };
     }
 
-    // 총건수가 표본 이하면 전부 본 것이다. 걸러낸 수가 곧 정답이다.
-    // ("한빛정밀": 총 12건을 다 받아 확인 → 전부 무관한 출원인이라 0건)
-    if (total <= applicants.length) {
-      return { count: matchingCount, isAtLeast: false };
+    // 첫 페이지에서 이미 다 봤다.
+    if (first.total <= first.read) {
+      return { count: first.matching, isAtLeast: false };
     }
 
-    // 표본이 한 건도 빠짐없이 이 회사면 검색어가 이 회사에서는 깨끗하게
-    // 동작한다는 뜻이라 총건수를 그대로 쓴다(실측: LG생활건강 5,282건,
-    // 삼성전자 325,636건, 카카오 1,482건 — 셋 다 표본 30/30 일치).
-    if (matchingCount === applicants.length) {
-      return { count: total, isAtLeast: false };
+    // 나머지 페이지. 첫 페이지에서 총건수를 알았으니 한꺼번에 받는다.
+    const countUpTo = Math.min(first.total, MAX_COUNTED);
+    const starts: number[] = [];
+    for (let start = first.read + 1; start <= countUpTo; start += PAGE_SIZE) {
+      starts.push(start);
     }
 
-    // 표본이 섞였는데 전체는 볼 수 없는 경우. 총건수를 그대로 쓰면 부풀린 값을
-    // 정확한 수치인 양 내보내게 되니, 확인된 건수만 "이상"으로 표시한다.
-    return { count: matchingCount, isAtLeast: matchingCount > 0 };
+    const rest = await Promise.all(starts.map(readPage));
+    const matching =
+      first.matching + rest.reduce((sum, page) => sum + page.matching, 0);
+
+    // 상한을 넘겨 다 못 본 경우에만 "이상"이다. 상한 안이면 전수 확인이라
+    // 정확한 수치다.
+    return { count: matching, isAtLeast: first.total > MAX_COUNTED };
   } catch {
     return null;
   }
