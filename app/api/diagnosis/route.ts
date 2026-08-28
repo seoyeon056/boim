@@ -1,25 +1,81 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSignals, getVisibility } from "@/lib/engine";
+import { NextResponse, type NextRequest } from "next/server";
 import { generateDiagnosisText } from "@/lib/llm/providers";
-import { MASKED_CUSTOMER_LABEL, restoreCustomerName } from "@/lib/llm/customer-mask";
+import { MASKED_CUSTOMER_LABEL } from "@/lib/llm/customer-mask";
 
-export async function GET(request: NextRequest) {
-  const companyId = request.nextUrl.searchParams.get("company") ?? undefined;
+// 성장 리포트의 종합 의견.
+//
+// 예전에는 GET으로 받아 서버가 getSignals()로 직접 계산했다. 그건 합성 데이터를
+// 읽는 함수라, 리포트 표에는 사용자가 올린 문서에서 나온 수치가 찍히는데 종합
+// 의견만 예시 데이터를 설명하는 상태였다. 같은 리포트 안에서 집중도가 72.7%와
+// 45%로 갈렸다.
+//
+// 이제 화면이 실제로 표시 중인 수치를 그대로 실어 보낸다. 기업명과 거래처명은
+// 담기지 않는다. 비율만으로는 익명 통계지만 실명과 묶이면 그 회사의 재무
+// 프로필이 되기 때문이다. 마스킹 라벨의 실명 복원은 클라이언트가 한다.
 
-  // 숫자는 서버가 직접 계산해서 넘긴다 — LLM은 해석·문장만 담당한다.
-  const signals = await getSignals(companyId);
-  const visibility = await getVisibility(companyId);
+const MAX_TEXT = 60;
 
-  const prompt = `다음은 한 기업의 성장 진단 데이터입니다. 이 수치만 근거로 2~3문장의 종합 진단을 작성하세요. 숫자를 새로 만들지 마세요.
+function num(raw: unknown): number {
+  const value = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
 
-외부 가시성 점수: ${visibility.visibilityScore}점 (${visibility.interpretations.visibility})
-뉴스 ${visibility.newsCount}${visibility.newsCountIsAtLeast ? "건 이상" : "건"} / 특허 ${visibility.patentCount}${visibility.patentCountIsAtLeast ? "건 이상" : "건"} / 채용공고 ${visibility.jobCount}건 / 최근 1년 공시 ${visibility.disclosureCount}건
-거래처 증가율: ${signals.customerGrowthRate}%
-재구매율: ${signals.repeatPurchaseRate}%
-최대 거래처 집중도: ${signals.topCustomerConcentration}% (${MASKED_CUSTOMER_LABEL})`;
+// 화면에 이미 떠 있는 짧은 해석 문구(예: "외부 정보 부족")만 받는다.
+function label(raw: unknown): string {
+  return typeof raw === "string" ? raw.slice(0, MAX_TEXT) : "";
+}
 
-  const rawText = await generateDiagnosisText(prompt);
-  const text = restoreCustomerName(rawText, signals.topCustomerName);
+export async function POST(request: NextRequest) {
+  let body: Record<string, unknown>;
 
-  return NextResponse.json({ diagnosis: text });
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json(
+      { message: "요청 본문을 읽을 수 없습니다." },
+      { status: 400 },
+    );
+  }
+
+  const period = label(body.period);
+  const transactionCount = num(body.transactionCount);
+
+  // 예전 프롬프트는 숫자만 나열하고 "2~3문장으로 해석하라"고만 했다. 근거가 빈약해
+  // 수치를 그대로 읊는 문장밖에 나오지 않았다. 무엇을 판단해야 하는지, 각 수치가
+  // 어떤 판정을 받았는지, 어떤 순서로 쓸지까지 준다.
+  const prompt = `당신은 중소기업 성장 진단 리포트를 쓰는 애널리스트입니다.
+아래 지표만 근거로 종합 의견을 작성하세요. 숫자를 새로 만들거나 추정하지 마세요.
+
+[대상]
+분석 기간: ${period || "미상"}
+분석에 사용한 내부 거래: ${transactionCount}건
+
+[외부에서 확인되는 정보]
+가시성 점수: ${num(body.visibilityScore)}점 / 100점 (${label(body.visibilityInterpretation)})
+뉴스 ${num(body.newsCount)}건 · 특허 ${num(body.patentCount)}건 · 채용공고 ${num(body.jobCount)}건 · 최근 1년 공시 ${num(body.disclosureCount)}건
+
+[내부 거래에서 확인되는 신호]
+거래처 증가율: ${num(body.customerGrowthRate)}% (${num(body.previousCustomersCount)}곳 → ${num(body.recentCustomersCount)}곳) — ${label(body.growthStatus)}
+재구매율: ${num(body.repeatPurchaseRate)}% — ${label(body.repeatStatus)}
+최대 거래처 집중도: ${num(body.topCustomerConcentration)}% (${MASKED_CUSTOMER_LABEL}) — ${label(body.concentrationStatus)}
+
+[작성 지침]
+- 3~4문장. 각 문장은 서로 다른 이야기를 해야 합니다.
+- 1문장: 외부에서 보이는 모습과 내부 거래에서 보이는 모습을 대조해 이 기업의 상태를 규정하세요.
+- 2문장: 가장 뚜렷한 강점을 근거 수치와 함께 쓰세요. 강점이 없으면 없다고 쓰세요.
+- 3문장: 가장 큰 위험 요인을 근거 수치와 함께 쓰세요.
+- 4문장: 다음에 확인하거나 보완해야 할 것을 한 가지만 제시하세요.
+- 수치를 단순히 나열하지 말고, 그 수치가 무엇을 뜻하는지 해석하세요.
+- 신용평가처럼 단정하지 말고 참고 자료의 어조를 유지하세요.
+- 거래처 이름은 "${MASKED_CUSTOMER_LABEL}"로만 지칭하세요.`;
+
+  try {
+    const text = await generateDiagnosisText(prompt);
+    return NextResponse.json({ diagnosis: text.trim() });
+  } catch {
+    return NextResponse.json(
+      { message: "종합 의견을 만들지 못했습니다." },
+      { status: 502 },
+    );
+  }
 }

@@ -1,14 +1,12 @@
-import { generateDiagnosisText } from "@/lib/llm/providers";
-
-// Step 04(AI 분석 결과 확인) 요약.
+// Step 04(AI 분석 결과 확인) 안내 문장.
 //
-// 이 화면의 원본 데이터는 사용자가 올린 거래명세서에서 뽑은 값이라 거래처명·품목·
-// 금액이 전부 들어 있다. 그래서 프롬프트에는 값을 하나도 넣지 않고 "몇 개 항목이
-// 신뢰도 몇 구간에 있는지"라는 통계만 넣는다. LLM은 어떤 회사와 거래했는지,
-// 얼마짜리 거래인지 전혀 보지 못한다.
+// 예전에는 이 문장을 LLM에 맡겼다. 화면에 들어가는 순간 항목 개수가 서버로 갔는데,
+// 버튼도 없이 자동이라 사용자가 선택할 기회조차 없었다. 기업명은 외부 가시성
+// 조회 때 이미 서버에 있으므로, 같은 세션에서 둘을 붙이면 "이 기업이 문서 몇 건을
+// 올렸다"가 재구성된다.
 //
-// Step 05는 거래처명을 마스킹 라벨로 바꿔 넣고 응답에서 되돌리는데(customer-mask.ts),
-// 여기서는 애초에 문장에 거래처명이 나올 이유가 없어 마스킹조차 필요 없다.
+// 내용을 보면 LLM이 얹을 것도 없었다 — 개수를 세고 무엇부터 보라고 말하면 끝이다.
+// 규칙으로 바꾸면서 전송이 사라졌다.
 
 export type ReviewFieldStat = {
   label: string;
@@ -23,36 +21,33 @@ export type ReviewStats = {
   byField: ReviewFieldStat[];
 };
 
-// LLM 호출이 실패해도 화면은 문장 없이 비어 있으면 안 된다.
-export function buildReviewFallback(stats: ReviewStats): string {
-  if (stats.needReview === 0) {
-    return `${stats.totalFields}개 항목이 모두 자동으로 확인되었습니다. 그대로 진행하셔도 됩니다.`;
+export function buildReviewGuidance(stats: ReviewStats): string {
+  if (stats.totalFields === 0) {
+    return "확인할 항목이 없습니다.";
   }
 
-  const worst = [...stats.byField]
+  if (stats.needReview === 0) {
+    return `${stats.transactionCount}건의 거래에서 읽어낸 ${stats.totalFields}개 항목이 모두 자동으로 확인되었습니다. 그대로 진행하셔도 됩니다.`;
+  }
+
+  // 확인이 필요한 항목이 어느 필드에 몰려 있는지 알려주면 훑는 순서가 잡힌다.
+  const ranked = stats.byField
     .filter((field) => field.needReview > 0)
-    .sort((a, b) => b.needReview - a.needReview)[0];
+    .sort((a, b) => b.needReview - a.needReview);
 
-  const focus = worst ? ` ${worst.label} 항목을 먼저 보시면 됩니다.` : "";
+  const head = `${stats.totalFields}개 항목 중 ${stats.needReview}개를 확인해 주세요.`;
 
-  return `총 ${stats.totalFields}개 항목 중 ${stats.needReview}개가 확인이 필요합니다.${focus}`;
-}
+  // 신뢰도가 특히 낮은 항목은 값 자체가 틀렸을 수 있어 먼저 봐야 한다.
+  if (stats.lowConfidenceCount > 0) {
+    const worst = ranked[0];
+    const focus = worst ? ` ${worst.label} 항목이 ${worst.needReview}개로 가장 많습니다.` : "";
+    return `${head} 이 중 ${stats.lowConfidenceCount}개는 문서에서 흐릿하게 읽혀 값이 다를 수 있으니 원본과 먼저 대조해 주세요.${focus}`;
+  }
 
-export async function generateReviewInsight(
-  stats: ReviewStats,
-): Promise<string> {
-  const fieldLines = stats.byField
-    .map((field) => `- ${field.label}: 확인 필요 ${field.needReview}개`)
-    .join("\n");
+  if (ranked.length === 1) {
+    return `${head} 모두 ${ranked[0].label} 항목이라 한 번에 훑어보실 수 있습니다.`;
+  }
 
-  const prompt = `다음은 문서에서 자동 추출한 항목의 신뢰도 집계입니다. 사용자가 무엇을 먼저 확인하면 되는지 2문장 이내로 안내하세요. 숫자를 새로 만들지 말고, 아래에 없는 내용을 추측하지 마세요.
-
-거래 건수: ${stats.transactionCount}건
-전체 항목: ${stats.totalFields}개
-확인 필요: ${stats.needReview}개 (이 중 신뢰도가 특히 낮은 항목 ${stats.lowConfidenceCount}개)
-
-항목별 확인 필요 개수:
-${fieldLines}`;
-
-  return generateDiagnosisText(prompt);
+  const names = ranked.map((field) => `${field.label} ${field.needReview}개`).join(", ");
+  return `${head} ${names} 순으로 보시면 됩니다.`;
 }
