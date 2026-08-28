@@ -7,6 +7,7 @@ import { calculateSignals } from "@/lib/signals";
 import { calculateVisibility, type Visibility } from "@/lib/visibility";
 import { getExternalPresence } from "@/lib/external/presence";
 import { searchDartCompanies } from "@/lib/external/dart";
+import { findCorpName } from "@/lib/external/dart-corp-codes";
 
 export type { Visibility } from "@/lib/visibility";
 
@@ -14,14 +15,48 @@ export type { Visibility } from "@/lib/visibility";
 // 첫 기업을 기준으로 보여준다.
 const DEFAULT_COMPANY = companies[0];
 
+// DART 고유번호는 8자리 숫자다. 데모 기업 id("hanbit")와 구분된다.
+const CORP_CODE = /^\d{8}$/;
+
 export async function getCompany(companyId?: string): Promise<Company> {
   if (!companyId) {
     return DEFAULT_COMPANY;
   }
 
   const company = companies.find((item) => item.id === companyId);
+  if (company) {
+    return company;
+  }
 
-  return company ?? DEFAULT_COMPANY;
+  // 검색 결과에서 고른 실제 기업은 id가 DART 고유번호다. 화면은 URL에 번호만
+  // 들고 다니므로 여기서 이름을 되찾아야 한다.
+  //
+  // 예전에는 데모 목록에 없으면 무조건 첫 기업(한빛정밀)을 돌려줬다. 그래서
+  // LG생활건강을 골라도 한빛정밀의 뉴스·특허·공시가 그대로 표시됐다.
+  // 다른 기업의 데이터를 그 기업의 것인 양 보여주는 건 조용한 오답이라 제일 나쁘다.
+  if (CORP_CODE.test(companyId)) {
+    const name = await findCorpName(companyId);
+    if (name) {
+      return {
+        id: companyId,
+        name,
+        description: "",
+        region: "",
+        industry: "",
+        employees: 0,
+      };
+    }
+  }
+
+  // 이름을 못 찾으면 빈 이름으로 돌려준다. 외부 조회를 건너뛰게 하기 위한 신호다.
+  return {
+    id: companyId,
+    name: "",
+    description: "",
+    region: "",
+    industry: "",
+    employees: 0,
+  };
 }
 
 export async function getVisibility(companyId?: string): Promise<Visibility> {
