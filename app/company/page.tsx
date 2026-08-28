@@ -94,7 +94,7 @@ export default function CompanyPage() {
               setSelectedCompany(null);
               setErrorMessage("");
             }}
-            placeholder="예: 한빛정밀"
+            placeholder=""
             autoComplete="off"
             className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
           />
