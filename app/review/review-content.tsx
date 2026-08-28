@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { withCompany } from "@/lib/company-link";
-import { fetchReviewInsight } from "@/lib/api";
 import {
-  buildReviewFallback,
+  buildReviewGuidance,
   type ReviewStats,
 } from "@/lib/llm/review-insight";
 import StepShell from "@/app/step-shell";
@@ -337,22 +336,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
     setTransactions(result);
 
-    // 안내 문장은 처음 불러온 추출 결과 기준으로 한 번만 만든다. 사용자가 값을
-    // 고칠 때마다 다시 부르면 호출만 늘고 문장은 거의 그대로다.
-    let isActive = true;
-    const stats = buildReviewStats(result);
-
-    fetchReviewInsight(stats)
-      .then(({ insight: text }) => {
-        if (isActive) setInsight(text);
-      })
-      .catch(() => {
-        if (isActive) setInsight(buildReviewFallback(stats));
-      });
-
-    return () => {
-      isActive = false;
-    };
+    // 안내 문장은 서버를 거치지 않고 여기서 만든다.
+     
+    setInsight(buildReviewGuidance(buildReviewStats(result)));
   }, []);
 
   function updateValue(txIndex: number, key: FieldKey, raw: string) {

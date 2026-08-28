@@ -20,13 +20,67 @@ type OcrResult = { lines: Cell[][] };
 
 // 거래명세서마다 열 이름이 조금씩 다르다. 우리가 필요한 네 값에 대응하는 표기를 모아둔다.
 const COLUMN_ALIASES = {
-  date: ["거래일자", "일자", "날짜", "거래일"],
-  item: ["품목", "품명", "상품명", "규격"],
-  amount: ["공급가액", "금액", "합계", "합계금액", "총액"],
+  date: ["거래일자", "일자", "날짜", "거래일", "월/일", "년월일", "월일"],
+  item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격"],
+  amount: ["공급가액", "금액", "합계", "합계금액", "총액", "공급가액(원)"],
 } as const;
 
 // 거래처는 표 안이 아니라 표 위 라벨에 있는 경우가 대부분이다.
-const CUSTOMER_LABELS = ["공급받는자", "거래처", "수신", "귀하", "상호"];
+const CUSTOMER_LABELS = ["수신", "공급받는자", "거래처", "상호", "귀하"];
+
+// 라벨 값에는 거래처가 아닌 것들이 자주 섞인다.
+//   "전자세금계산서 (공급받는자 보관용)"  제목 줄
+//   "상호(법인명)"                        표 머리글
+//   "수신: (주)글로벌네트웍스 귀중"        경칭이 붙은 값
+// 앞뒤 군더더기를 떼어낸 뒤, 남은 게 회사 이름처럼 보일 때만 받아들인다.
+// 수량(1)이나 순번(8) 같은 값을 금액으로 잘못 잡는 것을 막는 하한.
+const MIN_TRANSACTION_AMOUNT = 1000;
+
+// 표 하단 요약 줄을 걸러내는 말들.
+const SUMMARY_WORDS = [
+  "합계",
+  "소계",
+  "총계",
+  "부가가치세",
+  "부가세",
+  "VAT",
+  "총액",
+  "계(",
+];
+
+const CUSTOMER_SUFFIXES = ["귀중", "귀하", "보관용", "보관"];
+const CUSTOMER_REJECT = [
+  "법인명",
+  "법인",
+  "공급자",
+  "공급받는자",
+  "등록번호",
+  "대표",
+  "보관용",
+  "보관",
+];
+
+function stripCustomerDecoration(value: string): string {
+  // 앞뒤 괄호·구두점을 먼저 떼야 "보관용)"처럼 닫는 괄호가 붙은 값도 걸러진다.
+  let result = value.trim().replace(/^[)\]）,.\s]+|[([（\s]+$/g, "");
+  for (const suffix of CUSTOMER_SUFFIXES) {
+    result = result.replace(new RegExp(`\s*${suffix}\s*[)\]）]*\s*$`), "");
+  }
+  return result.replace(/^[)\]）,.\s]+/, "").trim();
+}
+
+function looksLikeCompany(value: string): boolean {
+  const cleaned = stripCustomerDecoration(value);
+  if (cleaned.length < 2) {
+    return false;
+  }
+  // "(법인명)"처럼 괄호만 남은 값은 머리글이지 거래처가 아니다.
+  if (/^[([（].*[)\]）]$/.test(cleaned)) {
+    return false;
+  }
+  const bare = cleaned.replace(/[()（）㈜\s]/g, "");
+  return bare.length >= 2 && !CUSTOMER_REJECT.some((word) => bare.includes(word));
+}
 
 // "㈜"는 한 글자짜리 조합 문자라 OCR이 자주 흘린다. 실측에서 "(쥐)"로 읽히거나
 // 닫는 괄호가 통째로 빠져 "한빛금속("으로 끝나는 경우를 확인했다.
@@ -48,9 +102,60 @@ function matchesAlias(text: string, aliases: readonly string[]): boolean {
   return aliases.some((alias) => normalized.includes(alias));
 }
 
-// "2026-03-02", "2026.03.02", "2026/3/2" 를 모두 YYYY-MM-DD로 맞춘다.
+// 문서 상단의 발행일. 행마다 날짜가 없거나 "08/25"처럼 연도가 빠진 표가 많아서,
+// 그런 행에 채워 넣을 기준 날짜가 필요하다.
+const DOCUMENT_DATE_LABELS = [
+  "작성일자",
+  "거래일자",
+  "견적일자",
+  "발행일",
+  "발주일자",
+  "발급일시",
+  "거래일시",
+];
+
+function findDocumentDate(lines: Cell[][]): string | null {
+  for (const row of lines) {
+    const text = row.map((cell) => cell.text).join(" ");
+    if (!DOCUMENT_DATE_LABELS.some((label) => normalize(text).includes(label))) {
+      continue;
+    }
+    const parsed = parseDate(text);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  // 라벨을 못 찾으면 문서에 등장하는 첫 온전한 날짜를 쓴다.
+  for (const row of lines) {
+    const parsed = parseDate(row.map((cell) => cell.text).join(" "));
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+// "08/25"처럼 연도가 없는 값에 문서 날짜의 연도를 붙인다.
+function parsePartialDate(text: string, documentDate: string | null): string | null {
+  if (!documentDate) {
+    return null;
+  }
+  const match = text.match(/(?:^|[^\d])(\d{1,2})\s*[-./]\s*(\d{1,2})(?:[^\d]|$)/);
+  if (!match) {
+    return null;
+  }
+  const [, month, day] = match;
+  if (Number(month) < 1 || Number(month) > 12 || Number(day) < 1 || Number(day) > 31) {
+    return null;
+  }
+  return `${documentDate.slice(0, 4)}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+// "2026-03-02", "2026.03.02", "2026/3/2", "2026년 08월 15일" 을 YYYY-MM-DD로 맞춘다.
 function parseDate(text: string): string | null {
-  const match = text.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+  const match = text.match(
+    /(\d{4})\s*(?:[-./]|년\s*)\s*(\d{1,2})\s*(?:[-./]|월\s*)\s*(\d{1,2})/,
+  );
   if (!match) {
     return null;
   }
@@ -85,8 +190,9 @@ function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
         }
       }
     }
-    // 날짜 열과 금액 열이 같이 잡혀야 표 헤더로 인정한다.
-    if (columns.date && columns.amount) {
+    // 금액 열은 반드시 있어야 하고, 날짜나 품목 중 하나만 더 있으면 표로 본다.
+    // 견적서처럼 행에 날짜 열이 아예 없는 표가 실제로 있다(날짜는 문서 상단에만).
+    if (columns.amount && (columns.date || columns.item)) {
       return { index, columns };
     }
   }
@@ -121,13 +227,13 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
       // "공급받는자: 미래모터스(주)" 처럼 라벨과 값이 한 셀에 붙어 오는 경우.
       // "거래처: 한빛금속(주) 담당자: 김OO"처럼 뒤에 다른 라벨이 이어지면 끊는다.
       const inline = valueAfterLabel(cell.text, CUSTOMER_LABELS);
-      if (inline) {
-        return { value: cleanCompanyName(inline), confidence: cell.confidence };
+      if (inline && looksLikeCompany(inline)) {
+        return { value: cleanCompanyName(stripCustomerDecoration(inline)), confidence: cell.confidence };
       }
       // 라벨 옆 셀에 값이 있는 경우
       const next = row[row.indexOf(cell) + 1];
-      if (next) {
-        return { value: cleanCompanyName(next.text), confidence: next.confidence };
+      if (next && looksLikeCompany(next.text)) {
+        return { value: cleanCompanyName(stripCustomerDecoration(next.text)), confidence: next.confidence };
       }
     }
   }
@@ -198,8 +304,8 @@ function labelRows(lines: Cell[][]): ExtractedTransactionRow[] {
 
     if (!customer) {
       const raw = valueAfterLabel(text, CUSTOMER_LABELS);
-      if (raw) {
-        customer = cleanCompanyName(raw);
+      if (raw && looksLikeCompany(raw)) {
+        customer = cleanCompanyName(stripCustomerDecoration(raw));
         customerConfidence = confidences[i];
       }
     }
@@ -249,15 +355,22 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
     return labelRows(lines);
   }
 
+  const documentDate = findDocumentDate(lines);
   const dataRows = lines.slice(headerIndex + 1);
   const extracted: ExtractedTransactionRow[] = [];
 
   for (const row of dataRows) {
-    // 날짜가 있는 행만 거래로 본다. 합계/비고 줄이 섞여 들어오는 것을 막는다.
+    // 날짜는 세 단계로 찾는다.
+    //   1) 행의 날짜 열 또는 온전한 날짜가 든 셀
+    //   2) "08/25"처럼 연도가 빠진 값 + 문서 날짜의 연도
+    //   3) 행에 날짜가 아예 없으면 문서 날짜 (견적서처럼 날짜 열이 없는 표)
     const dateCell =
       cellForColumn(row, columns.date) ??
       row.find((cell) => parseDate(cell.text) !== null);
-    const date = dateCell ? parseDate(dateCell.text) : null;
+    const date =
+      (dateCell ? parseDate(dateCell.text) : null) ??
+      (dateCell ? parsePartialDate(dateCell.text, documentDate) : null) ??
+      documentDate;
     if (!date) {
       continue;
     }
@@ -273,10 +386,30 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
 
     const itemCell = cellForColumn(row, columns.item);
 
+    // 품목이 비어 있는 행은 표의 장식 줄이거나 세금계산서의 요약 칸이다.
+    // 실측에서 세금계산서 텍스트 레이어가 품목 없이 금액만 든 행을 5개 만들었다.
+    const itemText = itemCell?.text.trim() ?? "";
+    if (itemText === "") {
+      continue;
+    }
+
+    // 금액이 0이거나 거래로 보기 힘들 만큼 작으면 거래가 아니다
+    // (수량·순번 칸을 금액으로 잘못 잡은 경우가 여기 걸린다).
+    if (!amount || amount < MIN_TRANSACTION_AMOUNT) {
+      continue;
+    }
+
+    // 표 아래쪽 요약 줄(합계·소계·부가세)은 개별 거래가 아니다. 그대로 세면
+    // 같은 금액을 두 번 세게 된다.
+    const rowText = normalize(row.map((cell) => cell.text).join(""));
+    if (SUMMARY_WORDS.some((word) => rowText.includes(word))) {
+      continue;
+    }
+
     extracted.push({
       date: { value: date, confidence: dateCell?.confidence ?? 0 },
       customer: { value: customer.value, confidence: customer.confidence },
-      item: { value: itemCell?.text.trim() ?? "", confidence: itemCell?.confidence ?? 0 },
+      item: { value: itemText, confidence: itemCell?.confidence ?? 0 },
       amount: { value: amount, confidence: amountCell?.confidence ?? 0 },
     });
   }

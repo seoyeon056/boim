@@ -1,7 +1,6 @@
 import type { Company } from "@/data/companies";
 import type { Visibility } from "@/lib/visibility";
 import type { Signals } from "@/lib/signals";
-import type { ReviewStats } from "@/lib/llm/review-insight";
 import { withCompany } from "@/lib/company-link";
 
 export type CompanyResult = Company;
@@ -43,21 +42,38 @@ export function fetchSignals(companyId?: string) {
   return request<SignalsResult>(withCompany("/api/signals", companyId));
 }
 
-// LLM이 쓴 종합 진단 문장. 실패 시 화면이 규칙 기반 문장으로 되돌아간다.
-export function fetchDiagnosis(companyId?: string) {
-  return request<{ diagnosis: string }>(
-    withCompany("/api/diagnosis", companyId),
-  );
-}
+// LLM이 쓴 종합 진단 문장.
+//
+// 화면이 실제로 표시 중인 수치를 그대로 보낸다. 예전에는 companyId만 보내고 서버가
+// 합성 데이터로 다시 계산해서, 리포트 표와 종합 의견의 숫자가 서로 달랐다.
+// 기업명도 담지 않는다. 비율 숫자만으로는 익명 통계지만, 실명과 묶이면 그 회사의
+// 재무 프로필이 된다("㈜한빛정밀 + 최대 거래처 의존도 95.4%"). 거래처 의존도는
+// 경쟁사가 알고 싶어 하는 영업 정보라 특히 그렇다.
+// 거래처명도 담지 않는다 — 응답의 마스킹 라벨을 화면에서 실명으로 되돌린다.
+export type DiagnosisInput = {
+  period: string;
+  transactionCount: number;
+  visibilityScore: number;
+  visibilityInterpretation: string;
+  newsCount: number;
+  patentCount: number;
+  jobCount: number;
+  disclosureCount: number;
+  customerGrowthRate: number;
+  previousCustomersCount: number;
+  recentCustomersCount: number;
+  growthStatus: string;
+  repeatPurchaseRate: number;
+  repeatStatus: string;
+  topCustomerConcentration: number;
+  concentrationStatus: string;
+};
 
-// Step 04 검수 안내 문장.
-// 추출 결과는 서버에 없고 sessionStorage에만 있어서 집계를 실어 보낸다.
-// 보내는 값은 개수뿐이라 거래처명·금액 같은 원본은 서버로 나가지 않는다.
-export async function fetchReviewInsight(stats: ReviewStats) {
-  const response = await fetch("/api/review-insight", {
+export async function fetchDiagnosis(input: DiagnosisInput) {
+  const response = await fetch("/api/diagnosis", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(stats),
+    body: JSON.stringify(input),
     cache: "no-store",
   });
 
@@ -65,5 +81,5 @@ export async function fetchReviewInsight(stats: ReviewStats) {
     throw new Error(`API 요청에 실패했습니다. 상태 코드: ${response.status}`);
   }
 
-  return (await response.json()) as { insight: string };
+  return (await response.json()) as { diagnosis: string };
 }
