@@ -13,6 +13,12 @@ export async function getExternalPresence(
 ): Promise<ExternalPresence> {
   const fallback = findExternalPresence(companyId);
 
+  // 기업명을 못 찾은 경우(고유번호만 있고 DART 조회 실패). 빈 이름으로 외부를
+  // 검색하면 엉뚱한 결과가 잡히므로 조회 자체를 건너뛴다.
+  if (companyName.trim() === "") {
+    return { ...fallback, companyId };
+  }
+
   const [news, jobCount, patent, disclosureCount] = await Promise.all([
     fetchNewsCount(companyName),
     fetchJobCount(companyName),

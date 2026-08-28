@@ -65,6 +65,9 @@ export type DartCorp = {
 type CorpCodeIndex = {
   // 정확 일치 조회용(공시 건수). 동명 법인은 먼저 나온 쪽을 쓴다.
   byName: Map<string, string>;
+  // 고유번호 -> 회사명. 화면이 URL에 고유번호만 들고 다녀서, 고른 기업의
+  // 이름을 되찾으려면 반대 방향 조회가 필요하다.
+  byCode: Map<string, string>;
   // 부분 일치 검색용(기업 검색 화면).
   all: DartCorp[];
 };
@@ -83,6 +86,7 @@ async function buildCorpCodeIndex(
 
   const xml = inflateSingleEntryZip(Buffer.from(await response.arrayBuffer()));
   const byName = new Map<string, string>();
+  const byCode = new Map<string, string>();
   const all: DartCorp[] = [];
 
   for (const [, entry] of xml.matchAll(/<list>([\s\S]*?)<\/list>/g)) {
@@ -104,9 +108,10 @@ async function buildCorpCodeIndex(
     if (!byName.has(key)) {
       byName.set(key, code);
     }
+    byCode.set(code, name);
   }
 
-  return { byName, all };
+  return { byName, byCode, all };
 }
 
 let indexPromise: Promise<CorpCodeIndex> | null = null;
@@ -167,6 +172,27 @@ export async function searchCorps(
         return listed !== 0 ? listed : a.corpName.length - b.corpName.length;
       })
       .slice(0, limit);
+  } catch {
+    indexPromise = null;
+    return null;
+  }
+}
+
+// 8자리 고유번호로 회사명을 되찾는다.
+//
+// 검색 결과에서 고른 실제 기업은 id가 DART 고유번호다. 이름을 복원하지 못하면
+// 그 기업이 누구인지 알 수 없어, 예전에는 데모 목록의 첫 기업으로 조용히
+// 대체됐다(LG생활건강을 골라도 한빛정밀의 뉴스가 표시됐다).
+export async function findCorpName(corpCode: string): Promise<string | null> {
+  const serviceKey = process.env.DART_SEARCH_KEY;
+  if (!serviceKey) {
+    return null;
+  }
+
+  try {
+    indexPromise ??= buildCorpCodeIndex(serviceKey);
+    const index = await indexPromise;
+    return index.byCode.get(corpCode) ?? null;
   } catch {
     indexPromise = null;
     return null;
