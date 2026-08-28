@@ -327,6 +327,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       title="내부 문서 업로드"
       description="문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요."
       backTo={withCompany("/visibility", companyId)}
+      companyId={companyId}
       footer={
         <div className="flex flex-col items-end gap-2">
           {notice && <p className="text-xs text-red-500">{notice}</p>}

@@ -163,7 +163,18 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
 
 // 성장 잠재력 등급: 긍정 판정을 받은 신호 개수로 정한다.
 // (별도 기준을 새로 만들지 않고 statuses 판정을 그대로 집계한다.)
-function buildGrade(signals: Signals): string {
+// 화면에서 "이 등급이 왜 나왔는지" 안내할 때 같은 문구를 쓰도록 내보낸다.
+export const GRADE_CRITERIA = [
+  { grade: "A", rule: "세 지표가 모두 긍정" },
+  { grade: "B+", rule: "두 지표가 긍정" },
+  { grade: "B", rule: "한 지표가 긍정" },
+  { grade: "C", rule: "긍정 지표 없음" },
+];
+
+export const GRADE_NOTE =
+  "거래처 증가율·재구매율·최대 거래처 집중도 세 지표 중 긍정 판정을 받은 개수로 매깁니다.";
+
+export function gradeFromSignals(signals: Signals): string {
   const positives = Object.values(signals.statuses).filter(
     (tone) => tone === "positive",
   ).length;
@@ -198,7 +209,7 @@ export function buildDiagnosis(
   signals: Signals,
 ): Diagnosis {
   return {
-    grade: buildGrade(signals),
+    grade: gradeFromSignals(signals),
     headline: buildHeadline(visibility, signals),
     external: describeExternal(visibility),
     internal: describeInternal(signals),

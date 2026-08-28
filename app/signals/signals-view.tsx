@@ -9,12 +9,21 @@ import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { josa } from "@/lib/korean";
 import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
+import { LoadingSteps } from "@/app/loading-steps";
+import { GradeBadge } from "@/app/grade-badge";
+import { gradeFromSignals } from "@/lib/diagnosis";
 
 const statusLabel = {
   positive: "긍정",
   neutral: "보통",
   caution: "주의",
 };
+
+const AI_STEPS = [
+  "지표를 정리하는 중",
+  "거래처명을 가리고 비율만 추리는 중",
+  "AI 가 해석을 쓰는 중",
+];
 
 // 규칙 기반 해석. LLM을 부르지 않는 기본 상태에서 쓴다.
 //
@@ -122,8 +131,18 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
     tone: item.tone,
   }));
 
+  // 등급은 세 지표의 긍정 개수로 정해지므로 이 화면에서도 그대로 보여준다.
+  const grade = gradeFromSignals(signals);
+
   return (
     <>
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <span className="text-[11px] text-zinc-400">
+          내부 거래에서 확인한 지표
+        </span>
+        <GradeBadge grade={grade} />
+      </div>
+
       <MetricCards metrics={metrics} />
 
       {/* 여섯 신호를 세어 한 줄로 요약한다. LLM이 아니라 규칙이 정한 결론이다. */}
@@ -172,15 +191,20 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         값이라, 외부 모델로 보낼지를 사용자가 정하게 한다. 보내는 것은 비율
         숫자뿐이고 거래처명은 브라우저를 벗어나지 않는다.
       */}
-      {!aiNotice && (
+      {!aiNotice && aiState === "loading" && (
+        <div className="mt-2 max-w-md">
+          <LoadingSteps title="AI 해석을 받는 중" steps={AI_STEPS} />
+        </div>
+      )}
+
+      {!aiNotice && aiState !== "loading" && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={requestAiNotice}
-            disabled={aiState === "loading"}
-            className="inline-flex h-8 items-center rounded-md border border-zinc-200 px-3 text-[12px] text-zinc-600 transition-colors hover:bg-zinc-50 disabled:text-zinc-300"
+            className="inline-flex h-8 items-center rounded-md border border-zinc-200 px-3 text-[12px] text-zinc-600 transition-colors hover:bg-zinc-50"
           >
-            {aiState === "loading" ? "해석 중…" : "AI 해석 받기"}
+            AI 해석 받기
           </button>
           <span className="text-[11px] text-zinc-400">
             {aiState === "failed"
@@ -195,6 +219,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         previousCustomersCount={signals.previousCustomersCount}
         repeatPurchaseRate={signals.repeatPurchaseRate}
       />
+
     </>
   );
 }

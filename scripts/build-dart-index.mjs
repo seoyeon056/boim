@@ -16,6 +16,12 @@ import { inflateRawSync } from "node:zlib";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(root, "lib", "external", "dart-index.generated.ts");
 
+// 타입을 string 으로 못박아 둔다. 타입 주석 없이 빈 문자열을 쓰면 리터럴 타입 ""
+// 으로 좁혀져서, 값이 비었는지 확인한 뒤 split 을 부르는 쪽이 never 가 된다.
+// (키 없이 빌드하는 사람에게만 터져서 놓치기 쉽다.)
+const EMPTY_INDEX = `export const DART_CORPS: string = "";
+`;
+
 // .env.local 은 Next 가 읽지만 이 스크립트는 직접 읽어야 한다.
 async function readLocalEnv() {
   try {
@@ -53,7 +59,7 @@ async function main() {
   const key = process.env.DART_SEARCH_KEY;
 
   if (!key) {
-    await writeFile(OUT, "export const DART_CORPS = \"\";\n", "utf8");
+    await writeFile(OUT, EMPTY_INDEX, "utf8");
     console.log("DART 키가 없어 인덱스를 비워 둔다 (런타임이 직접 내려받는다)");
     return;
   }
@@ -79,12 +85,16 @@ async function main() {
   }
 
   const text = lines.join("\n");
-  await writeFile(OUT, `export const DART_CORPS = ${JSON.stringify(text)};\n`, "utf8");
+  await writeFile(
+    OUT,
+    `export const DART_CORPS: string = ${JSON.stringify(text)};\n`,
+    "utf8",
+  );
   console.log(`DART 인덱스 생성 완료: ${lines.length.toLocaleString()}건`);
 }
 
 main().catch((error) => {
   // 인덱스가 없어도 런타임이 직접 내려받으므로 빌드를 막지 않는다.
   console.warn("DART 인덱스 생성 실패 — 런타임 조회로 대체한다:", error.message);
-  return writeFile(OUT, "export const DART_CORPS = \"\";\n", "utf8");
+  return writeFile(OUT, EMPTY_INDEX, "utf8");
 });

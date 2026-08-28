@@ -233,14 +233,6 @@ function requiresConfirmation(confidence: number): boolean {
   return confidence < AUTO_CONFIRM;
 }
 
-function displayValue(key: FieldKey, value: string | number): string {
-  if (key === "amount") {
-    const num = Number(value);
-    return `${Number.isFinite(num) ? num.toLocaleString("ko-KR") : value}원`;
-  }
-  return String(value);
-}
-
 function toField(raw: unknown): ConfidenceField {
   if (raw && typeof raw === "object" && "value" in raw) {
     const obj = raw as { value?: unknown; confidence?: unknown };
@@ -433,6 +425,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       title="AI 분석 결과 확인"
       description="신뢰도가 낮은 항목만 직접 확인해 주세요."
       backTo={withCompany("/upload", companyId)}
+      companyId={companyId}
       footer={
         <div className="flex flex-col items-end gap-2">
           {!datesValid && (
@@ -534,7 +527,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
                   {tier === "high" && (
                     <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                      <IconCheck /> 자동 확인
+                      <IconCheck /> 자동 확인 · 수정 가능
                     </span>
                   )}
                   {tier !== "high" && isConfirmed && (
@@ -597,13 +590,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       이 값이 맞습니다
                     </button>
                   </div>
-                ) : tier === "high" ? (
-                  // 자동 확인된 항목은 읽기 전용으로 둔다.
-                  <p className="mt-1.5 font-mono text-sm font-medium text-zinc-900">
-                    {displayValue(key, field.value)}
-                  </p>
                 ) : (
-                  // 한 번 확인한 항목도 다시 만지면 바로 수정 상태로 돌아간다.
+                  // 자동 확인된 항목도, 한 번 확인한 항목도 그대로 고칠 수 있게 둔다.
+                  // 신뢰도가 높아도 AI 가 잘못 읽을 수 있어서 손댈 길을 막지 않는다.
                   // (수정 버튼을 따로 누르게 하면 오타를 발견해도 한 단계 더 걸린다.)
                   <div className="mt-1 flex flex-col gap-1.5">
                     {isDate ? (
