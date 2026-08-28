@@ -77,17 +77,19 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
               }`}
             >
               <div className="flex items-baseline gap-4">
-                <span className="w-14 text-[13px] text-zinc-500">
+                <span className="w-16 text-[15px] text-zinc-600">
                   {metric.label}
                 </span>
-                <span className="font-mono text-[20px] font-medium tabular-nums text-zinc-900">
+                <span className="font-mono text-[26px] font-medium tabular-nums text-zinc-900">
                   {metric.value}
                 </span>
               </div>
+              {/* 멀리서도 읽히도록 한 단계 키우고 색을 진하게 잡는다.
+                  기존 #E8A87F / #ADA29A 는 흰 배경에서 대비가 너무 낮았다. */}
               <span
-                className="text-[11px]"
+                className="text-[13px]"
                 style={{
-                  color: metric.tone === "warn" ? "#E8A87F" : "#ADA29A",
+                  color: metric.tone === "warn" ? "#B4653C" : "#6B6259",
                 }}
               >
                 {metric.interpretation}
@@ -97,11 +99,11 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
         </div>
       </div>
 
-      <p className="mt-4 max-w-3xl text-[13px] leading-6 text-zinc-500">
+      <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-700">
         {summary}
       </p>
 
-      <p className="mt-3 max-w-3xl text-[13px] leading-6 text-zinc-500">
+      <p className="mt-3 max-w-3xl text-[15px] leading-[1.75] text-zinc-600">
         {visibility.notice} 정보가 적다는 것이 성장하지 않는다는 뜻은 아닙니다.
       </p>
     </StepShell>

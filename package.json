@@ -7,6 +7,7 @@
     "build": "npm run prepare-pdf && npm run prepare-dart && next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"lib/**/*.test.ts\"",
     "prepare-pdf": "node scripts/copy-pdf-assets.mjs",
     "prepare-dart": "node scripts/build-dart-index.mjs"
   },

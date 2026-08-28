@@ -43,8 +43,11 @@ export function CompareView({
   // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
   const internalSignals = signalResult.signals.map((item) => ({
     label: item.label,
-    value: `${item.prefix}${item.value}${item.suffix}`,
+    value: item.evaluable
+      ? `${item.prefix}${item.value}${item.suffix}`
+      : "—",
     tone: item.tone,
+    evaluable: item.evaluable,
   }));
 
   const diagnosis = buildDiagnosis(visibility, signalResult);
@@ -158,7 +161,7 @@ export function CompareView({
                       color: signal.tone === "positive" ? "#9DB8A4" : "#E8A87F",
                     }}
                   >
-                    {statusLabel[signal.tone]}
+                    {signal.evaluable ? statusLabel[signal.tone] : "판단 보류"}
                   </span>
                   <span className="font-mono text-[22px] font-medium tabular-nums text-white">
                     {signal.value}

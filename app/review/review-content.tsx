@@ -314,6 +314,13 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   const [status, setStatus] = useState<ViewStatus>("loading");
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  // 거래가 20건이면 한 건에 카드 네 장이라 화면이 80장이 된다. 기본은 접어 두고
+  // 손볼 게 있는 거래만 펼친다.
+  //
+  // "확인이 필요하면 펼침"을 기본으로 두고, 사용자가 누른 줄만 그 반대로
+  // 뒤집는다. effect 안에서 setState 하지 않으려면 열림 여부를 상태로 들고
+  // 있는 대신 이렇게 렌더 시점에 계산해야 한다.
+  const [flippedRows, setFlippedRows] = useState<Set<number>>(new Set());
   const [insight, setInsight] = useState<string | null>(null);
   const [extractionOutcome, setExtractionOutcome] = useState<string | null>(null);
 
@@ -333,11 +340,24 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     setInsight(buildReviewGuidance(buildReviewStats(result)));
   }, []);
 
+  // 금액은 자릿수가 커서 쉼표 없이는 5000000 이 얼마인지 바로 안 읽힌다.
+  // 입력창에는 쉼표를 넣어 보여주고, 상태에는 숫자만 저장한다.
+  function fieldText(key: FieldKey, value: string | number): string {
+    if (key !== "amount") {
+      return String(value);
+    }
+
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toLocaleString("ko-KR") : String(value);
+  }
+
   function updateValue(txIndex: number, key: FieldKey, raw: string) {
     setTransactions((prev) => {
       if (!prev) return prev;
       const next = [...prev];
-      const nextValue = key === "amount" ? (raw === "" ? 0 : Number(raw)) : raw;
+      // 쉼표를 지우고 숫자만 남긴다.
+      const digits = raw.replace(/[^\d]/g, "");
+      const nextValue = key === "amount" ? (digits === "" ? 0 : Number(digits)) : raw;
       next[txIndex] = {
         ...next[txIndex],
         [key]: { ...next[txIndex][key], value: nextValue },
@@ -357,6 +377,45 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       next.delete(confirmKey(txIndex, key));
       return next;
     });
+  }
+
+  // 이 거래에 아직 손볼 게 남았는가. 펼침 기본값이자 접힌 줄의 배지가 된다.
+  function pendingOf(tx: Transaction, txIndex: number): number {
+    return FIELD_META.filter(
+      ({ key }) =>
+        requiresConfirmation(tx[key].confidence) &&
+        !confirmed.has(confirmKey(txIndex, key)),
+    ).length;
+  }
+
+  // 기본(손볼 게 있으면 펼침)과 사용자가 뒤집었는지를 XOR 한다.
+  function isRowOpen(txIndex: number, pending: number): boolean {
+    return flippedRows.has(txIndex) !== pending > 0;
+  }
+
+  function toggleRow(txIndex: number) {
+    setFlippedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(txIndex)) {
+        next.delete(txIndex);
+      } else {
+        next.add(txIndex);
+      }
+      return next;
+    });
+  }
+
+  // 전부 펼치거나 전부 접는다. 기본값과 다른 줄만 뒤집힌 것으로 표시한다.
+  function setAllRows(open: boolean) {
+    if (!transactions) return;
+    setFlippedRows(
+      new Set(
+        transactions
+          .map((tx, index) => ({ index, pending: pendingOf(tx, index) }))
+          .filter(({ pending }) => pending > 0 !== open)
+          .map(({ index }) => index),
+      ),
+    );
   }
 
   function handleConfirm() {
@@ -497,15 +556,83 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       )}
 
       {/* 거래 여러 건을 순서대로 렌더링 */}
-      {transactions.map((tx, txIndex) => (
-        <div key={txIndex} className="mt-6">
-          {transactions.length > 1 && (
-            <p className="mb-2 font-mono text-xs text-zinc-400">
-              거래 {txIndex + 1} / {transactions.length}
-            </p>
-          )}
+      {transactions.length > 1 && (
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <span className="text-[13px] text-zinc-500">
+            거래 {transactions.length}건 — 확인이 필요한 항목만 펼쳐 두었습니다
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setAllRows(true)}
+              className="h-8 rounded-md border border-zinc-200 px-3 text-[13px] text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
+            >
+              전체 펼치기
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllRows(false)}
+              className="h-8 rounded-md border border-zinc-200 px-3 text-[13px] text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
+            >
+              전체 접기
+            </button>
+          </div>
+        </div>
+      )}
 
-          <div className="grid auto-rows-fr grid-cols-1 gap-2 md:grid-cols-2">
+      {transactions.map((tx, txIndex) => {
+        const pending = pendingOf(tx, txIndex);
+        const open = isRowOpen(txIndex, pending);
+
+        return (
+        <div key={txIndex} className="mt-2">
+          {/* 접힌 줄 — 값을 한 줄로 보여줘서 펼치지 않고도 훑을 수 있게 한다. */}
+          <button
+            type="button"
+            onClick={() => toggleRow(txIndex)}
+            aria-expanded={open}
+            className={`flex w-full items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition-colors ${
+              pending > 0
+                ? "border-amber-200 hover:border-amber-300"
+                : "border-zinc-100 hover:border-zinc-300"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`shrink-0 font-mono text-[13px] text-zinc-400 transition-transform ${
+                open ? "rotate-90" : ""
+              }`}
+            >
+              ▸
+            </span>
+            <span className="w-12 shrink-0 font-mono text-[12px] text-zinc-400">
+              {txIndex + 1}/{transactions.length}
+            </span>
+            <span className="w-24 shrink-0 font-mono text-[13px] text-zinc-700">
+              {String(tx.date.value)}
+            </span>
+            <span className="w-40 shrink-0 truncate text-[14px] text-zinc-900">
+              {String(tx.customer.value)}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-500">
+              {String(tx.item.value)}
+            </span>
+            <span className="shrink-0 font-mono text-[14px] font-medium tabular-nums text-zinc-900">
+              {fieldText("amount", tx.amount.value)}
+            </span>
+            {pending > 0 ? (
+              <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-medium text-amber-600">
+                확인 {pending}
+              </span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1 text-[12px] text-emerald-500">
+                <IconCheck /> 자동 확인
+              </span>
+            )}
+          </button>
+
+          {open && (
+          <div className="mt-2 grid auto-rows-fr grid-cols-1 gap-2 md:grid-cols-2">
           {FIELD_META.map(({ key, label, type }) => {
             const field = tx[key];
             const tier = tierOf(field.confidence);
@@ -527,7 +654,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
                   {tier === "high" && (
                     <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                      <IconCheck /> 자동 확인 · 수정 가능
+                      <IconCheck /> 자동 확인
                     </span>
                   )}
                   {tier !== "high" && isConfirmed && (
@@ -568,8 +695,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       />
                     ) : (
                       <input
-                        type={type}
-                        value={field.value}
+                        type={key === "amount" ? "text" : type}
+                        inputMode={key === "amount" ? "numeric" : undefined}
+                        value={fieldText(key, field.value)}
                         onChange={(event) =>
                           updateValue(txIndex, key, event.target.value)
                         }
@@ -605,8 +733,9 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       />
                     ) : (
                       <input
-                        type={type}
-                        value={field.value}
+                        type={key === "amount" ? "text" : type}
+                        inputMode={key === "amount" ? "numeric" : undefined}
+                        value={fieldText(key, field.value)}
                         onChange={(event) =>
                           updateValue(txIndex, key, event.target.value)
                         }
@@ -625,8 +754,10 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
             );
           })}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </StepShell>
   );
 }

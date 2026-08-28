@@ -175,14 +175,21 @@ export function ShareContent({
     ? signals.signals.map((item, index) => ({
         no: String(index + 1),
         label: item.label,
-        value: `${item.prefix}${item.value}${item.suffix}`,
+        // 표본이 모자라 판정하지 않은 지표는 수치를 적지 않는다. 인쇄물에 0%가
+        // 남으면 계산이 끝난 값으로 읽힌다.
+        value: item.evaluable
+          ? `${item.prefix}${item.value}${item.suffix}`
+          : "—",
         tone: item.tone,
         note: item.detail,
       }))
     : [];
 
   return (
-    <div className="min-h-screen print:min-h-0" style={{ backgroundColor: "#E9E2DD" }}>
+    <div
+      className="report-page min-h-screen print:min-h-0"
+      style={{ backgroundColor: "#E9E2DD" }}
+    >
       <div className="mx-auto w-full max-w-[840px] px-6 py-12 print:max-w-full print:px-0 print:py-0">
       {/* 화면 전용 네비 */}
       <div className="print:hidden">

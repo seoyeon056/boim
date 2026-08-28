@@ -41,33 +41,35 @@ export default function StepShell({
   const currentNo = step.replace(/[^0-9]/g, "").padStart(2, "0");
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col px-10 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col px-10 py-8">
       <Link
         href={backTo}
-        className="inline-flex items-center gap-1.5 self-start text-[11px] text-zinc-400 transition-colors hover:text-zinc-700"
+        className="inline-flex items-center gap-1.5 self-start text-[13px] text-zinc-500 transition-colors hover:text-zinc-900"
       >
         ← {backLabel}
       </Link>
 
       {/* 절차 — 가로 바 */}
-      <nav className="mt-5 flex border-t border-zinc-900">
+      <nav className="mt-5 hidden border-t border-zinc-900 md:flex">
         {FLOW_STEPS.map((flowStep) => {
           const done = flowStep.no < currentNo;
           const active = flowStep.no === currentNo;
 
-          const numberClass = `font-mono text-[11px] tabular-nums ${
+          // 멀리서도 읽히도록 한 단계 키우고, 지나지 않은 단계도 zinc-300
+          // (거의 안 보임) 대신 zinc-400 으로 둔다.
+          const numberClass = `font-mono text-[13px] tabular-nums ${
             active
               ? "font-bold text-zinc-900"
               : done
-                ? "text-zinc-400"
-                : "text-zinc-300"
+                ? "text-zinc-500"
+                : "text-zinc-400"
           }`;
-          const labelClass = `hidden truncate text-[11px] md:inline ${
+          const labelClass = `hidden truncate text-[14px] md:inline ${
             active
-              ? "font-medium text-zinc-900"
+              ? "font-semibold text-zinc-900"
               : done
-                ? "text-zinc-400"
-                : "text-zinc-300"
+                ? "text-zinc-600"
+                : "text-zinc-400"
           }`;
           const barStyle = {
             borderTop: `2px solid ${
@@ -89,7 +91,7 @@ export default function StepShell({
             return (
               <div
                 key={flowStep.no}
-                className="flex flex-1 items-center gap-2 py-3"
+                className="flex flex-1 items-center gap-2 py-3.5"
                 style={barStyle}
               >
                 {content}
@@ -101,7 +103,7 @@ export default function StepShell({
             <Link
               key={flowStep.no}
               href={withCompany(flowStep.path, companyId)}
-              className="flex flex-1 items-center gap-2 py-3 transition-colors hover:bg-zinc-50"
+              className="flex flex-1 items-center gap-2 py-3.5 transition-colors hover:bg-zinc-50"
               style={barStyle}
             >
               {content}
@@ -110,15 +112,15 @@ export default function StepShell({
         })}
       </nav>
 
-      <div className="grid flex-1 grid-cols-1 gap-10 border-t border-zinc-200 pt-8 md:grid-cols-[220px_1fr] md:gap-14">
+      <div className="grid grid-cols-1 gap-10 border-t border-zinc-200 pt-8 md:grid-cols-[240px_1fr] md:gap-14">
         <aside className="flex flex-col md:sticky md:top-16 md:self-start">
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-400">
+          <span className="font-mono text-[12px] font-bold uppercase tracking-[0.3em] text-zinc-500">
             {step}
           </span>
-          <h1 className="mt-2.5 text-[20px] font-bold leading-snug tracking-tight text-zinc-900">
+          <h1 className="mt-2.5 text-[26px] font-bold leading-tight tracking-tight text-zinc-900">
             {title}
           </h1>
-          <p className="mt-2.5 text-[13px] leading-6 text-zinc-500">
+          <p className="mt-3 text-[15px] leading-[1.7] text-zinc-600">
             {description}
           </p>
           {aside && (
@@ -129,7 +131,7 @@ export default function StepShell({
             외부 OCR API로 통째로 보내고 있어서 사실과 달랐다. 지금은 인식까지
             브라우저에서 끝내므로 이 문장이 실제 동작과 일치한다.
           */}
-          <p className="mt-6 border-t border-zinc-100 pt-4 text-[11px] leading-5 text-zinc-400">
+          <p className="mt-6 border-t border-zinc-100 pt-4 text-[13px] leading-6 text-zinc-500">
             업로드한 문서는 이 브라우저 안에서 분석되며 서버로 전송되지 않습니다.
             입력한 값은 진단서 발급 전까지만 보관됩니다.
           </p>
@@ -137,9 +139,9 @@ export default function StepShell({
 
         {/* key 를 단계 번호로 두어 화면이 바뀔 때마다 진입 애니메이션이 다시 실행된다. */}
         <div key={currentNo} className="step-enter flex min-w-0 flex-col">
-          <div className="min-w-0 flex-1">{children}</div>
+          <div className="min-w-0">{children}</div>
           {footer && (
-            <div className="mt-10 flex justify-end border-t border-zinc-200 pt-5">
+            <div className="mt-6 flex justify-end border-t border-zinc-200 pt-5">
               {footer}
             </div>
           )}
