@@ -1,0 +1,7 @@
+# 샘플 문서는 이진 파일이다. 표시하지 않으면 git 이 PDF 안의 줄바꿈을 CRLF 로
+# 바꿔 버려서 체크아웃한 파일이 열리지 않는다(실제로 걸렸다).
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.png binary
+*.jpg binary

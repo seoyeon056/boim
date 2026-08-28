@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { documentCategories } from "@/data/documentCategories";
 import type {
+  DocumentCategory,
   DocumentStatus,
   StoredCategory,
   StoredUpload,
@@ -25,6 +26,56 @@ const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 전체 최대 500MB
 const GAUGE_UPLOADED = "#1D4533";
 const GAUGE_MISSING = "#BCB0A9";
 const GAUGE_TRACK = "#E9E2DD";
+
+// 시연용 샘플 문서. public/sample 에 실제 파일로 들어 있고, 손으로 올린 파일과
+// 똑같은 인식 경로를 그대로 탄다. 결과를 미리 심어 두지 않는다.
+//
+// 거래명세서는 2026-03 ~ 08 여섯 달치다. 한 달치만 넣으면 관측 기간이 짧아
+// lib/signals.ts 가 "데이터 부족"으로 판정하고 등급이 안 나온다(실제로 그렇다).
+// 여섯 칸을 다 채워서 거래처 5곳 · 거래 20건 · 여섯 달이 나온다.
+const SAMPLE_FILES: { category: string; names: string[] }[] = [
+  {
+    category: "transaction-statement",
+    names: [
+      "거래명세서_202608.xlsx",
+      "거래명세서_대성테크_2026상반기.xlsx",
+      "거래명세서_한울전자_2026상반기.xlsx",
+      "거래명세서_동방정공_2026하반기.xlsx",
+    ],
+  },
+  {
+    // 스캔본이라 브라우저 OCR 경로를 탄다. 인식이 잘 안 되어도 위 엑셀에서
+    // 거래가 이미 나오므로 화면이 비지 않는다.
+    category: "tax-invoice",
+    names: ["전자세금계산서_202608.pdf", "기업_내부거래_데모데이터_1장.pdf"],
+  },
+  {
+    // 명세서에 없는 거래처의 입금이라 중복 없이 거래가 늘어난다.
+    // (중복 제거 기준은 날짜+금액+품목이다 — run-local-ocr.ts 의 dedupe)
+    category: "deposit-history",
+    names: ["입금내역_2026상반기.xlsx"],
+  },
+  { category: "quotation", names: ["견적서_EST202608.xlsx"] },
+  {
+    // 지금은 엔진이 읽지 않는 칸이지만, 나중에 연결해도 그대로 읽히도록
+    // 발주일자·품목·발주금액 열을 갖춰 두었다(확인함: 2건 · 납기 2026-10-15).
+    category: "purchase-order",
+    names: ["발주서_2026Q3.xlsx"],
+  },
+  { category: "contract", names: ["표준소프트웨어라이선스계약서.pdf"] },
+];
+
+function mimeOf(name: string): string {
+  if (name.toLowerCase().endsWith(".pdf")) return "application/pdf";
+  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+}
+
+// 문서를 두 묶음으로 나눈다. 여섯 개를 한 줄로 늘어놓으면 어디부터 손대야
+// 할지 알 수 없다. 중요도가 아니라 문서가 말해 주는 시점이 다르다.
+//   거래 실적 — 이미 일어난 거래.   성장 신호를 여기서 계산한다.
+//   거래 흐름 — 예정된 거래와 조건. 진단서에 근거 자료로 함께 싣는다.
+const RECORD_CATEGORIES = documentCategories.filter((c) => c.analyzed);
+const FLOW_CATEGORIES = documentCategories.filter((c) => !c.analyzed);
 
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
 const ALLOWED_TYPES = [
@@ -67,6 +118,9 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   const [isSaved, setIsSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
+  // 참고 자료는 기본으로 접어 둔다. 펼치는 건 사용자가 정한다.
+  const [showReference, setShowReference] = useState(false);
 
   // 파일 input DOM을 기억해 두었다가 값 초기화(input.value = "")에 사용
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -231,6 +285,68 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     setNotice(null);
   }
 
+  // 아직 손대지 않은 칸을 전부 "해당 문서 없음"으로 넘긴다.
+  // 여섯 칸을 하나씩 체크하는 클릭이 시연에서 제일 거슬리는 부분이었다.
+  function markRestMissing() {
+    setStates((prev) => {
+      const next = { ...prev };
+      for (const category of documentCategories) {
+        if (next[category.id].status === "empty") {
+          next[category.id] = { status: "missing", files: [] };
+        }
+      }
+      return next;
+    });
+    setIsSaved(false);
+    setNotice(null);
+  }
+
+  // 샘플 거래명세서를 불러온다. 손으로 올린 파일과 같은 경로를 타므로
+  // 인식·추출·계산이 전부 실제로 돈다.
+  async function loadSampleDocuments() {
+    setIsLoadingSample(true);
+    try {
+      const loaded = await Promise.all(
+        SAMPLE_FILES.map(async ({ category, names }) => ({
+          category,
+          files: await Promise.all(
+            names.map(async (name) => {
+              const response = await fetch(
+                `/sample/${encodeURIComponent(name)}`,
+              );
+              if (!response.ok) {
+                throw new Error(name);
+              }
+              return new File([await response.blob()], name, {
+                type: mimeOf(name),
+              });
+            }),
+          ),
+        })),
+      );
+
+      setStates((prev) => {
+        const next = { ...prev };
+        // 샘플에 없는 칸은 없는 것으로 둔다. 한 번 누르면 바로 다음 단계로
+        // 갈 수 있어야 시연이 끊기지 않는다.
+        for (const category of documentCategories) {
+          next[category.id] = { status: "missing", files: [] };
+        }
+        for (const { category, files } of loaded) {
+          next[category] = { status: "uploaded", files };
+        }
+        return next;
+      });
+      setErrors({});
+      setIsSaved(false);
+      setNotice(null);
+    } catch {
+      setNotice("샘플 문서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsLoadingSample(false);
+    }
+  }
+
   // 전체 합계 계산
   const totalUploadSize = documentCategories.reduce((sum, category) => {
     const files = states[category.id]?.files ?? [];
@@ -240,9 +356,14 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     return sum + (states[category.id]?.files.length ?? 0);
   }, 0);
 
-  // 모든 카테고리가 "파일 선택 완료" 또는 "해당 문서 없음" 상태인지 확인
-  const allHandled = documentCategories.every(
+  // 분석에 쓰이는 문서 세 칸만 정해지면 다음 단계로 넘어간다.
+  // 참고 자료는 비워 둬도 진단이 끝나므로 진행을 막지 않는다.
+  const analyzedHandled = RECORD_CATEGORIES.filter(
     (category) => states[category.id].status !== "empty",
+  ).length;
+  const allHandled = analyzedHandled === RECORD_CATEGORIES.length;
+  const hasUntouched = documentCategories.some(
+    (category) => states[category.id].status === "empty",
   );
   const uploadedCount = documentCategories.filter(
     (category) => states[category.id].status === "uploaded",
@@ -258,7 +379,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   async function handleAnalyze() {
     if (!allHandled) {
       setNotice(
-        "모든 문서 종류에 대해 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
+        "거래명세서·세금계산서·입금내역에 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
       );
       return;
     }
@@ -306,127 +427,8 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     router.push(withCompany("/processing", companyId));
   }
 
-  // 상태에 따른 배지 텍스트/스타일
-  function statusBadge(categoryId: string) {
-    const state = states[categoryId];
-    if (state.status === "missing") {
-      return { text: "없음", className: "bg-amber-50 text-amber-600" };
-    }
-    if (state.status === "uploaded") {
-      return {
-        text: `${state.files.length}개`,
-        className: "bg-emerald-50 text-emerald-600",
-      };
-    }
-    return { text: "미선택", className: "bg-zinc-100 text-zinc-400" };
-  }
-
-  return (
-    <StepShell
-      step="Step 03"
-      title="내부 문서 업로드"
-      description="문서 종류별로 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요."
-      backTo={withCompany("/visibility", companyId)}
-      companyId={companyId}
-      footer={
-        <div className="flex flex-col items-end gap-2">
-          {notice && <p className="text-xs text-red-500">{notice}</p>}
-          <button
-            type="button"
-            onClick={handleAnalyze}
-            disabled={!allHandled || isAnalyzing}
-            className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-          >
-            {isAnalyzing ? "문서 확인 중…" : "내부 문서 분석 시작"}
-          </button>
-        </div>
-      }
-    >
-
-      {/* 카테고리 진행 상황 — 문서 순서대로 한 칸씩 채운다.
-          업로드 완료 / 해당 문서 없음 / 미선택이 색으로 구분된다. */}
-      <div className="rounded-md border border-zinc-100 bg-white px-4 py-3.5">
-        <div className="mb-2.5 flex items-center justify-between">
-          <span
-            className={`font-mono text-xs font-medium tabular-nums transition-colors duration-500 ${
-              handledCount === documentCategories.length
-                ? "text-zinc-900"
-                : "text-zinc-500"
-            }`}
-          >
-            {progressPercent}%
-          </span>
-          <span className="text-[11px] text-zinc-400">
-            {handledCount}/{documentCategories.length} 항목 완료
-          </span>
-        </div>
-
-        <div className="flex gap-1.5">
-          {documentCategories.map((category) => {
-            const status = states[category.id].status;
-            const handled = status !== "empty";
-
-            return (
-              <div key={category.id} className="flex flex-1 flex-col gap-1.5">
-                <div
-                  className="h-1.5 overflow-hidden rounded-sm"
-                  style={{ backgroundColor: GAUGE_TRACK }}
-                >
-                  <div
-                    className="h-full rounded-sm"
-                    style={{
-                      width: handled ? "100%" : "0%",
-                      backgroundColor:
-                        status === "uploaded" ? GAUGE_UPLOADED : GAUGE_MISSING,
-                      transition:
-                        "width 420ms cubic-bezier(0.22,0.61,0.36,1), background-color 300ms ease",
-                    }}
-                  />
-                </div>
-                <span
-                  className={`truncate text-[11px] transition-colors duration-300 ${
-                    status === "uploaded"
-                      ? "text-zinc-600"
-                      : status === "missing"
-                        ? "text-zinc-400"
-                        : "text-zinc-300"
-                  }`}
-                >
-                  {category.name}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[11px] text-zinc-400">
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_UPLOADED }}
-            />
-            업로드 {uploadedCount}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_MISSING }}
-            />
-            해당 문서 없음 {missingCount}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_TRACK }}
-            />
-            미선택 {documentCategories.length - handledCount}
-          </span>
-        </div>
-      </div>
-
-      {/* 문서 카테고리 카드 목록 */}
-      <div className="mt-6 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {documentCategories.map((category) => {
+  // 카드 한 장. 분석에 쓰이는 문서와 참고 자료가 같은 모양을 공유한다.
+  function renderCategoryCard(category: DocumentCategory) {
           const state = states[category.id];
           const badge = statusBadge(category.id);
           const categorySize = state.files.reduce(
@@ -441,20 +443,29 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           return (
             <div
               key={category.id}
-              className="rounded-lg border border-zinc-100 bg-white transition-colors hover:border-zinc-200"
+              className={`rounded-lg bg-white transition-colors ${
+                category.primary
+                  ? "border-2 border-zinc-900"
+                  : "border border-zinc-100 hover:border-zinc-200"
+              }`}
             >
               {/* 헤더: 문서 종류 + 상태 배지 */}
               <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3">
                 {/* 문서 용도는 물음표에 마우스를 올렸을 때만 보여준다.
                     카드가 3열이라 설명을 항상 펼쳐두면 제목이 밀린다. */}
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <p className="truncate text-sm font-medium text-zinc-900">
+                  <p className="truncate text-[15px] font-semibold text-zinc-900">
                     {category.name}
                   </p>
+                  {category.primary && (
+                    <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                      가장 중요
+                    </span>
+                  )}
                   <div className="group relative flex items-center">
                     <span
                       aria-hidden="true"
-                      className="flex h-4 w-4 cursor-default items-center justify-center rounded-full bg-zinc-100 text-[10px] font-semibold text-zinc-400"
+                      className="flex h-4 w-4 cursor-default items-center justify-center rounded-full bg-zinc-100 text-[11px] font-semibold text-zinc-500"
                     >
                       ?
                     </span>
@@ -466,7 +477,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                   </div>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium ${badge.className}`}
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[12px] font-medium ${badge.className}`}
                 >
                   {badge.text}
                 </span>
@@ -503,10 +514,10 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                       : isDragging
                         ? "여기에 놓으면 첨부됩니다"
                         : state.files.length > 0
-                          ? "파일 더 추가 · 끌어다 놓기"
-                          : "파일 선택 · 끌어다 놓기"}
+                          ? "파일 더 추가"
+                          : "파일 선택"}
                   </span>
-                  <span className="text-zinc-300">PDF · PNG · JPG · XLSX</span>
+                  <span className="text-zinc-400">PDF · PNG · JPG · XLSX</span>
                   <input
                     id={inputId}
                     ref={(el) => {
@@ -626,7 +637,197 @@ export function UploadContent({ companyId }: { companyId?: string }) {
               </div>
             </div>
           );
-        })}
+  }
+
+  // 상태에 따른 배지 텍스트/스타일
+  function statusBadge(categoryId: string) {
+    const state = states[categoryId];
+    if (state.status === "missing") {
+      return { text: "없음", className: "bg-amber-50 text-amber-600" };
+    }
+    if (state.status === "uploaded") {
+      return {
+        text: `${state.files.length}개`,
+        className: "bg-emerald-50 text-emerald-600",
+      };
+    }
+    return { text: "미선택", className: "bg-zinc-100 text-zinc-400" };
+  }
+
+  return (
+    <StepShell
+      step="Step 03"
+      title="내부 문서 업로드"
+      description="거래명세서 하나만 있어도 진단이 됩니다. 없는 문서는 ‘해당 문서 없음’으로 넘기세요."
+      backTo={withCompany("/visibility", companyId)}
+      companyId={companyId}
+      footer={
+        <div className="flex flex-col items-end gap-2">
+          {notice && <p className="text-xs text-red-500">{notice}</p>}
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={!allHandled || isAnalyzing}
+            className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+          >
+            {isAnalyzing ? "문서 확인 중…" : "내부 문서 분석 시작"}
+          </button>
+        </div>
+      }
+    >
+
+      {/* 문서를 준비하지 못한 자리에서도 흐름을 끝까지 보여 줄 수 있어야 한다.
+          샘플은 public/sample 의 실제 엑셀이고, 손으로 올린 파일과 같은 인식
+          경로를 그대로 탄다. 결과를 미리 심어 두지 않는다. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3.5">
+        <button
+          type="button"
+          onClick={loadSampleDocuments}
+          disabled={isLoadingSample}
+          className="inline-flex h-9 items-center justify-center rounded-md bg-zinc-900 px-4 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+        >
+          {isLoadingSample ? "불러오는 중…" : "샘플 문서 불러오기"}
+        </button>
+        <button
+          type="button"
+          onClick={markRestMissing}
+          disabled={!hasUntouched}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-200 px-4 text-[13px] font-medium text-zinc-700 transition-colors hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:border-zinc-100 disabled:text-zinc-300"
+        >
+          나머지 모두 없음으로 표시
+        </button>
+        <span className="text-[13px] text-zinc-500">
+          여섯 칸을 모두 채웁니다. 거래처 5곳·6개월치 거래 20건을 실제로
+          인식합니다.
+        </span>
+      </div>
+
+      {/* 카테고리 진행 상황 — 문서 순서대로 한 칸씩 채운다.
+          업로드 완료 / 해당 문서 없음 / 미선택이 색으로 구분된다. */}
+      <div className="rounded-md border border-zinc-100 bg-white px-4 py-3.5">
+        <div className="mb-2.5 flex items-center justify-between">
+          <span
+            className={`font-mono text-xs font-medium tabular-nums transition-colors duration-500 ${
+              handledCount === documentCategories.length
+                ? "text-zinc-900"
+                : "text-zinc-500"
+            }`}
+          >
+            {progressPercent}%
+          </span>
+          <span className="text-[13px] text-zinc-500">
+            {handledCount}/{documentCategories.length} 항목 완료
+          </span>
+        </div>
+
+        <div className="flex gap-1.5">
+          {documentCategories.map((category) => {
+            const status = states[category.id].status;
+            const handled = status !== "empty";
+
+            return (
+              <div key={category.id} className="flex flex-1 flex-col gap-1.5">
+                <div
+                  className="h-1.5 overflow-hidden rounded-sm"
+                  style={{ backgroundColor: GAUGE_TRACK }}
+                >
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: handled ? "100%" : "0%",
+                      backgroundColor:
+                        status === "uploaded" ? GAUGE_UPLOADED : GAUGE_MISSING,
+                      transition:
+                        "width 420ms cubic-bezier(0.22,0.61,0.36,1), background-color 300ms ease",
+                    }}
+                  />
+                </div>
+                <span
+                  className={`truncate text-[13px] transition-colors duration-300 ${
+                    status === "uploaded"
+                      ? "text-zinc-700"
+                      : status === "missing"
+                        ? "text-zinc-500"
+                        : "text-zinc-400"
+                  }`}
+                >
+                  {category.name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[13px] text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_UPLOADED }}
+            />
+            업로드 {uploadedCount}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_MISSING }}
+            />
+            해당 문서 없음 {missingCount}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-4 rounded-sm"
+              style={{ backgroundColor: GAUGE_TRACK }}
+            />
+            미선택 {documentCategories.length - handledCount}
+          </span>
+        </div>
+      </div>
+
+      {/* ── 거래 실적 ─────────────────────────────────────── */}
+      <div className="mt-6 flex items-baseline justify-between gap-4">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-[15px] font-semibold text-zinc-900">
+            거래 실적
+          </h2>
+          <span className="text-[13px] text-zinc-500">
+            이미 일어난 거래입니다. 성장 신호를 여기서 계산합니다
+          </span>
+        </div>
+        <span className="font-mono text-[13px] text-zinc-400">
+          {analyzedHandled}/{RECORD_CATEGORIES.length}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {RECORD_CATEGORIES.map(renderCategoryCard)}
+      </div>
+
+      {/* ── 참고 자료 — 기본으로 접어 둔다 ────────────────── */}
+      <div className="mt-5 rounded-lg border border-zinc-100 bg-white">
+        <button
+          type="button"
+          onClick={() => setShowReference((open) => !open)}
+          aria-expanded={showReference}
+          className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left"
+        >
+          <span className="flex items-baseline gap-2">
+            <span className="text-[15px] font-semibold text-zinc-900">
+              거래 흐름
+            </span>
+            <span className="text-[13px] text-zinc-500">
+              앞으로 일어날 거래와 그 조건입니다. 진단서에 근거로 함께 실립니다
+            </span>
+          </span>
+          <span className="shrink-0 font-mono text-[13px] text-zinc-400">
+            {showReference ? "닫기 −" : "열기 +"}
+          </span>
+        </button>
+
+        {showReference && (
+          <div className="grid grid-cols-1 gap-2 border-t border-zinc-100 p-3 md:grid-cols-2 xl:grid-cols-3">
+            {FLOW_CATEGORIES.map(renderCategoryCard)}
+          </div>
+        )}
       </div>
 
       {/* 전체 선택 용량 */}

@@ -11,6 +11,12 @@ export interface DocumentCategory {
   id: string;
   name: string;
   purpose: string;
+  // 성장 신호 계산에 실제로 쓰이는 문서인지. 나머지는 맥락을 보는 참고 자료라
+  // 없어도 진단이 끝난다. 여섯 개를 한 줄로 늘어놓으면 어느 것이 중요한지
+  // 알 수 없어서, 화면에서 두 묶음으로 나누기 위한 표시다.
+  analyzed?: boolean;
+  // 그중에서도 이것 하나만 있으면 진단이 된다.
+  primary?: boolean;
 }
 
 // sessionStorage에 저장할 개별 파일의 메타데이터

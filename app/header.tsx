@@ -6,20 +6,21 @@ import { usePathname } from "next/navigation";
 const TOTAL_STEPS = 6;
 
 // 진단 흐름 안에서만 진행 표시기를 띄운다. 랜딩(/)처럼 흐름 밖 경로는 0이 되어 숨겨진다.
-const STEP_MAP: Record<string, number> = {
-  "/company": 1,
-  "/visibility": 2,
-  "/upload": 3,
-  "/processing": 3,
-  "/review": 4,
-  "/signals": 5,
-  "/compare": 5,
-  "/share": 6,
+const STEP_MAP: Record<string, { no: number; label: string }> = {
+  "/company": { no: 1, label: "기업 검색" },
+  "/visibility": { no: 2, label: "외부 가시성" },
+  "/upload": { no: 3, label: "문서 업로드" },
+  "/processing": { no: 3, label: "문서 분석" },
+  "/review": { no: 4, label: "분석 결과 확인" },
+  "/signals": { no: 5, label: "성장 신호·비교" },
+  "/compare": { no: 5, label: "성장 신호·비교" },
+  "/share": { no: 6, label: "진단서 발급" },
 };
 
 export default function Header() {
   const pathname = usePathname();
-  const step = STEP_MAP[pathname] ?? 0;
+  const current = STEP_MAP[pathname];
+  const step = current?.no ?? 0;
   const inFlow = step > 0;
 
   return (
@@ -31,7 +32,7 @@ export default function Header() {
         BO<span className="text-zinc-300">:</span>IM
       </Link>
       {inFlow && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 md:hidden">
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
             <div
               key={i}
@@ -44,9 +45,10 @@ export default function Header() {
               }`}
             />
           ))}
-          <span className="ml-1 font-mono text-[10px] text-zinc-400">
+          <span className="ml-2 font-mono text-[13px] font-medium text-zinc-600">
             {step}/{TOTAL_STEPS}
           </span>
+          <span className="text-[13px] text-zinc-600">{current?.label}</span>
         </div>
       )}
     </header>

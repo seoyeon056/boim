@@ -7,11 +7,14 @@ export const documentCategories: DocumentCategory[] = [
     id: "transaction-statement",
     name: "거래명세서",
     purpose: "거래일, 거래처, 품목, 수량과 금액을 확인합니다.",
+    analyzed: true,
+    primary: true,
   },
   {
     id: "tax-invoice",
     name: "세금계산서",
     purpose: "실제 매출·매입과 거래처별 금액을 확인합니다.",
+    analyzed: true,
   },
   {
     id: "purchase-order",
@@ -32,5 +35,6 @@ export const documentCategories: DocumentCategory[] = [
     id: "deposit-history",
     name: "입금내역",
     purpose: "거래 대금이 실제로 입금되었는지 확인합니다.",
+    analyzed: true,
   },
 ];
