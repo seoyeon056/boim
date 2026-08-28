@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 
 // 목표값까지 부드럽게 차오르는 숫자.
-// prefers-reduced-motion 이면 애니메이션 없이 목표값을 그대로 쓴다.
 //
-// 초기값을 target 으로 두는 이유:
-//  - 서버 렌더 결과와 첫 클라이언트 렌더가 같아야 하이드레이션 경고가 없다.
-//  - 모션을 끈 사용자는 이 값이 그대로 남는다(effect 에서 손대지 않는다).
-//  - 애니메이션을 쓰는 경우에만 effect 안 rAF 콜백이 0부터 다시 올린다.
+// 상태로 "값"이 아니라 "진행률"을 들고, 표시값은 target에서 파생시킨다.
+// 값을 상태로 들면 target이 바뀌어도 따라가지 못하는 경우가 생긴다. 실제로
+// prefers-reduced-motion 환경에서 effect가 그냥 돌아가는 바람에 초기값에 머물렀고,
+// 서버가 렌더한 예시 수치가 그대로 남았다. 카드 숫자만 예시값이고 설명은 업로드
+// 문서의 값이라 "150% / 1곳 → 1곳"처럼 앞뒤가 맞지 않았다.
+//
+// 진행률의 초기값이 1이라, 모션을 끈 사용자는 effect가 아무것도 하지 않아도
+// 항상 target을 보게 된다. 서버 렌더 결과와도 일치해 하이드레이션 경고가 없다.
 export function useCountUp(target: number, duration = 900): number {
-  const [value, setValue] = useState(target);
+  const [progress, setProgress] = useState(1);
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -25,12 +28,10 @@ export function useCountUp(target: number, duration = 900): number {
     const start = performance.now();
 
     const tick = (now: number) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const elapsed = Math.min(1, (now - start) / duration);
+      setProgress(1 - Math.pow(1 - elapsed, 3));
 
-      setValue(target * eased);
-
-      if (progress < 1) {
+      if (elapsed < 1) {
         frame = requestAnimationFrame(tick);
       }
     };
@@ -40,5 +41,8 @@ export function useCountUp(target: number, duration = 900): number {
     return () => cancelAnimationFrame(frame);
   }, [target, duration]);
 
-  return Math.round(value);
+  // 목표값이 소수를 가지면 그대로 살린다. 반올림해 뭉개면 카드에는 95%,
+  // 리포트에는 95.4%가 떠서 같은 지표가 화면마다 다르게 보인다.
+  const decimals = (String(target).split(".")[1] ?? "").length;
+  return Number((target * progress).toFixed(decimals));
 }
