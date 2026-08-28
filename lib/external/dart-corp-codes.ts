@@ -1,4 +1,5 @@
 import zlib from "node:zlib";
+import { DART_CORPS } from "@/lib/external/dart-index.generated";
 
 // DART 공시 API(list.json)는 회사명으로 바로 조회가 안 되고 8자리 고유번호
 // (corp_code)를 요구한다. 그 매핑표는 corpCode.xml 하나로만 제공되는데, 이름과
@@ -114,7 +115,52 @@ async function buildCorpCodeIndex(
   return { byName, byCode, all };
 }
 
+// 빌드 때 구워 둔 목록을 먼저 쓴다. 없으면(키 없이 빌드된 경우) 예전처럼 직접
+// 내려받는다. 서버리스는 콜드스타트마다 모듈 캐시가 비어서, 매번 3.6MB를 받아
+// 11만 건을 파싱하면 배포본에서 검색이 30초씩 걸린다.
+function buildIndexFromBaked(): CorpCodeIndex | null {
+  if (!DART_CORPS) {
+    return null;
+  }
+
+  const byName = new Map<string, string>();
+  const byCode = new Map<string, string>();
+  const all: DartCorp[] = [];
+
+  for (const line of DART_CORPS.split("\n")) {
+    // 정규화이름 | 고유번호 | 원래이름 | 종목코드 (탭 구분)
+    const [normalized, code, name, stockCode] = line.split("\t");
+    if (!code || !name) {
+      continue;
+    }
+    all.push({ corpCode: code, corpName: name, stockCode: stockCode ?? "" });
+    if (!byName.has(normalized)) {
+      byName.set(normalized, code);
+    }
+    byCode.set(code, name);
+  }
+
+  return { byName, byCode, all };
+}
+
+let bakedIndex: CorpCodeIndex | null | undefined;
+
+function getBakedIndex(): CorpCodeIndex | null {
+  bakedIndex ??= buildIndexFromBaked();
+  return bakedIndex;
+}
+
 let indexPromise: Promise<CorpCodeIndex> | null = null;
+
+// 구워 둔 목록이 있으면 네트워크를 아예 타지 않는다.
+async function getIndex(serviceKey: string): Promise<CorpCodeIndex> {
+  const baked = getBakedIndex();
+  if (baked) {
+    return baked;
+  }
+  indexPromise ??= buildCorpCodeIndex(serviceKey);
+  return indexPromise;
+}
 
 export async function findCorpCode(
   companyName: string,
@@ -125,8 +171,7 @@ export async function findCorpCode(
   }
 
   try {
-    indexPromise ??= buildCorpCodeIndex(serviceKey);
-    const index = await indexPromise;
+    const index = await getIndex(serviceKey);
 
     // 부분 일치는 일부러 안 한다. "한빛정밀"을 부분 일치로 찾으면 전혀 다른
     // 법인인 "한빛"이 걸리고, 그 회사 공시 건수가 우리 회사 것으로 표시된다.
@@ -157,8 +202,7 @@ export async function searchCorps(
   }
 
   try {
-    indexPromise ??= buildCorpCodeIndex(serviceKey);
-    const index = await indexPromise;
+    const index = await getIndex(serviceKey);
 
     return index.all
       .filter((corp) =>
@@ -190,8 +234,7 @@ export async function findCorpName(corpCode: string): Promise<string | null> {
   }
 
   try {
-    indexPromise ??= buildCorpCodeIndex(serviceKey);
-    const index = await indexPromise;
+    const index = await getIndex(serviceKey);
     return index.byCode.get(corpCode) ?? null;
   } catch {
     indexPromise = null;

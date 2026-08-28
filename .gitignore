@@ -43,3 +43,6 @@ next-env.d.ts
 
 # pdf.js 자산 — prepare-pdf 스크립트가 빌드 때 생성한다
 /public/pdfjs
+
+# DART 기업 목록 — prepare-dart 스크립트가 빌드 때 생성한다
+/lib/external/dart-index.generated.ts
