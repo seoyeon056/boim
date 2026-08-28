@@ -153,11 +153,20 @@ function getBakedIndex(): CorpCodeIndex | null {
 let indexPromise: Promise<CorpCodeIndex> | null = null;
 
 // 구워 둔 목록이 있으면 네트워크를 아예 타지 않는다.
-async function getIndex(serviceKey: string): Promise<CorpCodeIndex> {
+async function getIndex(): Promise<CorpCodeIndex | null> {
   const baked = getBakedIndex();
   if (baked) {
     return baked;
   }
+
+  // 구워 둔 목록이 없을 때만 직접 내려받고, 그때만 키가 필요하다.
+  // 빌드에서만 키를 주고 런타임에 안 주는 배포도 있어서, 키 없음을
+  // 먼저 걸러버리면 애써 구워 둔 목록을 쓰지 못한다.
+  const serviceKey = process.env.DART_SEARCH_KEY;
+  if (!serviceKey) {
+    return null;
+  }
+
   indexPromise ??= buildCorpCodeIndex(serviceKey);
   return indexPromise;
 }
@@ -165,13 +174,11 @@ async function getIndex(serviceKey: string): Promise<CorpCodeIndex> {
 export async function findCorpCode(
   companyName: string,
 ): Promise<string | null> {
-  const serviceKey = process.env.DART_SEARCH_KEY;
-  if (!serviceKey) {
-    return null;
-  }
-
   try {
-    const index = await getIndex(serviceKey);
+    const index = await getIndex();
+    if (!index) {
+      return null;
+    }
 
     // 부분 일치는 일부러 안 한다. "한빛정밀"을 부분 일치로 찾으면 전혀 다른
     // 법인인 "한빛"이 걸리고, 그 회사 공시 건수가 우리 회사 것으로 표시된다.
@@ -191,18 +198,16 @@ export async function searchCorps(
   query: string,
   limit = 20,
 ): Promise<DartCorp[] | null> {
-  const serviceKey = process.env.DART_SEARCH_KEY;
-  if (!serviceKey) {
-    return null;
-  }
-
   const normalizedQuery = normalizeCompanyName(query);
   if (normalizedQuery === "") {
     return [];
   }
 
   try {
-    const index = await getIndex(serviceKey);
+    const index = await getIndex();
+    if (!index) {
+      return null;
+    }
 
     return index.all
       .filter((corp) =>
@@ -228,13 +233,12 @@ export async function searchCorps(
 // 그 기업이 누구인지 알 수 없어, 예전에는 데모 목록의 첫 기업으로 조용히
 // 대체됐다(LG생활건강을 골라도 한빛정밀의 뉴스가 표시됐다).
 export async function findCorpName(corpCode: string): Promise<string | null> {
-  const serviceKey = process.env.DART_SEARCH_KEY;
-  if (!serviceKey) {
-    return null;
-  }
-
   try {
-    const index = await getIndex(serviceKey);
+    const index = await getIndex();
+    if (!index) {
+      return null;
+    }
+
     return index.byCode.get(corpCode) ?? null;
   } catch {
     indexPromise = null;
