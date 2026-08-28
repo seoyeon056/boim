@@ -14,6 +14,7 @@ import { withCompany } from "@/lib/company-link";
 import { buildDiagnosis } from "@/lib/diagnosis";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
+import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 
 // LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
 const STATUS_TEXT = { positive: "긍정", caution: "주의" } as const;
@@ -67,6 +68,22 @@ export function ShareContent({
         setSignals(effective);
         setUploadedCount(uploaded ? uploaded.transactionCount : null);
 
+        // Step 05에서 이미 동의했으면 여기서 또 묻지 않는다. 같은 종류의 값을
+        // 보내는 같은 질문이라, 흐름 안에서 두 번 물으면 성가시기만 하다.
+        if (!hasAiConsent()) {
+          return;
+        }
+
+        setLlmState("loading");
+        return runDiagnosis(visibilityResult, effective, uploaded?.transactionCount ?? 0)
+          .then((text) => {
+            if (isActive && text) setLlmDiagnosis(text);
+            if (isActive) setLlmState("idle");
+          })
+          .catch(() => {
+            if (isActive) setLlmState("failed");
+          });
+
       })
       .catch(() => {
         if (!isActive) return;
@@ -79,33 +96,44 @@ export function ShareContent({
     };
   }, [companyId]);
 
+  // 지표와 신호를 받아 종합 의견 문장을 만든다. 자동 생성과 버튼이 같은 경로를 쓴다.
+  async function runDiagnosis(
+    view: VisibilityResult,
+    values: SignalsResult,
+    count: number,
+  ): Promise<string> {
+    const { diagnosis: text } = await fetchDiagnosis({
+      period: PERIOD,
+      transactionCount: count,
+      visibilityScore: view.visibilityScore,
+      visibilityInterpretation: view.interpretations.visibility,
+      newsCount: view.newsCount,
+      patentCount: view.patentCount,
+      jobCount: view.jobCount,
+      disclosureCount: view.disclosureCount,
+      customerGrowthRate: values.customerGrowthRate,
+      previousCustomersCount: values.previousCustomersCount,
+      recentCustomersCount: values.recentCustomersCount,
+      growthStatus: STATUS_TEXT[values.statuses.customerGrowthRate],
+      repeatPurchaseRate: values.repeatPurchaseRate,
+      repeatStatus: STATUS_TEXT[values.statuses.repeatPurchaseRate],
+      topCustomerConcentration: values.topCustomerConcentration,
+      concentrationStatus: STATUS_TEXT[values.statuses.topCustomerConcentration],
+    });
+    return restoreCustomerName(text.trim(), values.topCustomerName);
+  }
+
   // AI 종합 의견은 기본으로 부르지 않는다. 이 수치는 사용자가 올린 문서에서 나온
   // 값이라, 외부 모델로 보낼지를 사용자가 정하게 한다. 기업명과 거래처명은 보내지
   // 않지만 비율 자체가 그 회사의 영업 정보이기 때문이다.
   async function requestLlmDiagnosis() {
     if (!visibility || !signals) return;
+    grantAiConsent();
     setLlmState("loading");
     try {
-      const { diagnosis: text } = await fetchDiagnosis({
-        period: PERIOD,
-        transactionCount: uploadedCount ?? 0,
-        visibilityScore: visibility.visibilityScore,
-        visibilityInterpretation: visibility.interpretations.visibility,
-        newsCount: visibility.newsCount,
-        patentCount: visibility.patentCount,
-        jobCount: visibility.jobCount,
-        disclosureCount: visibility.disclosureCount,
-        customerGrowthRate: signals.customerGrowthRate,
-        previousCustomersCount: signals.previousCustomersCount,
-        recentCustomersCount: signals.recentCustomersCount,
-        growthStatus: STATUS_TEXT[signals.statuses.customerGrowthRate],
-        repeatPurchaseRate: signals.repeatPurchaseRate,
-        repeatStatus: STATUS_TEXT[signals.statuses.repeatPurchaseRate],
-        topCustomerConcentration: signals.topCustomerConcentration,
-        concentrationStatus:
-          STATUS_TEXT[signals.statuses.topCustomerConcentration],
-      });
-      setLlmDiagnosis(restoreCustomerName(text.trim(), signals.topCustomerName));
+      setLlmDiagnosis(
+        await runDiagnosis(visibility, signals, uploadedCount ?? 0),
+      );
       setLlmState("idle");
     } catch {
       setLlmState("failed");
@@ -336,15 +364,20 @@ export function ShareContent({
                   <p className="-indent-4 pl-4">라. {llmDiagnosis}</p>
                 )}
                 {/* 인쇄물에는 버튼이 남으면 안 된다. */}
-                {!llmDiagnosis && (
+                {!llmDiagnosis && llmState === "loading" && (
+                  <p className="-indent-4 pl-4 text-zinc-400 print:hidden">
+                    라. AI 종합 의견을 작성하는 중입니다…
+                  </p>
+                )}
+                {!llmDiagnosis && llmState !== "loading" && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
                     <button
                       type="button"
                       onClick={requestLlmDiagnosis}
-                      disabled={!signals || llmState === "loading"}
+                      disabled={!signals}
                       className="inline-flex h-8 items-center rounded-md border border-zinc-300 px-3 text-[12px] text-zinc-700 transition-colors hover:bg-zinc-50 disabled:text-zinc-300"
                     >
-                      {llmState === "loading" ? "작성 중…" : "AI 종합 의견 추가"}
+                      AI 종합 의견 추가
                     </button>
                     <span className="text-[11px] text-zinc-500">
                       {llmState === "failed"

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { Signals } from "@/lib/signals";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
+import { describePaymentTerms, readDocumentTerms } from "@/lib/document-terms";
+import { grantAiConsent } from "@/lib/ai-consent";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
@@ -53,13 +55,21 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   const [signals, setSignals] = useState<Signals>(serverSignals);
   const [fromUpload, setFromUpload] = useState(false);
   const [transactionCount, setTransactionCount] = useState(0);
+  // 결제조건은 거래 건수·금액에 잡히지 않는 정보라 따로 읽어 덧붙인다.
+  const [paymentNote, setPaymentNote] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [aiState, setAiState] = useState<"idle" | "loading" | "failed">("idle");
 
   useEffect(() => {
+    const terms = readDocumentTerms();
+    if (terms) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPaymentNote(describePaymentTerms(terms));
+    }
+
     const uploaded = readUploadedSignals("");
     if (!uploaded) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setSignals(uploaded.signals);
      
     setFromUpload(true);
@@ -68,6 +78,8 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   }, []);
 
   async function requestAiNotice() {
+    // 여기서 한 번 동의하면 리포트에서 다시 묻지 않는다.
+    grantAiConsent();
     setAiState("loading");
     try {
       // 거래처명은 보내지 않는다. 비율 숫자만 나가고, 응답의 마스킹 라벨을
@@ -142,6 +154,13 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
       >
         {aiNotice ?? pickNotable(signals)}
       </p>
+
+      {/* 문서에서 읽어낸 결제조건. 브라우저 안에서만 계산되고 전송되지 않는다. */}
+      {paymentNote && (
+        <p className="mt-2 max-w-3xl text-[12px] leading-6 text-zinc-500">
+          {paymentNote}
+        </p>
+      )}
 
       {/*
         AI 해석은 기본으로 부르지 않는다. 이 수치는 사용자가 올린 문서에서 나온

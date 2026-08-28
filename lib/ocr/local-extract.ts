@@ -7,7 +7,10 @@
 // 인식은 PaddleOCR PP-OCRv5 한국어 모델(ONNX)을 onnxruntime-web으로 돌린다.
 // 실측(2026-08): 모델 최초 다운로드 6.9초(이후 캐시), 인식 1.3초/페이지.
 // 테스트 명세서 3행을 100% 정확히 읽었다(전체 신뢰도 0.951).
-import type { ExtractedTransactionRow } from "@/lib/ocr/types";
+import type {
+  DocumentTerms,
+  ExtractedTransactionRow,
+} from "@/lib/ocr/types";
 
 type Cell = {
   text: string;
@@ -23,6 +26,8 @@ const COLUMN_ALIASES = {
   date: ["거래일자", "일자", "날짜", "거래일", "월/일", "년월일", "월일"],
   item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격"],
   amount: ["공급가액", "금액", "합계", "합계금액", "총액", "공급가액(원)"],
+  quantity: ["수량", "수 량"],
+  unitPrice: ["단가", "단 가", "단가(원)"],
 } as const;
 
 // 거래처는 표 안이 아니라 표 위 라벨에 있는 경우가 대부분이다.
@@ -344,6 +349,55 @@ function labelRows(lines: Cell[][]): ExtractedTransactionRow[] {
   ];
 }
 
+// ── 문서 전체에 걸리는 조건 ─────────────────────────────────
+// 거래 건수나 금액만 봐서는 안 보이는 것들이다. 결제조건이 "납품 후 60일"이면
+// 매출이 잡힌 뒤에도 두 달은 현금이 들어오지 않는다는 뜻이다.
+const PAYMENT_LABELS = ["결제조건", "지급조건", "대금지급", "결제 조건"];
+const DUE_LABELS = ["납기일자", "납기일", "납품기일", "납기"];
+
+// 라벨 뒤 문장이 길게 이어질 수 있어(검수 완료 후 … 익월 15일 현금 지급) 길이를 자른다.
+const MAX_TERMS_LENGTH = 60;
+
+function findDocumentTerms(lines: Cell[][]): DocumentTerms {
+  const terms: DocumentTerms = {};
+
+  for (const row of lines) {
+    const text = row.map((cell) => cell.text).join(" ");
+
+    if (!terms.paymentTerms) {
+      const raw = valueAfterLabel(text, PAYMENT_LABELS);
+      if (raw) {
+        // "납품 후 60일 / 기존 거래처"처럼 뒤에 다른 항목이 슬래시로 이어진다.
+        // 결제조건에 해당하는 앞부분만 남긴다.
+        terms.paymentTerms = raw
+          .split(/\s*[/|·]\s*/)[0]
+          .slice(0, MAX_TERMS_LENGTH)
+          .trim();
+        // "납품 후 60일", "60일 이내"에서 일수를 읽어낸다.
+        // "익월 15일"처럼 날짜를 가리키는 표현은 일수가 아니므로 제외한다.
+        const days = terms.paymentTerms.match(/(?:후|이내|기준)\s*(\d{1,3})\s*일/);
+        if (days) {
+          terms.paymentDays = Number(days[1]);
+        }
+      }
+    }
+
+    if (!terms.dueDate) {
+      const raw = valueAfterLabel(text, DUE_LABELS);
+      const parsed = raw ? parseDate(raw) : null;
+      if (parsed) {
+        terms.dueDate = parsed;
+      }
+    }
+  }
+
+  return terms;
+}
+
+export function termsFromOcr(result: OcrResult): DocumentTerms {
+  return findDocumentTerms(result.lines ?? []);
+}
+
 export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
   const lines = result.lines ?? [];
   const { index: headerIndex, columns } = findHeader(lines);
@@ -406,11 +460,22 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
       continue;
     }
 
+    const quantityCell = cellForColumn(row, columns.quantity);
+    const unitPriceCell = cellForColumn(row, columns.unitPrice);
+    const quantity = quantityCell ? parseAmount(quantityCell.text) : null;
+    const unitPrice = unitPriceCell ? parseAmount(unitPriceCell.text) : null;
+
     extracted.push({
       date: { value: date, confidence: dateCell?.confidence ?? 0 },
       customer: { value: customer.value, confidence: customer.confidence },
       item: { value: itemText, confidence: itemCell?.confidence ?? 0 },
       amount: { value: amount, confidence: amountCell?.confidence ?? 0 },
+      ...(quantity !== null && quantity > 0
+        ? { quantity: { value: quantity, confidence: quantityCell?.confidence ?? 0 } }
+        : {}),
+      ...(unitPrice !== null && unitPrice > 0
+        ? { unitPrice: { value: unitPrice, confidence: unitPriceCell?.confidence ?? 0 } }
+        : {}),
     });
   }
 
