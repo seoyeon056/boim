@@ -49,9 +49,17 @@ export async function POST(request: NextRequest) {
   }
 
   const transactionCount = toNumber(body.transactionCount);
+  // 표본이 모자라 판정을 보류한 상태. 이 값이 없으면 LLM은 지표를 그대로 믿고
+  // 거래 1건짜리 100%도 "꾸준히 이어진다"로 옮겨 쓴다.
+  const dataSufficient = body.dataSufficient !== false;
   const positiveCount = toNumber(body.positiveCount);
   const cautionCount = toNumber(body.cautionCount);
-  const activityLevel = toAllowed(body.activityLevel, ["활발", "보통", "저조"]);
+  const activityLevel = toAllowed(body.activityLevel, [
+    "활발",
+    "보통",
+    "저조",
+    "데이터 부족",
+  ]);
 
   const rows = (Array.isArray(body.signals) ? body.signals : [])
     .map((raw) => {
@@ -59,7 +67,7 @@ export async function POST(request: NextRequest) {
       return {
         label: toAllowed(item.label, ALLOWED_LABELS),
         value: toNumber(item.value),
-        tone: toAllowed(item.tone, ["긍정", "보통", "주의"]),
+        tone: toAllowed(item.tone, ["긍정", "보통", "주의", "판단 보류"]),
         note: typeof item.note === "string" ? item.note.slice(0, MAX_NOTE) : "",
       };
     })
@@ -74,17 +82,29 @@ export async function POST(request: NextRequest) {
 만들지 말고, 주어진 판정을 그대로 전제로 설명만 작성하세요.
 
 분석에 사용한 내부 거래: ${transactionCount}건
-종합: 긍정 ${positiveCount}개 / 주의 ${cautionCount}개 → 내부 거래 활동 ${activityLevel}
+종합: ${
+    dataSufficient
+      ? `긍정 ${positiveCount}개 / 주의 ${cautionCount}개 → 내부 거래 활동 ${activityLevel}`
+      : "표본이 부족해 판정하지 않음"
+  }
 
 ${table}
 
 [작성 지침]
-- 2문장. 두 문장은 서로 다른 이야기를 해야 합니다.
+${
+    dataSufficient
+      ? ""
+      : `- 이 자료는 표본이 부족해 판정하지 않았습니다. 지표를 해석하지 말고,
+  거래 ${transactionCount}건으로는 판단하기 어렵다는 사실과 어떤 자료가 더 필요한지만
+  2문장 이내로 쓰세요. 아래 지침은 따르지 마세요.
+`
+  }- 2문장. 두 문장은 서로 다른 이야기를 해야 합니다.
 - 1문장: 주의 판정을 받은 지표가 있으면 그것을, 없으면 가장 뚜렷한 긍정 지표를 골라
   그 수치가 이 기업에 무엇을 뜻하는지 쓰세요.
 - 2문장: 그 지표 때문에 무엇을 확인하거나 관리해야 하는지 쓰세요.
 - 지표를 나열하지 말고 해석하세요.
 - 판정을 뒤집지 마세요. "주의"를 좋게, "긍정"을 나쁘게 쓰지 않습니다.
+- "판단 보류"로 표시된 지표는 근거로 쓰지 마세요. 표본이 모자라 계산만 된 값입니다.
 - 거래처 이름은 "${MASKED_CUSTOMER_LABEL}"로만 지칭하세요.`;
 
   try {

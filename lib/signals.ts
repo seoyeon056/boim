@@ -35,6 +35,10 @@ export type SignalItem = {
   // 그래서 무엇인지 (신규 거래처 확대 신호)
   note: string;
   tone: SignalTone;
+  // 표본이 부족해 판정에 쓰지 않는 지표. 값은 그대로 계산하되 긍정/주의로 세지
+  // 않고, 화면에서도 숫자 대신 "—"로 그린다. "값이 없는 것"과 "값이 좋은 것"을
+  // 갈라 두지 않으면 거래 1건짜리 100%가 좋은 신호로 읽힌다.
+  evaluable: boolean;
 };
 
 // 예전에는 "1~3월이 이전, 4월 이후가 최근"으로 못 박혀 있었다. 데모 데이터가
@@ -193,6 +197,20 @@ export const CONCENTRATION_WATCH = 25;
 export const CONTINUITY_GOOD = 70;
 export const CONTINUITY_WEAK = 40;
 
+// 표본이 적으면 비율이 극단으로 튄다. 거래가 1건이면 관측 기간도 1개월이라
+// 지속성이 1/1 = 100%가 되고, 거래처가 없으면 집중도가 0%라 "여러 곳으로 분산됨"
+// 으로 읽힌다. 자료가 없을수록 점수가 좋아지는 셈이다.
+// 그래서 판정하기 전에 그 지표를 평가할 표본이 있는지부터 본다.
+const MIN_TRANSACTIONS = 3;
+const MIN_MONTHS = 3;
+// 여섯 중 이만큼도 평가되지 않으면 종합 등급을 매기지 않는다.
+const MIN_EVALUABLE = 3;
+
+// 평가할 수 없는 지표는 긍정도 주의도 아니다. 값은 남기고 판정만 비운다.
+function gate(evaluable: boolean, tone: SignalTone): SignalTone {
+  return evaluable ? tone : "neutral";
+}
+
 function toneByGrowth(rate: number, comparable: boolean): SignalTone {
   if (!comparable) return "neutral";
   if (rate > 0) return "positive";
@@ -232,22 +250,48 @@ export function calculateSignals(items: Transaction[]) {
   const continuity = calculateContinuity(items, split);
   const trend = calculateTrend(items, split);
   const customerCount = countCustomers(items);
+  const totalAmount = sumAmount(items);
+
+  // 어떤 지표를 판정할 수 있는지 먼저 가른다. 여기서 걸러 두면 아래 판정·집계·
+  // 등급이 전부 같은 기준을 따른다.
+  const enoughRows = items.length >= MIN_TRANSACTIONS;
+  const enoughMonths = continuity.observedMonths >= MIN_MONTHS;
+  const evaluable = {
+    // 이전 기간이 비면 증가율 자체가 성립하지 않는다.
+    customerGrowth: previousCustomers > 0,
+    amountGrowth: previousAmount > 0,
+    // 거래처가 없으면 "몇 곳이 다시 왔는가"를 물을 수 없다.
+    repeatPurchaseRate: customerCount > 0 && enoughRows,
+    // 금액이 0이면 비중을 나눌 분모가 없다. 0%는 분산이 아니라 무자료다.
+    topCustomerConcentration: customerCount > 0 && totalAmount > 0,
+    continuity: enoughRows && enoughMonths,
+    trend: trend.comparable,
+  };
 
   const repeatCustomers = [...customersOf(items)].filter(
     (name) => items.filter((item) => item.customer === name).length >= 2,
   ).length;
 
   const statuses = {
-    customerGrowthRate: toneByGrowth(customerGrowthRate, previousCustomers > 0),
-    amountGrowthRate: toneByGrowth(amountGrowthRate, previousAmount > 0),
-    repeatPurchaseRate: toneByBand(repeatPurchaseRate, REPEAT_GOOD, REPEAT_WEAK),
-    topCustomerConcentration: (top.topCustomerConcentration >= CONCENTRATION_RISK
-      ? "caution"
-      : top.topCustomerConcentration >= CONCENTRATION_WATCH
-        ? "neutral"
-        : "positive") as SignalTone,
-    continuity: toneByBand(continuity.rate, CONTINUITY_GOOD, CONTINUITY_WEAK),
-    trend: toneByGrowth(trend.rate, trend.comparable),
+    customerGrowthRate: toneByGrowth(customerGrowthRate, evaluable.customerGrowth),
+    amountGrowthRate: toneByGrowth(amountGrowthRate, evaluable.amountGrowth),
+    repeatPurchaseRate: gate(
+      evaluable.repeatPurchaseRate,
+      toneByBand(repeatPurchaseRate, REPEAT_GOOD, REPEAT_WEAK),
+    ),
+    topCustomerConcentration: gate(
+      evaluable.topCustomerConcentration,
+      top.topCustomerConcentration >= CONCENTRATION_RISK
+        ? "caution"
+        : top.topCustomerConcentration >= CONCENTRATION_WATCH
+          ? "neutral"
+          : "positive",
+    ),
+    continuity: gate(
+      evaluable.continuity,
+      toneByBand(continuity.rate, CONTINUITY_GOOD, CONTINUITY_WEAK),
+    ),
+    trend: toneByGrowth(trend.rate, evaluable.trend),
   };
 
   const signals: SignalItem[] = [
@@ -257,14 +301,18 @@ export function calculateSignals(items: Transaction[]) {
       value: customerGrowthRate,
       prefix: customerGrowthRate > 0 ? "+" : "",
       suffix: "%",
-      detail: `이전 ${previousCustomers}곳 → 최근 ${recentCustomers}곳`,
-      note:
-        statuses.customerGrowthRate === "positive"
+      detail: evaluable.customerGrowth
+        ? `이전 ${previousCustomers}곳 → 최근 ${recentCustomers}곳`
+        : "비교할 이전 기간이 없음",
+      note: !evaluable.customerGrowth
+        ? "비교할 이전 기간이 없어 판단 보류"
+        : statuses.customerGrowthRate === "positive"
           ? "신규 거래처 확대 신호"
           : statuses.customerGrowthRate === "neutral"
             ? "거래처 수에 변화가 없음"
             : "거래처가 줄었음",
       tone: statuses.customerGrowthRate,
+      evaluable: evaluable.customerGrowth,
     },
     {
       key: "amountGrowth",
@@ -272,14 +320,18 @@ export function calculateSignals(items: Transaction[]) {
       value: amountGrowthRate,
       prefix: amountGrowthRate > 0 ? "+" : "",
       suffix: "%",
-      detail: `이전 ${won(previousAmount)} → 최근 ${won(recentAmount)}`,
-      note:
-        statuses.amountGrowthRate === "positive"
+      detail: evaluable.amountGrowth
+        ? `이전 ${won(previousAmount)} → 최근 ${won(recentAmount)}`
+        : "비교할 이전 기간이 없음",
+      note: !evaluable.amountGrowth
+        ? "비교할 이전 기간이 없어 판단 보류"
+        : statuses.amountGrowthRate === "positive"
           ? "거래 규모 확대 신호"
           : statuses.amountGrowthRate === "neutral"
             ? "거래 규모에 변화가 없음"
             : "거래 규모가 줄었음",
       tone: statuses.amountGrowthRate,
+      evaluable: evaluable.amountGrowth,
     },
     {
       key: "repeatRate",
@@ -288,13 +340,15 @@ export function calculateSignals(items: Transaction[]) {
       prefix: "",
       suffix: "%",
       detail: `전체 ${customerCount}곳 중 2회 이상 ${repeatCustomers}곳`,
-      note:
-        statuses.repeatPurchaseRate === "positive"
+      note: !evaluable.repeatPurchaseRate
+        ? "거래 건수가 적어 판단 보류"
+        : statuses.repeatPurchaseRate === "positive"
           ? "거래 관계가 비교적 안정적"
           : statuses.repeatPurchaseRate === "neutral"
             ? "반복 거래가 일부만 확인됨"
             : "한 번 거래하고 끝나는 경우가 많음",
       tone: statuses.repeatPurchaseRate,
+      evaluable: evaluable.repeatPurchaseRate,
     },
     {
       key: "concentration",
@@ -305,13 +359,15 @@ export function calculateSignals(items: Transaction[]) {
       detail: top.topCustomerName
         ? `${top.topCustomerName} 비중`
         : "거래 금액을 확인하지 못함",
-      note:
-        statuses.topCustomerConcentration === "caution"
+      note: !evaluable.topCustomerConcentration
+        ? "거래 금액 자료가 없어 판단 보류"
+        : statuses.topCustomerConcentration === "caution"
           ? "특정 거래처 의존 위험"
           : statuses.topCustomerConcentration === "neutral"
             ? "한 거래처 비중이 다소 높음"
             : "여러 거래처로 분산됨",
       tone: statuses.topCustomerConcentration,
+      evaluable: evaluable.topCustomerConcentration,
     },
     {
       key: "continuity",
@@ -320,13 +376,15 @@ export function calculateSignals(items: Transaction[]) {
       prefix: "",
       suffix: "%",
       detail: `${continuity.observedMonths}개월 중 ${continuity.activeMonths}개월에 거래 발생`,
-      note:
-        statuses.continuity === "positive"
+      note: !evaluable.continuity
+        ? "거래 건수와 관측 기간이 짧아 판단 보류"
+        : statuses.continuity === "positive"
           ? "거래가 꾸준히 이어짐"
           : statuses.continuity === "neutral"
             ? "거래가 끊긴 달이 있음"
             : "거래가 특정 시기에 몰려 있음",
       tone: statuses.continuity,
+      evaluable: evaluable.continuity,
     },
     {
       key: "trend",
@@ -337,27 +395,45 @@ export function calculateSignals(items: Transaction[]) {
       detail: trend.comparable
         ? `이전 달 평균 ${won(trend.averageAmount)} → 최근 달 ${won(trend.lastAmount)}`
         : "비교할 이전 달이 없음",
-      note: !trend.comparable
-        ? "추세를 판단하기에 기간이 짧음"
+      note: !evaluable.trend
+        ? "비교할 이전 달이 없어 판단 보류"
         : statuses.trend === "positive"
           ? "최근 거래가 늘어나는 중"
           : statuses.trend === "neutral"
             ? "최근 거래가 이전과 비슷함"
             : "최근 거래가 줄어드는 중",
       tone: statuses.trend,
+      evaluable: evaluable.trend,
     },
   ];
 
+  // 평가할 수 없는 지표는 세지 않는다. 그러지 않으면 자료가 없는 기업이
+  // "긍정 2개"를 받아 보통 등급으로 올라간다.
   const positiveCount = signals.filter(
-    (item) => item.tone === "positive",
+    (item) => item.evaluable && item.tone === "positive",
   ).length;
-  const cautionCount = signals.filter((item) => item.tone === "caution").length;
+  const cautionCount = signals.filter(
+    (item) => item.evaluable && item.tone === "caution",
+  ).length;
+  const evaluableCount = signals.filter((item) => item.evaluable).length;
+
+  // 평가할 수 있는 지표가 절반도 안 되면 활동 수준을 말하지 않는다.
+  const dataSufficient = evaluableCount >= MIN_EVALUABLE;
 
   // 여섯 신호 중 몇 개가 긍정인지로 활동 수준을 정한다.
-  const activityLevel =
-    positiveCount >= 4 ? "활발" : positiveCount >= 2 ? "보통" : "저조";
+  const activityLevel = !dataSufficient
+    ? "데이터 부족"
+    : positiveCount >= 4
+      ? "활발"
+      : positiveCount >= 2
+        ? "보통"
+        : "저조";
 
   return {
+    // 원본 개수는 그대로 남긴다. 화면과 LLM 프롬프트가 "무엇을 근거로 판단했는지"
+    // 를 같이 보여줄 수 있어야 한다.
+    transactionCount: items.length,
+    totalAmount,
     previousCustomersCount: previousCustomers,
     recentCustomersCount: recentCustomers,
     customerCount,
@@ -377,8 +453,11 @@ export function calculateSignals(items: Transaction[]) {
 
     statuses,
     signals,
+    evaluable,
     positiveCount,
     cautionCount,
+    evaluableCount,
+    dataSufficient,
     activityLevel,
   };
 }

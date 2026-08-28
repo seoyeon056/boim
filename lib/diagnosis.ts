@@ -13,7 +13,7 @@ import type { Visibility } from "@/lib/visibility";
 // 그래서 문장도 계산된 값에서 고른다.
 
 export type Diagnosis = {
-  grade: string; // 성장 잠재력 등급 (A/B+/B/C)
+  grade: string; // 성장 잠재력 등급 (A/B+/B/C, 표본이 모자라면 "데이터 부족")
   headline: string; // 결론 한 문장
   external: string; // 외부에서 본 모습
   internal: string; // 내부에서 본 모습
@@ -70,6 +70,10 @@ function describeExternal(visibility: Visibility): string {
 // ── 내부에서 본 모습 ─────────────────────────────────────────
 // 거래처 확보(증가율)와 관계 유지(재구매율)는 다른 이야기다. 네 조합을 각각 쓴다.
 function describeInternal(signals: Signals): string {
+  if (!signals.dataSufficient) {
+    return `제출한 내부 거래가 ${signals.transactionCount}건뿐이라 성장 신호를 판단하지 않았습니다. 거래 내역이 더 쌓인 뒤에 다시 보시는 편이 정확합니다.`;
+  }
+
   const growing = signals.statuses.customerGrowthRate === "positive";
   const repeating = signals.statuses.repeatPurchaseRate === "positive";
   const flow = `${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로`;
@@ -129,6 +133,12 @@ function describeRisk(signals: Signals): string {
 // 이 제품의 존재 이유는 "밖에서 안 보이는데 안에서는 움직이는 기업"을 드러내는
 // 것이다. 그 경우를 먼저 판별한다.
 function buildHeadline(visibility: Visibility, signals: Signals): string {
+  // 내부 자료가 없으면 "내부에서는 신호가 있다/없다"를 말할 수 없다.
+  // 이 경우에는 외부에서 본 것만 말하고 판단은 미룬다.
+  if (!signals.dataSufficient) {
+    return `제출한 내부 거래가 ${signals.transactionCount}건이라 성장 신호를 판단하기에 부족합니다. 외부 공개 정보는 가시성 ${visibility.visibilityScore}점 수준으로 확인됩니다.`;
+  }
+
   const invisible = visibility.visibilityScore < 30;
   const growing = signals.statuses.customerGrowthRate === "positive";
   const repeating = signals.statuses.repeatPurchaseRate === "positive";
@@ -170,18 +180,26 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
 // (별도 기준을 새로 만들지 않고 statuses 판정을 그대로 집계한다.)
 // 등급의 근거를 화면에서 그대로 안내한다.
 // 긍정/주의 판정은 lib/signals.ts 가 정하고, 여기서는 개수를 등급으로만 옮긴다.
-export const GRADE_NOTE = "여섯 신호 중 긍정 판정을 받은 개수로 매깁니다.";
+export const GRADE_NOTE =
+  "여섯 신호 중 긍정 판정을 받은 개수로 매깁니다. 표본이 모자라 판단을 보류한 신호는 세지 않습니다.";
 
 export const GRADE_CRITERIA = [
   { grade: "A", rule: "긍정 5개 이상" },
   { grade: "B+", rule: "긍정 4개" },
   { grade: "B", rule: "긍정 2~3개" },
   { grade: "C", rule: "긍정 1개 이하" },
+  { grade: "—", rule: "평가 가능한 신호 3개 미만이면 등급 없음" },
 ];
 
 // 지표가 여섯으로 늘었으므로 구간도 여섯 기준으로 나눈다.
 // (셋일 때 쓰던 3개=A / 2개=B+ 를 그대로 두면 절반만 긍정이어도 B+ 가 된다.)
 export function gradeFromSignals(signals: Signals): string {
+  // 평가할 수 있는 지표가 모자라면 등급을 만들지 않는다. 긍정 개수만 보면
+  // 거래가 없는 기업도 집중도 0%·지속성 100%로 "긍정 2개"를 받아 B가 된다.
+  if (!signals.dataSufficient) {
+    return "데이터 부족";
+  }
+
   const positives = signals.positiveCount;
 
   if (positives >= 5) return "A";
@@ -204,6 +222,10 @@ export const POSITIVE_CRITERIA = [
 ];
 
 function buildInternalCardNote(signals: Signals): string {
+  if (!signals.dataSufficient) {
+    return "거래 자료가 부족해 성장 신호를 판단하지 않았습니다.";
+  }
+
   const isGrowing = signals.statuses.customerGrowthRate === "positive";
   const isRepeating = signals.statuses.repeatPurchaseRate === "positive";
 

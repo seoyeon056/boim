@@ -15,6 +15,9 @@ export type MetricCardData = {
   // 긍정 / 보통 / 주의. 예전에는 caution 하나로만 갈랐는데, 지표가 여섯으로
   // 늘면서 "나쁘진 않지만 좋지도 않다"를 표현할 자리가 필요해졌다.
   tone: "positive" | "neutral" | "caution";
+  // 표본이 모자라 판정하지 않은 지표. 0%나 100%를 그대로 띄우면 계산된 값처럼
+  // 읽히므로 숫자 자리를 "—"로 비운다. (이전 기간이 없는데 증가율 0%가 뜨던 문제)
+  evaluable?: boolean;
 };
 
 function MetricCard({
@@ -25,6 +28,7 @@ function MetricCard({
   description,
   status,
   tone,
+  evaluable = true,
   delay = 0,
 }: MetricCardData & { delay?: number }) {
   const shown = useCountUp(target, 900 + delay);
@@ -46,9 +50,15 @@ function MetricCard({
               tone === "caution" ? "#8A4A2E" : tone === "neutral" ? "#5B554E" : "#2A211C",
           }}
         >
-          {prefix}
-          {shown}
-          {suffix}
+          {evaluable ? (
+            <>
+              {prefix}
+              {shown}
+              {suffix}
+            </>
+          ) : (
+            <span className="text-zinc-300">—</span>
+          )}
         </span>
         <span className="mt-2.5 text-[13px] text-zinc-500">{description}</span>
       </div>

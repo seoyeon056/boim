@@ -31,7 +31,14 @@ const AI_STEPS = [
 // 무엇을 해야 하는지를 두 문장으로 쓴다. 사람이 읽고 다음 행동을 정할 수 있어야
 // 문장이 값을 한다.
 function pickNotable(signals: Signals): string {
-  const caution = signals.signals.find((item) => item.tone === "caution");
+  // 평가할 수 있는 지표가 모자라면 무엇 하나를 골라 말할 근거가 없다.
+  if (!signals.dataSufficient) {
+    return `제출한 거래가 ${signals.transactionCount}건이라 지표를 판단하기에 부족합니다. 거래 내역을 더 담은 문서를 올리시면 같은 기준으로 다시 계산해 드립니다.`;
+  }
+
+  const caution = signals.signals.find(
+    (item) => item.evaluable && item.tone === "caution",
+  );
 
   // 주의 신호가 있으면 그것부터 말한다. 좋은 소식보다 먼저 알아야 할 일이다.
   if (caution) {
@@ -50,7 +57,9 @@ function pickNotable(signals: Signals): string {
   }
 
   // 주의가 없으면 가장 뚜렷한 긍정을 짚는다.
-  const best = signals.signals.find((item) => item.tone === "positive");
+  const best = signals.signals.find(
+    (item) => item.evaluable && item.tone === "positive",
+  );
   if (best) {
     return `${best.label} ${best.prefix}${best.value}${best.suffix}로 ${best.note}가 확인됩니다. 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
   }
@@ -97,6 +106,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transactionCount,
+          dataSufficient: signals.dataSufficient,
           positiveCount: signals.positiveCount,
           cautionCount: signals.cautionCount,
           activityLevel: signals.activityLevel,
@@ -104,7 +114,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
           signals: signals.signals.map((item) => ({
             label: item.label,
             value: item.value,
-            tone: statusLabel[item.tone],
+            tone: item.evaluable ? statusLabel[item.tone] : "판단 보류",
             note: item.note,
           })),
         }),
@@ -127,8 +137,9 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
     prefix: item.prefix,
     suffix: item.suffix,
     description: item.detail,
-    status: statusLabel[item.tone],
+    status: item.evaluable ? statusLabel[item.tone] : "판단 보류",
     tone: item.tone,
+    evaluable: item.evaluable,
   }));
 
   return (
@@ -144,21 +155,35 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
 
       {/* 여섯 신호를 세어 한 줄로 요약한다. LLM이 아니라 규칙이 정한 결론이다. */}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-zinc-100 bg-zinc-50 px-4 py-3">
-        <span className="text-[13px] text-zinc-500">
-          긍정 신호{" "}
-          <span className="font-mono font-semibold text-emerald-600">
-            {signals.positiveCount}개
+        {signals.dataSufficient ? (
+          <>
+            <span className="text-[13px] text-zinc-500">
+              긍정 신호{" "}
+              <span className="font-mono font-semibold text-emerald-600">
+                {signals.positiveCount}개
+              </span>
+            </span>
+            <span className="text-[13px] text-zinc-500">
+              주의 신호{" "}
+              <span className="font-mono font-semibold text-amber-600">
+                {signals.cautionCount}개
+              </span>
+            </span>
+            <span className="text-[13px] font-semibold text-zinc-900">
+              → 내부 거래 활동: {signals.activityLevel}
+            </span>
+          </>
+        ) : (
+          /* 판정한 지표가 모자랄 때 개수를 세어 보여주면 "긍정 2개"처럼
+             계산이 끝난 것으로 읽힌다. 무엇이 모자란지를 대신 말한다. */
+          <span className="text-[13px] text-zinc-500">
+            거래 {signals.transactionCount}건으로는 여섯 지표 중{" "}
+            <span className="font-mono font-semibold text-zinc-900">
+              {signals.evaluableCount}개
+            </span>
+            만 평가할 수 있어 활동 수준을 판단하지 않았습니다.
           </span>
-        </span>
-        <span className="text-[13px] text-zinc-500">
-          주의 신호{" "}
-          <span className="font-mono font-semibold text-amber-600">
-            {signals.cautionCount}개
-          </span>
-        </span>
-        <span className="text-[13px] font-semibold text-zinc-900">
-          → 내부 거래 활동: {signals.activityLevel}
-        </span>
+        )}
       </div>
 
       {/* 이 수치가 어디서 나왔는지 밝힌다. 예전에는 예시 데이터가 실제 분석

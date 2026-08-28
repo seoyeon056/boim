@@ -175,7 +175,11 @@ export function ShareContent({
     ? signals.signals.map((item, index) => ({
         no: String(index + 1),
         label: item.label,
-        value: `${item.prefix}${item.value}${item.suffix}`,
+        // 표본이 모자라 판정하지 않은 지표는 수치를 적지 않는다. 인쇄물에 0%가
+        // 남으면 계산이 끝난 값으로 읽힌다.
+        value: item.evaluable
+          ? `${item.prefix}${item.value}${item.suffix}`
+          : "—",
         tone: item.tone,
         note: item.detail,
       }))
