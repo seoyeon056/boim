@@ -161,7 +161,7 @@ export function ShareContent({
         label: "외부 가시성 점수",
         value: visibility ? `${visibility.visibilityScore}점 / 100점` : "-",
       },
-      { label: "내부 활동 수준", value: diagnosis ? diagnosis.grade : "-" },
+      { label: "성장 잠재력 등급", value: diagnosis ? diagnosis.grade : "-" },
     ],
     [
       { label: "분석 기관", value: "BO:IM AI 진단 시스템" },

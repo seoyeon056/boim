@@ -1,6 +1,6 @@
 import {
-  ACTIVITY_CRITERIA,
-  ACTIVITY_NOTE,
+  GRADE_CRITERIA,
+  GRADE_NOTE,
   POSITIVE_CRITERIA,
 } from "@/lib/diagnosis";
 
@@ -9,9 +9,9 @@ import {
 export function GradeBadge({ grade }: { grade: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-zinc-400">활동 수준</span>
+      <span className="text-[11px] text-zinc-400">성장 잠재력</span>
       <span
-        className="text-[18px] font-semibold leading-none"
+        className="font-mono text-[22px] font-medium leading-none"
         style={{ color: "#1D4533" }}
       >
         {grade}
@@ -22,7 +22,7 @@ export function GradeBadge({ grade }: { grade: string }) {
         <span
           tabIndex={0}
           role="button"
-          aria-label="활동 수준 기준 보기"
+          aria-label="등급 기준 보기"
           className="flex h-4 w-4 cursor-default items-center justify-center rounded-full bg-zinc-100 text-[10px] font-semibold text-zinc-500"
         >
           i
@@ -42,13 +42,13 @@ export function GradeBadge({ grade }: { grade: string }) {
           </span>
 
           <span className="mt-2.5 block border-t border-zinc-700 pt-2.5">
-            {ACTIVITY_NOTE}
+            {GRADE_NOTE}
           </span>
 
           <span className="mt-1.5 flex flex-col gap-0.5">
-            {ACTIVITY_CRITERIA.map((item) => (
+            {GRADE_CRITERIA.map((item) => (
               <span key={item.grade} className="flex gap-2">
-                <span className="w-10 shrink-0">{item.grade}</span>
+                <span className="w-8 shrink-0 font-mono">{item.grade}</span>
                 <span className="text-zinc-300">{item.rule}</span>
               </span>
             ))}

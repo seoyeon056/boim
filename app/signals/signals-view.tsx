@@ -11,6 +11,7 @@ import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
 import { LoadingSteps } from "@/app/loading-steps";
 import { GradeBadge } from "@/app/grade-badge";
+import { gradeFromSignals } from "@/lib/diagnosis";
 
 const statusLabel = {
   positive: "긍정",
@@ -136,7 +137,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         <span className="text-[11px] text-zinc-400">
           내부 거래에서 확인한 지표
         </span>
-        <GradeBadge grade={signals.activityLevel} />
+        <GradeBadge grade={gradeFromSignals(signals)} />
       </div>
 
       <MetricCards metrics={metrics} />

@@ -13,7 +13,7 @@ import type { Visibility } from "@/lib/visibility";
 // 그래서 문장도 계산된 값에서 고른다.
 
 export type Diagnosis = {
-  grade: string; // 활동 수준(활발/보통/저조)
+  grade: string; // 성장 잠재력 등급 (A/B+/B/C)
   headline: string; // 결론 한 문장
   external: string; // 외부에서 본 모습
   internal: string; // 내부에서 본 모습
@@ -168,16 +168,27 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
 
 // 성장 잠재력 등급: 긍정 판정을 받은 신호 개수로 정한다.
 // (별도 기준을 새로 만들지 않고 statuses 판정을 그대로 집계한다.)
-// 활동 수준(활발/보통/저조)의 근거를 화면에서 그대로 안내한다.
-// 판정 기준은 lib/signals.ts 가 정하고, 여기서는 문구만 맞춘다.
-export const ACTIVITY_NOTE =
-  "여섯 신호 중 긍정 판정을 받은 개수로 정합니다.";
+// 등급의 근거를 화면에서 그대로 안내한다.
+// 긍정/주의 판정은 lib/signals.ts 가 정하고, 여기서는 개수를 등급으로만 옮긴다.
+export const GRADE_NOTE = "여섯 신호 중 긍정 판정을 받은 개수로 매깁니다.";
 
-export const ACTIVITY_CRITERIA = [
-  { grade: "활발", rule: "긍정 4개 이상" },
-  { grade: "보통", rule: "긍정 2~3개" },
-  { grade: "저조", rule: "긍정 0~1개" },
+export const GRADE_CRITERIA = [
+  { grade: "A", rule: "긍정 5개 이상" },
+  { grade: "B+", rule: "긍정 4개" },
+  { grade: "B", rule: "긍정 2~3개" },
+  { grade: "C", rule: "긍정 1개 이하" },
 ];
+
+// 지표가 여섯으로 늘었으므로 구간도 여섯 기준으로 나눈다.
+// (셋일 때 쓰던 3개=A / 2개=B+ 를 그대로 두면 절반만 긍정이어도 B+ 가 된다.)
+export function gradeFromSignals(signals: Signals): string {
+  const positives = signals.positiveCount;
+
+  if (positives >= 5) return "A";
+  if (positives === 4) return "B+";
+  if (positives >= 2) return "B";
+  return "C";
+}
 
 // 무엇이 "긍정"인지 밝히지 않으면 활동 수준이 어디서 나온 값인지 알 수 없다.
 export const POSITIVE_CRITERIA = [
@@ -216,7 +227,7 @@ export function buildDiagnosis(
   signals: Signals,
 ): Diagnosis {
   return {
-    grade: signals.activityLevel,
+    grade: gradeFromSignals(signals),
     headline: buildHeadline(visibility, signals),
     external: describeExternal(visibility),
     internal: describeInternal(signals),
