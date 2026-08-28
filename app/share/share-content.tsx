@@ -17,7 +17,7 @@ import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 
 // LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
-const STATUS_TEXT = { positive: "긍정", caution: "주의" } as const;
+const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" } as const;
 
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
@@ -164,30 +164,15 @@ export function ShareContent({
   ];
 
   // 판정(긍정/주의)은 lib/signals.ts 계산 결과를 그대로 쓴다.
+  // 지표 정의는 lib/signals.ts 가 갖는다. 리포트는 계산 결과를 옮겨 적는다.
   const growthSignals = signals
-    ? [
-        {
-          no: "1",
-          label: "거래처 증가율",
-          value: `${signals.customerGrowthRate > 0 ? "+" : ""}${signals.customerGrowthRate}%`,
-          tone: signals.statuses.customerGrowthRate,
-          note: `이전 ${signals.previousCustomersCount}곳 → 현재 ${signals.recentCustomersCount}곳`,
-        },
-        {
-          no: "2",
-          label: "재구매율",
-          value: `${signals.repeatPurchaseRate}%`,
-          tone: signals.statuses.repeatPurchaseRate,
-          note: "두 번 이상 거래한 비율",
-        },
-        {
-          no: "3",
-          label: "최대 거래처 집중도",
-          value: `${signals.topCustomerConcentration}%`,
-          tone: signals.statuses.topCustomerConcentration,
-          note: `${signals.topCustomerName} 의존도`,
-        },
-      ]
+    ? signals.signals.map((item, index) => ({
+        no: String(index + 1),
+        label: item.label,
+        value: `${item.prefix}${item.value}${item.suffix}`,
+        tone: item.tone,
+        note: item.detail,
+      }))
     : [];
 
   return (
