@@ -54,6 +54,45 @@ function normalize(value) {
   return value.replace(/\s+/g, "").toLowerCase();
 }
 
+// 3.6MB 다운로드인데 국내 공공 API라 Vercel 빌드 리전(미국 iad1)에서 느리다.
+// 2026-08-28 배포에서 60초 타임아웃에 걸려 인덱스가 빈 채로 구워졌고, 그러면
+// 런타임이 콜드스타트마다 이 파일을 직접 받는 원래 상태로 되돌아간다.
+// 넉넉히 잡고 한 번 더 시도한다. 그래도 안 되면 호출부가 폴백한다.
+const DOWNLOAD_TIMEOUT_MS = 120000;
+const DOWNLOAD_ATTEMPTS = 2;
+
+async function downloadCorpCodeZip(key) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    const startedAt = Date.now();
+
+    try {
+      const response = await fetch(
+        `https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${key}`,
+        { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) },
+      );
+      if (!response.ok) {
+        throw new Error(`corpCode 요청 실패: HTTP ${response.status}`);
+      }
+
+      const zip = Buffer.from(await response.arrayBuffer());
+      // 또 실패하면 얼마나 걸려서 실패했는지가 로그에 있어야 판단이 된다.
+      console.log(
+        `corpCode 내려받기 완료: ${(zip.length / 1e6).toFixed(1)}MB, ${Date.now() - startedAt}ms`,
+      );
+      return zip;
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `corpCode 내려받기 ${attempt}차 실패(${Date.now() - startedAt}ms): ${error.message}`,
+      );
+    }
+  }
+
+  throw lastError;
+}
+
 async function main() {
   await readLocalEnv();
   const key = process.env.DART_SEARCH_KEY;
@@ -64,15 +103,7 @@ async function main() {
     return;
   }
 
-  const response = await fetch(
-    `https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${key}`,
-    { signal: AbortSignal.timeout(60000) },
-  );
-  if (!response.ok) {
-    throw new Error(`corpCode 요청 실패: HTTP ${response.status}`);
-  }
-
-  const xml = inflateSingleEntryZip(Buffer.from(await response.arrayBuffer()));
+  const xml = inflateSingleEntryZip(await downloadCorpCodeZip(key));
   const lines = [];
 
   for (const [, entry] of xml.matchAll(/<list>([\s\S]*?)<\/list>/g)) {
@@ -95,6 +126,9 @@ async function main() {
 
 main().catch((error) => {
   // 인덱스가 없어도 런타임이 직접 내려받으므로 빌드를 막지 않는다.
+  // 타입을 string 으로 못 박아 두는 게 중요하다. 빈 문자열 리터럴로 두면
+  // dart-corp-codes.ts 의 if (!DART_CORPS) 를 지난 뒤 타입이 never 로 좁혀져
+  // .split() 에서 타입 체크가 깨진다. 빌드를 막지 않으려던 폴백이 빌드를 막는다.
   console.warn("DART 인덱스 생성 실패 — 런타임 조회로 대체한다:", error.message);
   return writeFile(OUT, EMPTY_INDEX, "utf8");
 });

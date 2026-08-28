@@ -1,7 +1,8 @@
 import { josa } from "@/lib/korean";
 import {
-  CONCENTRATION_CAUTION,
-  REPEAT_CAUTION,
+  CONCENTRATION_WATCH,
+  CONTINUITY_GOOD,
+  REPEAT_GOOD,
   type Signals,
 } from "@/lib/signals";
 import type { Visibility } from "@/lib/visibility";
@@ -12,7 +13,7 @@ import type { Visibility } from "@/lib/visibility";
 // 그래서 문장도 계산된 값에서 고른다.
 
 export type Diagnosis = {
-  grade: string; // 성장 잠재력 등급
+  grade: string; // 활동 수준(활발/보통/저조)
   headline: string; // 결론 한 문장
   external: string; // 외부에서 본 모습
   internal: string; // 내부에서 본 모습
@@ -167,37 +168,29 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
 
 // 성장 잠재력 등급: 긍정 판정을 받은 신호 개수로 정한다.
 // (별도 기준을 새로 만들지 않고 statuses 판정을 그대로 집계한다.)
-// 화면에서 "이 등급이 왜 나왔는지" 안내할 때 같은 문구를 쓰도록 내보낸다.
-export const GRADE_CRITERIA = [
-  { grade: "A", rule: "세 지표가 모두 긍정" },
-  { grade: "B+", rule: "두 지표가 긍정" },
-  { grade: "B", rule: "한 지표가 긍정" },
-  { grade: "C", rule: "긍정 지표 없음" },
+// 활동 수준(활발/보통/저조)의 근거를 화면에서 그대로 안내한다.
+// 판정 기준은 lib/signals.ts 가 정하고, 여기서는 문구만 맞춘다.
+export const ACTIVITY_NOTE =
+  "여섯 신호 중 긍정 판정을 받은 개수로 정합니다.";
+
+export const ACTIVITY_CRITERIA = [
+  { grade: "활발", rule: "긍정 4개 이상" },
+  { grade: "보통", rule: "긍정 2~3개" },
+  { grade: "저조", rule: "긍정 0~1개" },
 ];
 
-export const GRADE_NOTE =
-  "세 지표 중 긍정 판정을 받은 개수로 매깁니다.";
-
-// "긍정"이 무엇인지 밝히지 않으면 등급이 어디서 나온 값인지 알 수 없다.
+// 무엇이 "긍정"인지 밝히지 않으면 활동 수준이 어디서 나온 값인지 알 수 없다.
 export const POSITIVE_CRITERIA = [
-  { label: "거래처 증가율", rule: "0%보다 크면 긍정" },
-  { label: "재구매율", rule: `${REPEAT_CAUTION}% 이상이면 긍정` },
+  { label: "거래처 증가율", rule: "이전 기간보다 늘면 긍정" },
+  { label: "거래금액 증가율", rule: "이전 기간보다 늘면 긍정" },
+  { label: "재구매율", rule: `${REPEAT_GOOD}% 이상이면 긍정` },
   {
     label: "최대 거래처 집중도",
-    rule: `${CONCENTRATION_CAUTION}% 미만이면 긍정`,
+    rule: `${CONCENTRATION_WATCH}% 미만이면 긍정`,
   },
+  { label: "거래 지속성", rule: `${CONTINUITY_GOOD}% 이상이면 긍정` },
+  { label: "최근 추세", rule: "직전 구간보다 늘면 긍정" },
 ];
-
-export function gradeFromSignals(signals: Signals): string {
-  const positives = Object.values(signals.statuses).filter(
-    (tone) => tone === "positive",
-  ).length;
-
-  if (positives >= 3) return "A";
-  if (positives === 2) return "B+";
-  if (positives === 1) return "B";
-  return "C";
-}
 
 function buildInternalCardNote(signals: Signals): string {
   const isGrowing = signals.statuses.customerGrowthRate === "positive";
@@ -223,7 +216,7 @@ export function buildDiagnosis(
   signals: Signals,
 ): Diagnosis {
   return {
-    grade: gradeFromSignals(signals),
+    grade: signals.activityLevel,
     headline: buildHeadline(visibility, signals),
     external: describeExternal(visibility),
     internal: describeInternal(signals),

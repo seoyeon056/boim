@@ -12,6 +12,7 @@ import { readUploadedSignals } from "@/lib/uploaded-signals";
 
 const statusLabel = {
   positive: "긍정",
+  neutral: "보통",
   caution: "주의",
 };
 
@@ -40,23 +41,11 @@ export function CompareView({
   const externalMetrics = visibility.metrics;
 
   // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
-  const internalSignals = [
-    {
-      label: "거래처 증가율",
-      value: `${signalResult.customerGrowthRate > 0 ? "+" : ""}${signalResult.customerGrowthRate}%`,
-      tone: signalResult.statuses.customerGrowthRate,
-    },
-    {
-      label: "재구매율",
-      value: `${signalResult.repeatPurchaseRate}%`,
-      tone: signalResult.statuses.repeatPurchaseRate,
-    },
-    {
-      label: "최대 거래처 집중도",
-      value: `${signalResult.topCustomerConcentration}%`,
-      tone: signalResult.statuses.topCustomerConcentration,
-    },
-  ];
+  const internalSignals = signalResult.signals.map((item) => ({
+    label: item.label,
+    value: `${item.prefix}${item.value}${item.suffix}`,
+    tone: item.tone,
+  }));
 
   const diagnosis = buildDiagnosis(visibility, signalResult);
 
