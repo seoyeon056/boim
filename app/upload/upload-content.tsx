@@ -60,6 +60,9 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   // 카테고리별 오류 메시지 (파일 제한 위반 시 표시)
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
+  // 파일을 끌어다 올린 카테고리 (테두리 강조용)
+  const [dragOver, setDragOver] = useState<Record<string, boolean>>({});
+
   // 저장 완료 여부 / 하단 안내 메시지
   const [isSaved, setIsSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,12 +84,14 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     setErrors((prev) => ({ ...prev, [categoryId]: message }));
   }
 
-  function handleFileChange(
+  // 파일 선택(input)과 드래그 앤 드롭이 같은 검사를 거치도록 한곳에 모았다.
+  // inputEl 은 드롭으로 들어온 경우 null 이다.
+  function addFiles(
     categoryId: string,
-    event: React.ChangeEvent<HTMLInputElement>,
+    fileList: FileList | File[] | null,
+    inputEl: HTMLInputElement | null,
   ) {
-    const input = event.target;
-    const fileList = input.files;
+    const input = inputEl ?? { value: "" };
 
     // 파일 선택을 취소한 경우: 기존 선택을 그대로 둔다.
     if (!fileList || fileList.length === 0) return;
@@ -159,6 +164,24 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   }
 
   // 파일 하나만 선택 목록에서 제거한다.
+  function handleFileChange(
+    categoryId: string,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    addFiles(categoryId, event.target.files, event.target);
+  }
+
+  function setDragging(categoryId: string, on: boolean) {
+    setDragOver((prev) => (prev[categoryId] === on ? prev : { ...prev, [categoryId]: on }));
+  }
+
+  function handleDrop(categoryId: string, event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(categoryId, false);
+    if (states[categoryId].files.length >= MAX_FILES_PER_CATEGORY) return;
+    addFiles(categoryId, event.dataTransfer?.files ?? null, null);
+  }
+
   function removeFile(categoryId: string, fileIndex: number) {
     setStates((prev) => {
       const current = prev[categoryId];
@@ -412,6 +435,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           const error = errors[category.id];
           const inputId = `file-${category.id}`;
           const atMax = state.files.length >= MAX_FILES_PER_CATEGORY;
+          const isDragging = dragOver[category.id] === true && !atMax;
 
           return (
             <div
@@ -451,18 +475,35 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                 {/* 파일 선택 (label과 input을 연결해 접근성 확보) */}
                 <label
                   htmlFor={inputId}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setDragging(category.id, true);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragging(category.id, true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    setDragging(category.id, false);
+                  }}
+                  onDrop={(event) => handleDrop(category.id, event)}
                   className={`flex items-center justify-between gap-2 rounded-md border border-dashed px-4 py-3 text-xs transition-colors ${
                     atMax
                       ? "cursor-not-allowed border-zinc-100 text-zinc-300"
-                      : "cursor-pointer border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
+                      : isDragging
+                        ? "cursor-copy border-zinc-900 bg-zinc-50 text-zinc-900"
+                        : "cursor-pointer border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-zinc-600"
                   }`}
                 >
                   <span>
                     {atMax
                       ? "최대 5개 도달"
-                      : state.files.length > 0
-                        ? "파일 더 추가"
-                        : "파일 선택"}
+                      : isDragging
+                        ? "여기에 놓으면 첨부됩니다"
+                        : state.files.length > 0
+                          ? "파일 더 추가 · 끌어다 놓기"
+                          : "파일 선택 · 끌어다 놓기"}
                   </span>
                   <span className="text-zinc-300">PDF · PNG · JPG · XLSX</span>
                   <input

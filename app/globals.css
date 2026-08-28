@@ -119,12 +119,12 @@ header {
 .text-zinc-500 { color: #736861; }
 .text-zinc-600 { color: #55483f; }
 .text-zinc-900 { color: #2a211c; }
-.bg-zinc-900 { background-color: #1d4533; }
-.hover\:bg-zinc-700:hover { background-color: #163526; }
-.border-zinc-900 { border-color: #1d4533; }
+.bg-zinc-900 { background-color: #2a211c; }
+.hover\:bg-zinc-700:hover { background-color: #3f342c; }
+.border-zinc-900 { border-color: #2a211c; }
 
 input[type="checkbox"], input[type="radio"] {
-  accent-color: #1d4533;
+  accent-color: #2a211c;
 }
 
 @keyframes stepEnter {
@@ -137,7 +137,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 :focus-visible {
-  outline: 2px solid #1d4533;
+  outline: 2px solid #2a211c;
   outline-offset: 2px;
 }
 
