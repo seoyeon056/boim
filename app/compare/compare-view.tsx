@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { withCompany } from "@/lib/company-link";
 import { buildDiagnosis } from "@/lib/diagnosis";
+import { GradeBadge } from "@/app/grade-badge";
 import StepShell from "@/app/step-shell";
 import type { Signals } from "@/lib/signals";
 import type { Visibility } from "@/lib/visibility";
@@ -74,6 +75,7 @@ export function CompareView({
       title="외부와 내부 비교"
       description="공개 데이터와 내부 분석 결과를 함께 비교합니다."
       backTo={withCompany("/signals", companyId)}
+      companyId={companyId}
       footer={
         <Link
           href={withCompany("/share", visibility.companyId)}
@@ -184,9 +186,13 @@ export function CompareView({
 
       {/* BO:IM 진단 */}
       <div className="mt-4 rounded-lg border border-zinc-100 bg-white p-5">
-        <p className="text-xs font-semibold tracking-tight text-zinc-400">
-          BO:IM 진단
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-xs font-semibold tracking-tight text-zinc-400">
+            BO:IM 진단
+          </p>
+
+          <GradeBadge grade={diagnosis.grade} />
+        </div>
 
         {/* 한 줄 요약 — 강조 */}
         <div className="mt-3 rounded-md bg-zinc-900 px-4 py-3">

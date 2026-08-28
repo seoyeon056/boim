@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { withCompany } from "@/lib/company-link";
 
 // 상단 가로 절차 바 + 짧은 좌측 표제 + 하단 우측 액션.
 // 진단 흐름(STEP 1~6)의 모든 화면이 이 껍데기를 공유한다.
@@ -12,16 +13,18 @@ interface StepShellProps {
   backLabel?: string;
   aside?: ReactNode;
   footer?: ReactNode;
+  // 지나온 단계로 되돌아갈 때 진단 중인 기업을 유지한다.
+  companyId?: string;
   children: ReactNode;
 }
 
 const FLOW_STEPS = [
-  { no: "01", label: "기업 검색" },
-  { no: "02", label: "외부 가시성" },
-  { no: "03", label: "문서 업로드" },
-  { no: "04", label: "분석 결과 확인" },
-  { no: "05", label: "성장 신호·비교" },
-  { no: "06", label: "진단서 발급" },
+  { no: "01", label: "기업 검색", path: "/company" },
+  { no: "02", label: "외부 가시성", path: "/visibility" },
+  { no: "03", label: "문서 업로드", path: "/upload" },
+  { no: "04", label: "분석 결과 확인", path: "/review" },
+  { no: "05", label: "성장 신호·비교", path: "/signals" },
+  { no: "06", label: "진단서 발급", path: "/share" },
 ];
 
 export default function StepShell({
@@ -32,6 +35,7 @@ export default function StepShell({
   backLabel = "이전으로",
   aside,
   footer,
+  companyId,
   children,
 }: StepShellProps) {
   const currentNo = step.replace(/[^0-9]/g, "").padStart(2, "0");
@@ -51,40 +55,57 @@ export default function StepShell({
           const done = flowStep.no < currentNo;
           const active = flowStep.no === currentNo;
 
+          const numberClass = `font-mono text-[11px] tabular-nums ${
+            active
+              ? "font-bold text-zinc-900"
+              : done
+                ? "text-zinc-400"
+                : "text-zinc-300"
+          }`;
+          const labelClass = `hidden truncate text-[11px] md:inline ${
+            active
+              ? "font-medium text-zinc-900"
+              : done
+                ? "text-zinc-400"
+                : "text-zinc-300"
+          }`;
+          const barStyle = {
+            borderTop: `2px solid ${
+              active ? "#16191B" : done ? "#BDB5A6" : "transparent"
+            }`,
+            marginTop: -1,
+          };
+
+          const content = (
+            <>
+              <span className={numberClass}>{flowStep.no}</span>
+              <span className={labelClass}>{flowStep.label}</span>
+            </>
+          );
+
+          // 지나온 단계만 눌러서 돌아갈 수 있다.
+          // 앞선 단계는 필요한 데이터가 아직 없어서 열어두지 않는다.
+          if (!done) {
+            return (
+              <div
+                key={flowStep.no}
+                className="flex flex-1 items-center gap-2 py-3"
+                style={barStyle}
+              >
+                {content}
+              </div>
+            );
+          }
+
           return (
-            <div
+            <Link
               key={flowStep.no}
-              className="flex flex-1 items-center gap-2 py-3"
-              style={{
-                borderTop: `2px solid ${
-                  active ? "#16191B" : done ? "#BDB5A6" : "transparent"
-                }`,
-                marginTop: -1,
-              }}
+              href={withCompany(flowStep.path, companyId)}
+              className="flex flex-1 items-center gap-2 py-3 transition-colors hover:bg-zinc-50"
+              style={barStyle}
             >
-              <span
-                className={`font-mono text-[11px] tabular-nums ${
-                  active
-                    ? "font-bold text-zinc-900"
-                    : done
-                      ? "text-zinc-400"
-                      : "text-zinc-300"
-                }`}
-              >
-                {flowStep.no}
-              </span>
-              <span
-                className={`hidden truncate text-[11px] md:inline ${
-                  active
-                    ? "font-medium text-zinc-900"
-                    : done
-                      ? "text-zinc-400"
-                      : "text-zinc-300"
-                }`}
-              >
-                {flowStep.label}
-              </span>
-            </div>
+              {content}
+            </Link>
           );
         })}
       </nav>

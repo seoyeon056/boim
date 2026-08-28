@@ -1,5 +1,5 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css');
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Nanum+Myeongjo:wght@400;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+KR:wght@300;400;500;600&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -17,6 +17,8 @@
   --color-border: var(--border);
   --font-sans: 'Pretendard', sans-serif;
   --font-serif: 'Instrument Serif', serif;
+  /* 진단서 본문용 한글 명조. 나눔명조보다 획이 가늘고 자간이 정돈돼 있다. */
+  --font-document: 'Noto Serif KR', 'Nanum Myeongjo', serif;
   --font-mono: 'JetBrains Mono', 'Pretendard', monospace;
 }
 
@@ -74,16 +76,19 @@ body {
   animation: fadeIn 0.4s ease-out both;
 }
 
+/* 배경 글씨가 천천히 떠오르며 흘러간다.
+   이동 폭이 24px 라 사실상 멈춰 보였다. 폭을 키우고 좌우로도 흔든다. */
 @keyframes signalDrift {
-  0%   { transform: translate3d(0, 12px, 0); opacity: 0; }
-  15%  { opacity: 0.9; }
-  85%  { opacity: 0.9; }
-  100% { transform: translate3d(24px, -40px, 0); opacity: 0; }
+  0%   { transform: translate3d(0, 40px, 0); opacity: 0; }
+  12%  { opacity: 0.85; }
+  50%  { transform: translate3d(28px, -30px, 0); }
+  88%  { opacity: 0.85; }
+  100% { transform: translate3d(-16px, -110px, 0); opacity: 0; }
 }
 
 .signal-word {
   animation-name: signalDrift;
-  animation-timing-function: linear;
+  animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
 }
 
@@ -183,7 +188,12 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 /* 액센트(번트 앰버)로 링크·강조에 색을 남긴다 */
-a { color: inherit; }
+/* @layer base 안에 둬야 한다. 레이어 밖에 두면 Tailwind 의 유틸리티
+   (@layer utilities 안의 .text-white 등)보다 우선순위가 높아져서,
+   <Link> 로 만든 어두운 버튼의 흰 글자가 배경색을 물려받아 사라진다. */
+@layer base {
+  a { color: inherit; }
+}
 a.accent, .text-accent { color: #8a4a2e; }
 a.accent:hover { color: #5e3122; }
 

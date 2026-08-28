@@ -1,12 +1,24 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CompanyResult, searchCompanies } from "@/lib/api";
 import { withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
+import { LoadingSteps } from "@/app/loading-steps";
+
+const DIAGNOSE_STEPS = [
+  "기업 정보를 확인하는 중",
+  "뉴스·특허·채용 공개 정보를 모으는 중",
+  "외부 가시성 점수를 분석하는 중",
+];
 
 export default function CompanyPage() {
+  const router = useRouter();
+
+  // 다음 화면이 서버에서 외부 API 를 부르는 동안 빈 화면이 보이지 않도록,
+  // 이동을 시작하면서 무엇을 하고 있는지 알려준다.
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [query, setQuery] = useState("");
   const [companies, setCompanies] = useState<CompanyResult[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<CompanyResult | null>(
@@ -174,18 +186,32 @@ export default function CompanyPage() {
                 )}
               </button>
 
-              {isSelected && (
-                <Link
-                  href={withCompany("/visibility", company.id)}
+              {isSelected && !isDiagnosing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDiagnosing(true);
+                    router.push(withCompany("/visibility", company.id));
+                  }}
                   className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
                 >
                   이 기업 진단하기
-                </Link>
+                </button>
+              )}
+
+              {isSelected && isDiagnosing && (
+                <div className="mt-3">
+                  <LoadingSteps
+                    title="외부 가시성 점수 분석 중"
+                    steps={DIAGNOSE_STEPS}
+                  />
+                </div>
               )}
             </div>
           );
         })}
       </div>
+
     </StepShell>
   );
 }

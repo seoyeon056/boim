@@ -51,6 +51,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
       title="외부 가시성 점수"
       description={`${visibility.company}의 뉴스·특허·채용·공시 공개 정보를 기반으로 측정합니다.`}
       backTo="/company"
+      companyId={visibility.companyId}
       footer={
         <Link
           href={withCompany("/upload", visibility.companyId)}
