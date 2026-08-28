@@ -5,10 +5,17 @@
 // 하면 됐지만, 서버리스는 콜드스타트마다 처음부터 다시 한다. 배포본에서 기업
 // 검색이 30초가 걸린 이유다.
 //
-// 결과는 lib/external/dart-index.generated.ts 로 나간다(gitignore 대상).
+// 결과는 lib/external/dart-index.generated.ts 로 나간다. 이 파일은 저장소에
+// 커밋돼 있다. OpenDART가 점검 중이면(status 800, HTTP 200으로 온다) 빌드가
+// 목록을 못 받아 인덱스가 빈 채로 배포되고, 그러면 기업 검색이 데모 30곳으로
+// 폴백한다. 심사 중에 그 일이 나면 손쓸 방법이 없어 빌드를 네트워크에
+// 의존시키지 않기로 했다.
+//
+// 목록을 갱신하려면 한국에서 `npm run prepare-dart` 를 돌리고 생성된 파일을
+// 커밋한다. 빌드 때도 이 스크립트가 그대로 돌아 최신 목록이 있으면 덮어쓴다.
 // 키가 없거나 받기에 실패하면 빈 문자열을 쓰고, 런타임이 예전처럼 직접
 // 내려받는 경로로 넘어간다.
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
@@ -22,10 +29,26 @@ const OUT = join(root, "lib", "external", "dart-index.generated.ts");
 const EMPTY_INDEX = `export const DART_CORPS: string = "";
 `;
 
+// 목록을 못 받았을 때 호출한다. 저장소에 커밋된 인덱스가 이미 있으면 그대로
+// 둔다. 예전에는 무조건 빈 인덱스로 덮어썼는데, 그러면 OpenDART 점검 시간에
+// 배포가 한 번 돌기만 해도 커밋해 둔 11만 건이 날아가고 기업 검색이 데모
+// 30곳으로 폴백한다. 빌드가 실패하는 것보다 나쁜 결과다.
+async function keepCommittedIndexOrEmpty() {
+  try {
+    if ((await readFile(OUT, "utf8")).trim() !== EMPTY_INDEX.trim()) {
+      console.log("커밋된 DART 인덱스를 그대로 쓴다");
+      return;
+    }
+  } catch {
+    // 파일이 없으면 아래에서 빈 인덱스를 만든다.
+  }
+
+  await writeFile(OUT, EMPTY_INDEX, "utf8");
+}
+
 // .env.local 은 Next 가 읽지만 이 스크립트는 직접 읽어야 한다.
 async function readLocalEnv() {
   try {
-    const { readFile } = await import("node:fs/promises");
     const raw = await readFile(join(root, ".env.local"), "utf8");
     for (const line of raw.split(/\r?\n/)) {
       const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)$/);
@@ -98,7 +121,7 @@ async function main() {
   const key = process.env.DART_SEARCH_KEY;
 
   if (!key) {
-    await writeFile(OUT, EMPTY_INDEX, "utf8");
+    await keepCommittedIndexOrEmpty();
     console.log("DART 키가 없어 인덱스를 비워 둔다 (런타임이 직접 내려받는다)");
     return;
   }
@@ -130,5 +153,5 @@ main().catch((error) => {
   // dart-corp-codes.ts 의 if (!DART_CORPS) 를 지난 뒤 타입이 never 로 좁혀져
   // .split() 에서 타입 체크가 깨진다. 빌드를 막지 않으려던 폴백이 빌드를 막는다.
   console.warn("DART 인덱스 생성 실패 — 런타임 조회로 대체한다:", error.message);
-  return writeFile(OUT, EMPTY_INDEX, "utf8");
+  return keepCommittedIndexOrEmpty();
 });
