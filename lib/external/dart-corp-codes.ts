@@ -1,4 +1,5 @@
 import zlib from "node:zlib";
+import { toKoreanLetterSpelling } from "@/lib/korean";
 import { DART_CORPS } from "@/lib/external/dart-index.generated";
 
 // DART 공시 API(list.json)는 회사명으로 바로 조회가 안 되고 8자리 고유번호
@@ -45,8 +46,14 @@ function inflateSingleEntryZip(zip: Buffer): string {
 
 // DART의 corp_name은 "주식회사 엘지생활건강"처럼 법인격 표기가 붙거나 빠진다.
 // 공백과 앞뒤 법인격 표기만 걷어내고 비교한다.
+//
+// 알파벳은 한글 소리로 바꾼다. DART는 등록된 표기 그대로 저장해서 "LG생활건강",
+// "LG이노텍"처럼 알파벳으로 들어 있는데, 사람은 "엘지생활건강"이라고 친다.
+// 그대로 비교하면 상장사가 통째로 안 걸리고 이름만 비슷한 재단·SPC가 나온다
+// (실측: "엘지생활건강" → 엘지생활건강미래화장품육성재단 1건, 본체 없음).
+// 양쪽을 같은 표기로 맞추므로 알파벳으로 쳐도 그대로 걸린다.
 function normalizeCompanyName(value: string): string {
-  return value
+  return toKoreanLetterSpelling(value)
     .replace(/\s+/g, "")
     .replace(/^(주식회사|㈜|\(주\))/, "")
     .replace(/(주식회사|㈜|\(주\))$/, "")
@@ -129,13 +136,17 @@ function buildIndexFromBaked(): CorpCodeIndex | null {
 
   for (const line of DART_CORPS.split("\n")) {
     // 정규화이름 | 고유번호 | 원래이름 | 종목코드 (탭 구분)
-    const [normalized, code, name, stockCode] = line.split("\t");
+    // 첫 칸은 빌드 스크립트가 만든 것이라 여기 규칙(법인격 표기 제거, 알파벳
+    // 한글 표기)을 거치지 않았다. 그대로 열쇠로 쓰면 조회하는 쪽과 어긋나므로
+    // 원래 이름에서 다시 정규화한다. 11만 건에 약 150ms(실측), 프로세스당 한 번이다.
+    const [, code, name, stockCode] = line.split("\t");
     if (!code || !name) {
       continue;
     }
     all.push({ corpCode: code, corpName: name, stockCode: stockCode ?? "" });
-    if (!byName.has(normalized)) {
-      byName.set(normalized, code);
+    const key = normalizeCompanyName(name);
+    if (!byName.has(key)) {
+      byName.set(key, code);
     }
     byCode.set(code, name);
   }

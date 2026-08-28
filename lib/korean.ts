@@ -60,3 +60,29 @@ export function josa(word: string, pair: string): string {
   const [withFinal, withoutFinal] = pair.split("/");
   return `${word}${hasFinalConsonant(word) ? withFinal : withoutFinal}`;
 }
+
+
+// 알파벳 이니셜로 된 회사명을 한글 소리로 바꾼다(LG -> 엘지, SK -> 에스케이).
+// 특허(출원인명)와 DART(기업명) 양쪽에서 필요하다. 등록처는 한글로 적어 두는데
+// 사람은 알파벳으로도 치고, 반대로 DART는 알파벳으로 적어 두는데 사람은 한글로
+// 친다. 양쪽을 이 표기로 맞추면 어느 쪽으로 쳐도 걸린다.
+//
+// 특정 대기업 몇 개를 하드코딩하는 대신 26자 전체를 매핑해서, 앞으로 나올 어떤
+// 이니셜형 회사명에도 적용된다.
+const KOREAN_LETTER_NAMES: Record<string, string> = {
+  A: "에이", B: "비", C: "씨", D: "디", E: "이", F: "에프", G: "지",
+  H: "에이치", I: "아이", J: "제이", K: "케이", L: "엘", M: "엠", N: "엔",
+  O: "오", P: "피", Q: "큐", R: "알", S: "에스", T: "티", U: "유",
+  V: "브이", W: "더블유", X: "엑스", Y: "와이", Z: "지",
+};
+
+export function toKoreanLetterSpelling(value: string): string {
+  // 알파벳이 없으면 건드리지 않는다(우리 데이터 대부분이 여기 해당한다).
+  if (!/[a-zA-Z]/.test(value)) {
+    return value;
+  }
+
+  return [...value.toUpperCase()]
+    .map((char) => KOREAN_LETTER_NAMES[char] ?? char)
+    .join("");
+}
