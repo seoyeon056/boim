@@ -115,32 +115,50 @@ function describeRisk(signals: Signals): string {
   return `매출이 여러 거래처에 나뉘어 있고 가장 큰 ${name}도 ${share}%에 그쳐, 특정 거래처 의존 위험은 낮습니다.`;
 }
 
+// ── 한 줄 결론 ───────────────────────────────────────────────
+// /compare 상단 강조 박스에 들어간다. 구간 이름만 조합하면 "외부 정보는
+// 부족하지만 내부 거래에서는 부분적인 성장 신호가 확인되었습니다"처럼 어느
+// 기업에나 붙는 말이 된다. 실제 수치를 근거로 넣고, 이 서비스가 무엇을
+// 보여주려 하는지가 드러나게 쓴다.
+//
+// 이 제품의 존재 이유는 "밖에서 안 보이는데 안에서는 움직이는 기업"을 드러내는
+// 것이다. 그 경우를 먼저 판별한다.
 function buildHeadline(visibility: Visibility, signals: Signals): string {
-  const externalPart =
-    visibility.visibilityScore < 30
-      ? "외부 정보는 부족하지만"
-      : visibility.visibilityScore < 60
-        ? "외부 정보만으로는 판단이 어렵지만"
-        : "외부 정보에도 흔적이 일부 남아 있고";
+  const invisible = visibility.visibilityScore < 30;
+  const growing = signals.statuses.customerGrowthRate === "positive";
+  const repeating = signals.statuses.repeatPurchaseRate === "positive";
+  const share = signals.topCustomerConcentration;
+  const name = signals.topCustomerName ?? "최대 거래처";
 
-  const isGrowing = signals.statuses.customerGrowthRate === "positive";
-  const isRepeating = signals.statuses.repeatPurchaseRate === "positive";
+  const evidence = growing
+    ? `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘었고`
+    : `재구매율이 ${signals.repeatPurchaseRate}%로 이어지고`;
 
-  const internalPart =
-    isGrowing && isRepeating
-      ? "내부 거래에서는 뚜렷한 성장 신호가 확인되었습니다."
-      : isGrowing || isRepeating
-        ? "내부 거래에서는 부분적인 성장 신호가 확인되었습니다."
-        : "내부 거래에서도 뚜렷한 성장 신호는 확인되지 않았습니다.";
+  // 밖에서는 안 보이는데 안에서는 신호가 있다 — 이 서비스가 겨냥한 상황이다.
+  if (invisible && (growing || repeating)) {
+    const risk =
+      share >= 40
+        ? ` 다만 매출의 ${share}%가 ${name} 한 곳에 몰려 있어 이 신호를 그대로 성장으로 읽기는 이릅니다.`
+        : "";
+    return `공개 정보로는 확인되지 않던 활동이 내부 거래에서는 드러납니다. ${evidence} 있습니다.${risk}`;
+  }
 
-  const topCustomer = signals.topCustomerName ?? "최대 거래처";
+  // 밖에서도 안에서도 흔적이 없다.
+  if (invisible) {
+    return `외부 공개 정보와 내부 거래 어느 쪽에서도 최근 성장 활동이 확인되지 않습니다. 자료가 더 쌓인 뒤에 다시 보시는 편이 정확합니다.`;
+  }
 
-  const riskPart =
-    signals.statuses.topCustomerConcentration === "caution"
-      ? ` 다만 ${topCustomer}에 대한 거래처 의존 위험은 함께 살펴봐야 합니다.`
-      : ` 최대 거래처인 ${topCustomer}의 비중은 ${signals.topCustomerConcentration}%로 부담이 크지 않습니다.`;
+  // 밖에는 보이는데 안이 비어 있다 — 노출과 실제 거래가 어긋난 경우다.
+  if (!growing && !repeating) {
+    return `외부에는 공개 정보가 남아 있지만(가시성 ${visibility.visibilityScore}점), 제출한 내부 거래에서는 성장 신호가 확인되지 않습니다.`;
+  }
 
-  return `${externalPart}, ${internalPart}${riskPart}`;
+  // 양쪽 다 신호가 있다.
+  const risk =
+    share >= 40
+      ? ` 다만 ${name} 비중이 ${share}%로 높아 성장의 기반이 한쪽에 쏠려 있습니다.`
+      : ` ${name} 비중도 ${share}%로 특정 거래처 쏠림이 크지 않습니다.`;
+  return `외부 공개 정보와 내부 거래 양쪽에서 활동이 확인됩니다. ${evidence} 있습니다.${risk}`;
 }
 
 // 성장 잠재력 등급: 긍정 판정을 받은 신호 개수로 정한다.
