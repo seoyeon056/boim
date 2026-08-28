@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run prepare-pdf && next dev",
-    "build": "npm run prepare-pdf && next build",
+    "dev": "npm run prepare-pdf && npm run prepare-dart && next dev",
+    "build": "npm run prepare-pdf && npm run prepare-dart && next build",
     "start": "next start",
     "lint": "eslint",
-    "prepare-pdf": "node scripts/copy-pdf-assets.mjs"
+    "prepare-pdf": "node scripts/copy-pdf-assets.mjs",
+    "prepare-dart": "node scripts/build-dart-index.mjs"
   },
   "dependencies": {
     "next": "16.2.11",
