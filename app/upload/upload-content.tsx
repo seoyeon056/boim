@@ -119,8 +119,6 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
-  // 참고 자료는 기본으로 접어 둔다. 펼치는 건 사용자가 정한다.
-  const [showReference, setShowReference] = useState(false);
 
   // 파일 input DOM을 기억해 두었다가 값 초기화(input.value = "")에 사용
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -368,13 +366,6 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   const uploadedCount = documentCategories.filter(
     (category) => states[category.id].status === "uploaded",
   ).length;
-  const missingCount = documentCategories.filter(
-    (category) => states[category.id].status === "missing",
-  ).length;
-  const handledCount = uploadedCount + missingCount;
-  const progressPercent = Math.round(
-    (handledCount / documentCategories.length) * 100,
-  );
 
   async function handleAnalyze() {
     if (!allHandled) {
@@ -440,28 +431,36 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           const atMax = state.files.length >= MAX_FILES_PER_CATEGORY;
           const isDragging = dragOver[category.id] === true && !atMax;
 
+          // 파일이 들어오면 카드 전체가 초록으로 물든다. 배지 하나만 바뀌면
+          // 무엇이 채워졌는지 한눈에 안 들어온다.
+          const filled = state.status === "uploaded";
+          const skipped = state.status === "missing";
+
           return (
             <div
               key={category.id}
-              className={`rounded-lg bg-white transition-colors ${
-                category.primary
-                  ? "border-2 border-zinc-900"
-                  : "border border-zinc-100 hover:border-zinc-200"
+              className={`rounded-lg transition-all duration-500 ${
+                filled
+                  ? "border border-[#C8D7C6] bg-[#F4F8F4] shadow-[0_1px_3px_rgba(29,69,51,0.06)]"
+                  : skipped
+                    ? "border border-zinc-100 bg-zinc-50/60"
+                    : category.primary
+                      ? "border-2 border-zinc-300 bg-white hover:border-zinc-500"
+                      : "border border-zinc-100 bg-white hover:border-zinc-200"
               }`}
             >
               {/* 헤더: 문서 종류 + 상태 배지 */}
-              <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3">
+              <div
+                className={`flex items-start justify-between gap-3 border-b px-4 py-3 transition-colors duration-500 ${
+                  filled ? "border-[#DCE7DC]" : "border-zinc-100"
+                }`}
+              >
                 {/* 문서 용도는 물음표에 마우스를 올렸을 때만 보여준다.
                     카드가 3열이라 설명을 항상 펼쳐두면 제목이 밀린다. */}
                 <div className="flex min-w-0 items-center gap-1.5">
                   <p className="truncate text-[15px] font-semibold text-zinc-900">
                     {category.name}
                   </p>
-                  {category.primary && (
-                    <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                      가장 중요
-                    </span>
-                  )}
                   <div className="group relative flex items-center">
                     <span
                       aria-hidden="true"
@@ -476,11 +475,13 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                     </div>
                   </div>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[12px] font-medium ${badge.className}`}
-                >
-                  {badge.text}
-                </span>
+                {badge && (
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[12px] font-medium transition-colors duration-500 ${badge.className}`}
+                  >
+                    {badge.text}
+                  </span>
+                )}
               </div>
 
               <div className="px-4 py-3">
@@ -640,25 +641,27 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   }
 
   // 상태에 따른 배지 텍스트/스타일
+  // 배지는 세 가지다. 비어 있을 때 "미선택"이라고 붙이면 못 끝낸 일처럼
+  // 읽혀서, 그때는 아무 말도 하지 않는다.
   function statusBadge(categoryId: string) {
     const state = states[categoryId];
     if (state.status === "missing") {
-      return { text: "없음", className: "bg-amber-50 text-amber-600" };
+      return { text: "없음", className: "bg-zinc-100 text-zinc-500" };
     }
     if (state.status === "uploaded") {
       return {
         text: `${state.files.length}개`,
-        className: "bg-emerald-50 text-emerald-600",
+        className: "bg-[#E3EBE4] text-[#1D4533]",
       };
     }
-    return { text: "미선택", className: "bg-zinc-100 text-zinc-400" };
+    return null;
   }
 
   return (
     <StepShell
       step="Step 03"
       title="내부 문서 업로드"
-      description="거래명세서 하나만 있어도 진단이 됩니다. 없는 문서는 ‘해당 문서 없음’으로 넘기세요."
+      description="거래명세서 하나만 있어도 진단이 됩니다. 가지고 계신 것만 올리세요."
       backTo={withCompany("/visibility", companyId)}
       companyId={companyId}
       footer={
@@ -697,27 +700,35 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           나머지 모두 없음으로 표시
         </button>
         <span className="text-[13px] text-zinc-500">
-          여섯 칸을 모두 채웁니다. 거래처 5곳·6개월치 거래 20건을 실제로
-          인식합니다.
+          문서가 없어도 괜찮습니다. 샘플로 거래처 5곳·6개월치 거래 20건을
+          실제로 분석해 볼 수 있습니다.
         </span>
       </div>
 
-      {/* 카테고리 진행 상황 — 문서 순서대로 한 칸씩 채운다.
-          업로드 완료 / 해당 문서 없음 / 미선택이 색으로 구분된다. */}
+      {/* 카테고리 진행 상황.
+          퍼센트와 "N/6 항목 완료"를 나란히 두면 채워야 할 진도표처럼 읽혔다.
+          지금 무엇이 준비됐는지만 말하고, 몇 개가 남았는지는 세지 않는다. */}
       <div className="rounded-md border border-zinc-100 bg-white px-4 py-3.5">
         <div className="mb-2.5 flex items-center justify-between">
-          <span
-            className={`font-mono text-xs font-medium tabular-nums transition-colors duration-500 ${
-              handledCount === documentCategories.length
-                ? "text-zinc-900"
-                : "text-zinc-500"
-            }`}
-          >
-            {progressPercent}%
+          <span className="text-[13px] text-zinc-600">
+            {uploadedCount > 0
+              ? `문서 ${uploadedCount}종 · 파일 ${totalFileCount}개 준비됐습니다`
+              : "가지고 계신 문서만 올리면 됩니다"}
           </span>
-          <span className="text-[13px] text-zinc-500">
-            {handledCount}/{documentCategories.length} 항목 완료
-          </span>
+          {allHandled && (
+            <span className="flex items-center gap-1 text-[13px] text-[#1D4533]">
+              <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                <path
+                  d="M3 8.5l3 3 7-7"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              분석할 수 있습니다
+            </span>
+          )}
         </div>
 
         <div className="flex gap-1.5">
@@ -758,76 +769,36 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           })}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-100 pt-2.5 text-[13px] text-zinc-500">
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_UPLOADED }}
-            />
-            업로드 {uploadedCount}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_MISSING }}
-            />
-            해당 문서 없음 {missingCount}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-4 rounded-sm"
-              style={{ backgroundColor: GAUGE_TRACK }}
-            />
-            미선택 {documentCategories.length - handledCount}
-          </span>
-        </div>
       </div>
 
-      {/* ── 거래 실적 ─────────────────────────────────────── */}
-      <div className="mt-6 flex items-baseline justify-between gap-4">
+      {/* ── 두 묶음을 접지 않고 나란히 둔다 ────────────────
+          접어 두면 "열어서 채워야 할 게 또 있다"로 읽힌다. 전부 보이되
+          채운 칸과 빈 칸이 색으로 갈리게 해서, 목록이 아니라 진행 상태로
+          보이게 한다. */}
+      <div className="mt-7">
         <div className="flex items-baseline gap-2">
-          <h2 className="text-[15px] font-semibold text-zinc-900">
-            거래 실적
-          </h2>
+          <h2 className="text-[15px] font-semibold text-zinc-900">거래 실적</h2>
           <span className="text-[13px] text-zinc-500">
             이미 일어난 거래입니다. 성장 신호를 여기서 계산합니다
           </span>
         </div>
-        <span className="font-mono text-[13px] text-zinc-400">
-          {analyzedHandled}/{RECORD_CATEGORIES.length}
-        </span>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {RECORD_CATEGORIES.map(renderCategoryCard)}
+        </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {RECORD_CATEGORIES.map(renderCategoryCard)}
-      </div>
-
-      {/* ── 참고 자료 — 기본으로 접어 둔다 ────────────────── */}
-      <div className="mt-5 rounded-lg border border-zinc-100 bg-white">
-        <button
-          type="button"
-          onClick={() => setShowReference((open) => !open)}
-          aria-expanded={showReference}
-          className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left"
-        >
-          <span className="flex items-baseline gap-2">
-            <span className="text-[15px] font-semibold text-zinc-900">
-              거래 흐름
-            </span>
-            <span className="text-[13px] text-zinc-500">
-              앞으로 일어날 거래와 그 조건입니다. 진단서에 근거로 함께 실립니다
-            </span>
+      <div className="mt-7">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-[15px] font-semibold text-zinc-900">거래 흐름</h2>
+          <span className="text-[13px] text-zinc-500">
+            앞으로 일어날 거래와 그 조건입니다. 진단서에 근거로 함께 실립니다
           </span>
-          <span className="shrink-0 font-mono text-[13px] text-zinc-400">
-            {showReference ? "닫기 −" : "열기 +"}
-          </span>
-        </button>
+        </div>
 
-        {showReference && (
-          <div className="grid grid-cols-1 gap-2 border-t border-zinc-100 p-3 md:grid-cols-2 xl:grid-cols-3">
-            {FLOW_CATEGORIES.map(renderCategoryCard)}
-          </div>
-        )}
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {FLOW_CATEGORIES.map(renderCategoryCard)}
+        </div>
       </div>
 
       {/* 전체 선택 용량 */}
