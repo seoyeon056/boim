@@ -70,13 +70,18 @@ export async function findCompaniesByName(query: string): Promise<Company[]> {
     return [];
   }
 
-  // 키가 없거나 DART 호출이 실패하면 null 이 와서 아래 데모 데이터로 넘어간다.
-  const fromDart = await searchDartCompanies(query.trim());
-  if (fromDart) {
-    return fromDart;
-  }
-
-  return companies.filter((item) =>
+  const fromDemo = companies.filter((item) =>
     normalizeCompanyName(item.name).includes(normalizedQuery),
   );
+
+  // 키가 없거나 DART 호출이 실패하면 null 이 온다.
+  const fromDart = await searchDartCompanies(query.trim());
+
+  // 빈 배열(= 조회는 됐지만 결과 없음)도 값이라서, 예전처럼 `if (fromDart)`로
+  // 갈라내면 데모 데이터로 영영 못 넘어간다. 그래서 "한빛정밀"처럼 DART에 없는
+  // 데모 기업 30곳이 전부 검색되지 않았다.
+  //
+  // 실제 기업을 먼저 보여주고, 데모 기업은 뒤에 붙인다. 데모 기업만 내부 거래
+  // 데이터(data/transactions.ts)를 가지고 있어서 진단 흐름을 끝까지 볼 수 있다.
+  return fromDart ? [...fromDart, ...fromDemo] : fromDemo;
 }
