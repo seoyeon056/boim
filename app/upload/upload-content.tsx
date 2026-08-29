@@ -32,7 +32,7 @@ const GAUGE_TRACK = "#E9E2DD";
 //
 // 거래명세서는 2026-03 ~ 08 여섯 달치다. 한 달치만 넣으면 관측 기간이 짧아
 // lib/signals.ts 가 "데이터 부족"으로 판정하고 등급이 안 나온다(실제로 그렇다).
-// 여섯 칸을 다 채워서 거래처 5곳 · 거래 20건 · 여섯 달이 나온다.
+// 여섯 칸을 다 채워서 거래처 6곳 · 거래 21건 · 여섯 달이 나온다.
 const SAMPLE_FILES: { category: string; names: string[] }[] = [
   {
     category: "transaction-statement",
@@ -700,7 +700,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           나머지 모두 없음으로 표시
         </button>
         <span className="text-[13px] text-zinc-500">
-          문서가 없어도 괜찮습니다. 샘플로 거래처 5곳·6개월치 거래 20건을
+          문서가 없어도 괜찮습니다. 샘플로 거래처 6곳·6개월치 거래 21건을
           실제로 분석해 볼 수 있습니다.
         </span>
       </div>

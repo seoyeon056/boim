@@ -24,7 +24,14 @@ export type Diagnosis = {
 // ── 외부에서 본 모습 ─────────────────────────────────────────
 // 점수 구간만 보고 문장을 고르면 어떤 기업이든 같은 말이 나온다. 어느 축에 흔적이
 // 남았고 어느 축이 비었는지를 실제 건수로 짚어야 기업마다 다른 문장이 된다.
-type Axis = { label: string; count: number; unit: string };
+// isAtLeast는 "적어도 이만큼"이라는 뜻이다. 화면 카드가 "300건 이상"이라고
+// 적는 값을 진단서만 "300건"으로 쓰면, 하한을 확정 수치로 바꿔 말하게 된다.
+type Axis = {
+  label: string;
+  count: number;
+  unit: string;
+  isAtLeast?: boolean;
+};
 
 // 확인하지 못한 축은 found/missing 어느 쪽도 아니다. "없다"고 쓰면 거짓이 되고,
 // 건수를 쓰면 0을 사실인 양 말하게 된다. 그래서 세 번째 갈래로 둔다.
@@ -35,8 +42,20 @@ function presentAxes(visibility: Visibility): {
 } {
   const unavailable = new Set(visibility.unavailable);
   const axes = [
-    { key: "news", label: "뉴스", count: visibility.newsCount, unit: "건" },
-    { key: "patent", label: "특허", count: visibility.patentCount, unit: "건" },
+    {
+      key: "news",
+      label: "뉴스",
+      count: visibility.newsCount,
+      unit: "건",
+      isAtLeast: visibility.newsCountIsAtLeast,
+    },
+    {
+      key: "patent",
+      label: "특허",
+      count: visibility.patentCount,
+      unit: "건",
+      isAtLeast: visibility.patentCountIsAtLeast,
+    },
     { key: "job", label: "채용 공고", count: visibility.jobCount, unit: "건" },
     {
       key: "disclosure",
@@ -57,7 +76,11 @@ function presentAxes(visibility: Visibility): {
 
 function listAxes(axes: Axis[], withCount: boolean): string {
   return axes
-    .map((axis) => (withCount ? `${axis.label} ${axis.count.toLocaleString()}${axis.unit}` : axis.label))
+    .map((axis) =>
+      withCount
+        ? `${axis.label} ${axis.count.toLocaleString()}${axis.unit}${axis.isAtLeast ? " 이상" : ""}`
+        : axis.label,
+    )
     .join("·");
 }
 
@@ -171,8 +194,10 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
   const share = signals.topCustomerConcentration;
   const name = signals.topCustomerName ?? "최대 거래처";
 
+  // 두 갈래 모두 뒤에 " 있습니다."가 붙는다. 어미를 맞춰 두지 않으면
+  // "늘었고 있습니다"처럼 문장이 깨진다.
   const evidence = growing
-    ? `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘었고`
+    ? `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘고`
     : `재구매율이 ${signals.repeatPurchaseRate}%로 이어지고`;
 
   // 밖에서는 안 보이는데 안에서는 신호가 있다 — 이 서비스가 겨냥한 상황이다.
