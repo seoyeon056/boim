@@ -117,10 +117,10 @@ export default function StepShell({
           <span className="font-mono text-[12px] font-bold uppercase tracking-[0.3em] text-zinc-500">
             {step}
           </span>
-          <h1 className="mt-2.5 text-[26px] font-bold leading-tight tracking-tight text-zinc-900">
+          <h1 className="mt-2.5 text-[30px] font-bold leading-[1.2] tracking-tight text-zinc-900">
             {title}
           </h1>
-          <p className="mt-3 text-[15px] leading-[1.7] text-zinc-600">
+          <p className="mt-3 text-[16px] leading-[1.75] text-zinc-700">
             {description}
           </p>
           {aside && (
