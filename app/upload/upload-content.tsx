@@ -709,14 +709,13 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           퍼센트와 "N/6 항목 완료"를 나란히 두면 채워야 할 진도표처럼 읽혔다.
           지금 무엇이 준비됐는지만 말하고, 몇 개가 남았는지는 세지 않는다. */}
       <div className="rounded-md border border-zinc-100 bg-white px-4 py-3.5">
-        <div className="mb-2.5 flex items-center justify-between">
+        <div className="mb-2.5 flex items-center gap-1.5">
           <span className="text-[13px] text-zinc-600">
-            {uploadedCount > 0
-              ? `문서 ${uploadedCount}종 · 파일 ${totalFileCount}개 준비됐습니다`
-              : "가지고 계신 문서만 올리면 됩니다"}
+            {uploadedCount > 0 ? "파일 준비 완료" : "문서 준비 현황"}
           </span>
           {allHandled && (
             <span className="flex items-center gap-1 text-[13px] text-[#1D4533]">
+              <span aria-hidden className="text-zinc-300">,</span>
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
                 <path
                   d="M3 8.5l3 3 7-7"
@@ -726,7 +725,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                   strokeLinejoin="round"
                 />
               </svg>
-              분석할 수 있습니다
+              분석 가능
             </span>
           )}
         </div>

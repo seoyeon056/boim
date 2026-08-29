@@ -388,9 +388,16 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     ).length;
   }
 
-  // 기본(손볼 게 있으면 펼침)과 사용자가 뒤집었는지를 XOR 한다.
+  // 기본으로 펼쳐 두는 줄: 손볼 게 있는 줄 + 맨 첫 줄.
+  // 데모 데이터엔 확인 필요 항목이 없어 아무것도 안 펼쳐지는데, 그러면 이 줄이
+  // 접었다 펼 수 있다는 걸 사용자가 눈치채지 못한다. 첫 줄만 열어 둔다.
+  function defaultRowOpen(txIndex: number, pending: number): boolean {
+    return pending > 0 || txIndex === 0;
+  }
+
+  // 기본값과 사용자가 뒤집었는지를 XOR 한다.
   function isRowOpen(txIndex: number, pending: number): boolean {
-    return flippedRows.has(txIndex) !== pending > 0;
+    return flippedRows.has(txIndex) !== defaultRowOpen(txIndex, pending);
   }
 
   function toggleRow(txIndex: number) {
@@ -412,7 +419,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       new Set(
         transactions
           .map((tx, index) => ({ index, pending: pendingOf(tx, index) }))
-          .filter(({ pending }) => pending > 0 !== open)
+          .filter(({ index, pending }) => defaultRowOpen(index, pending) !== open)
           .map(({ index }) => index),
       ),
     );
@@ -591,7 +598,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
             type="button"
             onClick={() => toggleRow(txIndex)}
             aria-expanded={open}
-            className={`flex w-full items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition-colors ${
+            className={`group flex w-full items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition-colors ${
               pending > 0
                 ? "border-amber-200 hover:border-amber-300"
                 : "border-zinc-100 hover:border-zinc-300"
@@ -599,7 +606,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
           >
             <span
               aria-hidden
-              className={`shrink-0 font-mono text-[13px] text-zinc-400 transition-transform ${
+              className={`inline-block w-6 shrink-0 text-center font-mono text-[28px] leading-none text-zinc-500 transition-transform group-hover:text-zinc-800 ${
                 open ? "rotate-90" : ""
               }`}
             >
