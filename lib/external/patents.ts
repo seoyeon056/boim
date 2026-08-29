@@ -11,32 +11,31 @@
 // 완전 정확 일치는 아니라("한빛정밀" 검색에 무관한 "한빛티앤아이"가 걸림, 아마
 // 형태소 단위로 느슨하게 매칭하는 듯) 응답의 Applicant 필드가 검색어를 실제로
 // 포함하는 항목만 다시 한번 걸러서 센다.
+import { toKoreanLetterSpelling } from "@/lib/korean";
+
 function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, "").toLowerCase();
 }
 
-// 한국 특허는 출원인명이 한글로 등록된다("LG CNS" → "주식회사 엘지씨엔에스").
-// LG/SK/CJ/KT처럼 영문 이니셜로 된 회사명은 알파벳을 한 글자씩 소리나는 대로
-// 한글로 바꾼 형태로 검색해야 실제로 걸린다(실측: LG→엘지, SK→에스케이,
-// KT→케이티 전부 실제 출원인명에서 확인됨). 특정 대기업 몇 개를 하드코딩하는
-// 대신 알파벳 26자 전체를 매핑해서, 앞으로 나올 어떤 이니셜형 회사명에도 적용된다.
-const KOREAN_LETTER_NAMES: Record<string, string> = {
-  A: "에이", B: "비", C: "씨", D: "디", E: "이", F: "에프", G: "지",
-  H: "에이치", I: "아이", J: "제이", K: "케이", L: "엘", M: "엠", N: "엔",
-  O: "오", P: "피", Q: "큐", R: "알", S: "에스", T: "티", U: "유",
-  V: "브이", W: "더블유", X: "엑스", Y: "와이", Z: "지",
-};
+// 이 검색은 완전 정확일치가 아니라서 응답에 들어 있는 총건수(TotalSearchCount)를
+// 그대로 쓰면 안 된다. 실측:
+//
+//   한빛정밀: 총 12건이 잡히지만 전부 무관한 출원인 → 실제 0건
+//   포스코:   총 52,561건, 앞 30건은 전부 일치하는데 끝 30건은 0건 일치
+//             (포스코플랜텍이 "주식회사 플랜텍"으로 등록돼 있다)
+//
+// 앞부분만 표본으로 보고 "나머지도 깨끗하겠지"라고 넘기면 포스코 특허가
+// 52,561건으로 나온다. 그래서 추론하지 않고 실제로 받아서 센다.
+//
+// 상한까지는 전부 받아 정확한 건수를 내고, 상한을 넘으면 받은 만큼만
+// "N건 이상"으로 말한다. 이 서비스의 대상인 중소기업은 대부분 상한 안에
+// 들어와서 추론 없는 정확한 값이 나온다(실측: 한빛정밀 12건 0.3초,
+// 동일기연 106건 9.5초 / 상한을 넘는 건 아모텍 885건·대기업 정도다).
+const PAGE_SIZE = 30;
+const MAX_COUNTED = 300;
 
-function toKoreanLetterSpelling(value: string): string {
-  return [...value.toUpperCase()]
-    .map((char) => KOREAN_LETTER_NAMES[char] ?? char)
-    .join("");
-}
-
-// KIPRIS가 한 번에 내려주는 최대 건수(500 초과 요청해도 500까지만 옴, 실측 확인).
-// 페이지가 이 값만큼 꽉 찼다는 건 뒤에 더 있을 수도 있다는 뜻이라, 그럴 땐
-// "정확히 N건"이 아니라 "N건 이상"으로 표시해야 한다.
-const MAX_DOCS_PER_PAGE = 500;
+// 페이지당 1~5초인데 느린 날이 있다. 상한까지 받아도 실측 10초 안쪽이었다.
+const REQUEST_TIMEOUT_MS = 15000;
 
 export type PatentCountResult = {
   count: number;
@@ -52,11 +51,10 @@ export async function fetchPatentCount(
     return null;
   }
 
-  // 영문 알파벳이 하나라도 있으면 한글 발음으로 바꿔서 검색한다.
-  // 이미 한글인 회사명(우리 실제 데이터 대부분)은 이 매핑을 거쳐도 그대로다.
-  const searchWord = /[a-zA-Z]/.test(companyName)
-    ? toKoreanLetterSpelling(companyName)
-    : companyName;
+  // 한국 특허는 출원인명이 한글로 등록된다("LG CNS" → "주식회사 엘지씨엔에스").
+  // 알파벳이 섞여 있으면 한글 발음으로 바꿔서 검색해야 실제로 걸린다
+  // (실측: LG→엘지, SK→에스케이, KT→케이티 전부 실제 출원인명에서 확인됨).
+  const searchWord = toKoreanLetterSpelling(companyName);
 
   const url = new URL(
     "http://plus.kipris.or.kr/openapi/rest/patUtiModInfoSearchSevice/applicantNameSearchInfo",
@@ -64,32 +62,66 @@ export async function fetchPatentCount(
   url.searchParams.set("applicant", searchWord);
   url.searchParams.set("patent", "true");
   url.searchParams.set("utility", "true");
-  url.searchParams.set("docsStart", "1");
-  url.searchParams.set("docsCount", String(MAX_DOCS_PER_PAGE));
   url.searchParams.set("accessKey", serviceKey);
 
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const normalizedTarget = normalizeCompanyName(searchWord);
 
+  // 한 페이지를 받아 이 회사가 출원인인 건수와 검색 총건수를 돌려준다.
+  const readPage = async (
+    start: number,
+  ): Promise<{ matching: number; read: number; total: number }> => {
+    const pageUrl = new URL(url);
+    pageUrl.searchParams.set("docsStart", String(start));
+    pageUrl.searchParams.set("docsCount", String(PAGE_SIZE));
+
+    const response = await fetch(pageUrl, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) {
-      return null;
+      throw new Error(`KIPRIS HTTP ${response.status}`);
     }
 
     const xml = await response.text();
-    const normalizedTarget = normalizeCompanyName(searchWord);
-
     const applicants = [...xml.matchAll(/<Applicant>(.*?)<\/Applicant>/g)];
-    const matchingCount = applicants.filter(([, name]) =>
-      normalizeCompanyName(name).includes(normalizedTarget),
-    ).length;
 
-    // 필터링 전 원본 페이지 자체가 상한을 꽉 채웠으면, 다음 페이지에 검색어와
-    // 일치하는 항목이 더 있을 수도 있다는 뜻이라 "이상"으로 표시해야 정직하다.
-    // 단, 매칭 건수가 0이면 "0건 이상"이라는 의미 없는 문구가 되니 표시하지 않는다.
     return {
-      count: matchingCount,
-      isAtLeast: matchingCount > 0 && applicants.length >= MAX_DOCS_PER_PAGE,
+      matching: applicants.filter(([, name]) =>
+        normalizeCompanyName(name).includes(normalizedTarget),
+      ).length,
+      read: applicants.length,
+      total: Number(
+        xml.match(/<TotalSearchCount>(\d+)<\/TotalSearchCount>/)?.[1],
+      ),
     };
+  };
+
+  try {
+    const first = await readPage(1);
+
+    // 총건수를 못 읽었으면 본 것만 말한다.
+    if (!Number.isFinite(first.total)) {
+      return { count: first.matching, isAtLeast: first.read > 0 };
+    }
+
+    // 첫 페이지에서 이미 다 봤다.
+    if (first.total <= first.read) {
+      return { count: first.matching, isAtLeast: false };
+    }
+
+    // 나머지 페이지. 첫 페이지에서 총건수를 알았으니 한꺼번에 받는다.
+    const countUpTo = Math.min(first.total, MAX_COUNTED);
+    const starts: number[] = [];
+    for (let start = first.read + 1; start <= countUpTo; start += PAGE_SIZE) {
+      starts.push(start);
+    }
+
+    const rest = await Promise.all(starts.map(readPage));
+    const matching =
+      first.matching + rest.reduce((sum, page) => sum + page.matching, 0);
+
+    // 상한을 넘겨 다 못 본 경우에만 "이상"이다. 상한 안이면 전수 확인이라
+    // 정확한 수치다.
+    return { count: matching, isAtLeast: first.total > MAX_COUNTED };
   } catch {
     return null;
   }

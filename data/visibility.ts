@@ -2,8 +2,16 @@
 // 뉴스·특허·채용공고·공시 "건수"만 원본 데이터로 두고,
 // 가시성 점수와 해석 문구는 lib/visibility.ts 에서 계산한다.
 // data/transactions.ts 에서 성장 신호를 계산하는 방식과 같은 구조다.
+// 외부 공개 정보의 네 축.
+export type ExternalSource = "news" | "patent" | "job" | "disclosure";
+
 export type ExternalPresence = {
   companyId: string;
+  // 외부 API가 대답하지 않아 "확인하지 못한" 축. 0건(찾아봤는데 없음)과는
+  // 전혀 다른 상태다. 실패를 0으로 적으면 "특허 0건, 공개 기술 흔적 없음"처럼
+  // 사실이 아닌 진단이 그대로 진단서까지 실린다(실측: LG생활건강 특허 5,282건이
+  // KIPRIS 타임아웃 한 번에 0건으로 표시됨).
+  unavailable?: ExternalSource[];
   newsCount: number;
   // 네이버는 한 번에 최대 100건만 내려준다. total이 그보다 크고 표본에 무관
   // 기사가 섞여 있으면 전체를 검증할 방법이 없어, 확인된 건수만 "이상"으로
@@ -68,4 +76,11 @@ export function findExternalPresence(companyId: string): ExternalPresence {
   );
 
   return presence ?? { companyId, ...EMPTY_PRESENCE };
+}
+
+// 합성 데이터에 이 기업이 들어 있는지. 데모 기업은 수집 결과가 원래부터 값으로
+// 주어져 있어 폴백이 정상 동작이지만, 검색으로 찾은 실제 기업은 폴백할 값 자체가
+// 없어서 0이 된다. 그 둘을 갈라야 실패를 0건이라고 말하지 않는다.
+export function hasSyntheticPresence(companyId: string): boolean {
+  return externalPresences.some((item) => item.companyId === companyId);
 }

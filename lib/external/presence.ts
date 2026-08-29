@@ -1,4 +1,9 @@
-import { findExternalPresence, type ExternalPresence } from "@/data/visibility";
+import {
+  findExternalPresence,
+  hasSyntheticPresence,
+  type ExternalPresence,
+  type ExternalSource,
+} from "@/data/visibility";
 import { fetchNewsCount } from "@/lib/external/news";
 import { fetchJobCount } from "@/lib/external/jobs";
 import { fetchPatentCount } from "@/lib/external/patents";
@@ -19,6 +24,8 @@ export async function getExternalPresence(
     return { ...fallback, companyId };
   }
 
+  const isDemoCompany = hasSyntheticPresence(companyId);
+
   const [news, jobCount, patent, disclosureCount] = await Promise.all([
     fetchNewsCount(companyName),
     fetchJobCount(companyName),
@@ -26,8 +33,20 @@ export async function getExternalPresence(
     fetchDisclosureCount(companyName),
   ]);
 
+  // 데모 기업은 합성 데이터가 곧 정답이라 폴백이 정상 동작이다. 검색으로 찾은
+  // 실제 기업은 폴백할 값이 없어 0이 되므로, 대답하지 않은 축을 그대로 적어
+  // 화면과 진단서가 "0건"이라고 단정하지 않게 한다.
+  const unavailable: ExternalSource[] = [];
+  if (!isDemoCompany) {
+    if (!news) unavailable.push("news");
+    if (patent === null) unavailable.push("patent");
+    if (jobCount === null) unavailable.push("job");
+    if (disclosureCount === null) unavailable.push("disclosure");
+  }
+
   return {
     companyId,
+    unavailable,
     newsCount: news?.count ?? fallback.newsCount,
     newsCountIsAtLeast: news ? news.isAtLeast : undefined,
     jobCount: jobCount ?? fallback.jobCount,

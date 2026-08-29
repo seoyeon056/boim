@@ -26,17 +26,32 @@ export type Diagnosis = {
 // 남았고 어느 축이 비었는지를 실제 건수로 짚어야 기업마다 다른 문장이 된다.
 type Axis = { label: string; count: number; unit: string };
 
-function presentAxes(visibility: Visibility): { found: Axis[]; missing: Axis[] } {
-  const axes: Axis[] = [
-    { label: "뉴스", count: visibility.newsCount, unit: "건" },
-    { label: "특허", count: visibility.patentCount, unit: "건" },
-    { label: "채용 공고", count: visibility.jobCount, unit: "건" },
-    { label: "공시", count: visibility.disclosureCount, unit: "건" },
-  ];
+// 확인하지 못한 축은 found/missing 어느 쪽도 아니다. "없다"고 쓰면 거짓이 되고,
+// 건수를 쓰면 0을 사실인 양 말하게 된다. 그래서 세 번째 갈래로 둔다.
+function presentAxes(visibility: Visibility): {
+  found: Axis[];
+  missing: Axis[];
+  unknown: Axis[];
+} {
+  const unavailable = new Set(visibility.unavailable);
+  const axes = [
+    { key: "news", label: "뉴스", count: visibility.newsCount, unit: "건" },
+    { key: "patent", label: "특허", count: visibility.patentCount, unit: "건" },
+    { key: "job", label: "채용 공고", count: visibility.jobCount, unit: "건" },
+    {
+      key: "disclosure",
+      label: "공시",
+      count: visibility.disclosureCount,
+      unit: "건",
+    },
+  ] as const;
+
+  const known = axes.filter((axis) => !unavailable.has(axis.key));
 
   return {
-    found: axes.filter((axis) => axis.count > 0),
-    missing: axes.filter((axis) => axis.count === 0),
+    found: known.filter((axis) => axis.count > 0),
+    missing: known.filter((axis) => axis.count === 0),
+    unknown: axes.filter((axis) => unavailable.has(axis.key)),
   };
 }
 
@@ -47,14 +62,25 @@ function listAxes(axes: Axis[], withCount: boolean): string {
 }
 
 function describeExternal(visibility: Visibility): string {
-  const { found, missing } = presentAxes(visibility);
+  const { found, missing, unknown } = presentAxes(visibility);
+
+  // 못 부른 축이 있으면 문장 끝에 그대로 밝힌다. 침묵하면 읽는 사람은 남은
+  // 축만 보고 "이 회사는 그게 없구나"로 읽는다.
+  const unknownTail =
+    unknown.length === 0
+      ? ""
+      : ` ${josa(listAxes(unknown, false), "은/는")} 외부 서비스가 응답하지 않아 이번 진단에서 확인하지 못했습니다.`;
+
+  if (found.length === 0 && missing.length === 0) {
+    return `외부 공개 정보를 이번 진단에서는 확인하지 못했습니다.${unknownTail}`;
+  }
 
   if (found.length === 0) {
-    return "외부에서는 뉴스·특허·채용 공고·공시 어디에서도 이 기업의 활동이 확인되지 않습니다.";
+    return `외부에서는 ${josa(listAxes(missing, false), "은/는")} 어디에서도 이 기업의 활동이 확인되지 않습니다.${unknownTail}`;
   }
 
   if (missing.length === 0) {
-    return `외부에서는 ${josa(listAxes(found, true), "이/가")} 모두 확인되어, 공개 정보만으로도 활동을 어느 정도 따라갈 수 있습니다.`;
+    return `외부에서는 ${josa(listAxes(found, true), "이/가")} 모두 확인되어, 공개 정보만으로도 활동을 어느 정도 따라갈 수 있습니다.${unknownTail}`;
   }
 
   const tail =
@@ -64,7 +90,7 @@ function describeExternal(visibility: Visibility): string {
         ? "다만 이것만으로 최근 성장 활동을 판단하기에는 부족합니다."
         : "다만 공개 정보는 활동의 결과가 드러난 뒤에야 쌓입니다.";
 
-  return `외부에서는 ${josa(listAxes(found, true), "이/가")} 확인되지만 ${josa(listAxes(missing, false), "은/는")} 남아 있지 않습니다. ${tail}`;
+  return `외부에서는 ${josa(listAxes(found, true), "이/가")} 확인되지만 ${josa(listAxes(missing, false), "은/는")} 남아 있지 않습니다. ${tail}${unknownTail}`;
 }
 
 // ── 내부에서 본 모습 ─────────────────────────────────────────
