@@ -1,5 +1,6 @@
 "use client";
 
+import { josa } from "@/lib/korean";
 import type { DocumentTerms } from "@/lib/ocr/types";
 
 // 문서에서 읽어낸 결제조건·납기일자. 브라우저에만 있고 서버로 가지 않는다.
@@ -39,12 +40,14 @@ export function describePaymentTerms(terms: DocumentTerms): string | null {
   const months = Math.round(terms.paymentDays / 30);
 
   if (terms.paymentDays >= 90) {
-    return `결제조건이 "${terms.paymentTerms}"이라서 매출이 현금으로 도는 데 약 ${months}개월이 걸립니다. 거래가 늘어도 그만큼 운전자본이 먼저 묶이므로, 자금 계획을 함께 보셔야 합니다.`;
+    return `결제조건이 ${josa(`"${terms.paymentTerms}"`, "이라서/라서")} 매출이 현금으로 도는 데 약 ${months}개월이 걸립니다. 거래가 늘어도 그만큼 운전자본이 먼저 묶이므로, 자금 계획을 함께 보셔야 합니다.`;
   }
 
   if (terms.paymentDays >= 45) {
-    return `결제조건이 "${terms.paymentTerms}"이라서 매출이 현금으로 도는 데 약 ${months}개월이 걸립니다. 거래 규모가 커질수록 이 간극도 함께 커집니다.`;
+    return `결제조건이 ${josa(`"${terms.paymentTerms}"`, "이라서/라서")} 매출이 현금으로 도는 데 약 ${months}개월이 걸립니다. 거래 규모가 커질수록 이 간극도 함께 커집니다.`;
   }
 
-  return `결제조건은 "${terms.paymentTerms}"으로, 매출과 현금 유입 사이의 간극이 크지 않습니다.`;
+  // 결제조건 값은 문서에서 읽어온다. 조사를 붙박아 두면 값에 따라 틀린다
+  // (실측: "납품 후 30일"으로 → ㄹ 받침이라 "30일"로가 맞다).
+  return `결제조건은 ${josa(`"${terms.paymentTerms}"`, "으로/로")}, 매출과 현금 유입 사이의 간극이 크지 않습니다.`;
 }

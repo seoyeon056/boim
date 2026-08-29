@@ -1,38 +1,16 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import type { StoredUpload } from "@/types/document";
+import {
+  readUploadSnapshot,
+  serverUploadSnapshot,
+  subscribeUpload,
+} from "@/lib/uploaded-documents";
 
 // 통계 요약과 판단 근거 문서 목록.
 // 업로드 내역(sessionStorage)은 브라우저에만 있으므로 이 부분만 클라이언트에서 읽는다.
 
-const STORAGE_KEY = "boimDocumentUpload";
 const DEFAULT_CATEGORY_COUNT = 6;
-
-// sessionStorage는 React 바깥의 저장소라 useSyncExternalStore로 읽는다.
-// getSnapshot은 같은 값에 대해 같은 참조를 돌려줘야 해서 파싱 결과를 캐시한다.
-let cachedRaw: string | null = null;
-let cachedUpload: StoredUpload | null = null;
-
-function getSnapshot(): StoredUpload | null {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
-
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    try {
-      cachedUpload = raw ? (JSON.parse(raw) as StoredUpload) : null;
-    } catch {
-      cachedUpload = null;
-    }
-  }
-
-  return cachedUpload;
-}
-
-// 업로드 기록은 이 화면에 들어온 뒤로 바뀌지 않으므로 구독할 것이 없다.
-function subscribe(): () => void {
-  return () => {};
-}
 
 export function SignalsEvidence({
   customerCount,
@@ -44,7 +22,11 @@ export function SignalsEvidence({
   repeatPurchaseRate: number;
 }) {
   // 서버 렌더 시에는 null(기록 없음)로 두고, 브라우저에서 실제 값을 읽는다.
-  const upload = useSyncExternalStore(subscribe, getSnapshot, () => null);
+  const upload = useSyncExternalStore(
+    subscribeUpload,
+    readUploadSnapshot,
+    serverUploadSnapshot,
+  );
 
   const usedDocs =
     upload?.categories.filter((c) => c.status === "uploaded") ?? [];
@@ -121,9 +103,15 @@ export function SignalsEvidence({
           </ul>
         )}
 
+        {/*
+          문서가 하나도 없을 때까지 "위 문서에서 추출한 거래 기록만을 근거로"라고
+          쓰면 바로 위에 있는 "업로드 기록을 확인할 수 없습니다"와 정면으로
+          어긋난다. 실제로는 예시 데이터로 계산한 화면이다.
+        */}
         <p className="mt-4 text-[11px] leading-5 text-zinc-400">
-          지표는 위 문서에서 추출한 거래 기록만을 근거로 산정되었으며, 검증되지
-          않은 항목은 계산에서 제외되었습니다.
+          {usedDocs.length === 0
+            ? "근거로 삼은 문서가 없어 위 지표는 예시 데이터로 산정되었습니다. 문서를 올리면 그 거래 기록만으로 다시 계산됩니다."
+            : "지표는 위 문서에서 추출한 거래 기록만을 근거로 산정되었으며, 검증되지 않은 항목은 계산에서 제외되었습니다."}
         </p>
       </div>
     </>

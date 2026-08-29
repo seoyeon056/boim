@@ -24,8 +24,13 @@ const LETTER_HAS_FINAL: Record<string, boolean> = {
   l: true, m: true, n: true, r: true, // 엘, 엠, 엔, 알
 };
 
-function hasFinalConsonant(word: string): boolean {
-  const trimmed = word.replace(/[)\]）\s]+$/, "");
+// 완성형 한글의 종성 번호. ㄹ 은 8번이다.
+const RIEUL_FINAL = 8;
+
+function hasFinalConsonant(word: string, rieulCountsAsOpen = false): boolean {
+  // 값을 따옴표로 감싸 문장에 넣는 자리가 있다("납품 후 30일"로). 조사는
+  // 따옴표가 아니라 그 안의 마지막 글자를 보고 골라야 한다.
+  const trimmed = word.replace(/["'”’)\]）\s]+$/, "");
   const last = trimmed[trimmed.length - 1];
   if (!last) {
     return false;
@@ -35,7 +40,12 @@ function hasFinalConsonant(word: string): boolean {
 
   // 완성형 한글
   if (code >= 0xac00 && code <= 0xd7a3) {
-    return (code - 0xac00) % 28 !== 0;
+    const final = (code - 0xac00) % 28;
+    // 로/으로는 ㄹ 받침을 받침 없는 것처럼 다룬다("30일로", "30일으로"가 아니라).
+    if (rieulCountsAsOpen && final === RIEUL_FINAL) {
+      return false;
+    }
+    return final !== 0;
   }
 
   // "㈜"는 "주"로 읽어 받침이 없다.
@@ -45,6 +55,11 @@ function hasFinalConsonant(word: string): boolean {
 
   if (/\d/.test(last)) {
     return DIGIT_HAS_FINAL[last] ?? false;
+  }
+
+  // 결제조건에 "선금 50%"처럼 기호로 끝나는 값이 들어온다. 읽는 소리로 판단한다.
+  if (last === "%") {
+    return true; // 퍼센트
   }
 
   const lower = last.toLowerCase();
@@ -58,7 +73,10 @@ function hasFinalConsonant(word: string): boolean {
 // 앞말에 맞는 조사를 붙여 돌려준다. josa("공시", "은/는") -> "공시는"
 export function josa(word: string, pair: string): string {
   const [withFinal, withoutFinal] = pair.split("/");
-  return `${word}${hasFinalConsonant(word) ? withFinal : withoutFinal}`;
+  // "으로/로"만 ㄹ 받침이 예외다. 다른 조사는 ㄹ도 받침으로 센다("30일은").
+  const rieulCountsAsOpen = withFinal === "으로";
+
+  return `${word}${hasFinalConsonant(word, rieulCountsAsOpen) ? withFinal : withoutFinal}`;
 }
 
 

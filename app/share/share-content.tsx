@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  readUploadSnapshot,
+  serverUploadSnapshot,
+  subscribeUpload,
+  uploadedCategoryNames,
+} from "@/lib/uploaded-documents";
 import Link from "next/link";
 
 import {
@@ -24,14 +30,9 @@ const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" }
 
 const PERIOD = "2026년 01월 – 2026년 06월";
 
-const EVIDENCE_DOCS = [
-  "거래명세서",
-  "세금계산서",
-  "발주서",
-  "견적서",
-  "계약서",
-  "입금내역",
-];
+// 붙임은 실제로 제출된 문서만 적는다. 예전에는 이 여섯 개를 고정으로 늘어놓고
+// "각 1부"라고 썼는데, 문서를 하나도 올리지 않아도 그대로 나왔다. 공문서 형식의
+// 진단서에 존재하지 않는 붙임을 적는 셈이라 문서 전체의 신뢰가 흔들린다.
 
 // 진단서 본문 서체. 나눔명조는 획이 굵고 예스러워 문서가 무거워 보인다.
 // Noto Serif KR 은 획이 가늘고 자간이 정돈돼 있어 같은 문서 톤을 유지하면서 덜 튄다.
@@ -54,6 +55,14 @@ export function ShareContent({
   const [signals, setSignals] = useState<SignalsResult | null>(null);
   // 업로드·검수한 거래로 계산한 신호. 있으면 서버의 합성 데이터 대신 이걸 쓴다.
   const [uploadedCount, setUploadedCount] = useState<number | null>(null);
+  // 업로드 내역은 브라우저(sessionStorage)에만 있다. Step 05의 근거 문서
+  // 목록과 같은 기록을 읽는다.
+  const upload = useSyncExternalStore(
+    subscribeUpload,
+    readUploadSnapshot,
+    serverUploadSnapshot,
+  );
+  const evidenceDocs = uploadedCategoryNames(upload);
   // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
   const [llmDiagnosis, setLlmDiagnosis] = useState<string | null>(null);
   const [llmState, setLlmState] = useState<"idle" | "loading" | "failed">("idle");
@@ -397,9 +406,9 @@ export function ShareContent({
             4. 분석 근거 문서
           </h2>
           <p className="-indent-4 pl-4 text-[13px] leading-7 text-zinc-900">
-            붙임
-            {EVIDENCE_DOCS.map((doc, i) => `${i + 1}. ${doc}`).join("　")}
-            　각 1부.
+            {evidenceDocs.length === 0
+              ? "제출된 문서가 없어 내부 성장 신호는 예시 데이터로 산출되었습니다. 붙임 없음."
+              : `붙임${evidenceDocs.map((doc, i) => `${i + 1}. ${doc}`).join("　")}　각 1부.`}
           </p>
         </section>
 
