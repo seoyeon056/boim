@@ -179,6 +179,12 @@ const UNAVAILABLE_METRIC = {
   tone: "warn" as const,
 };
 
+// 60점 위가 전부 한 구간이라 100점에도 "일부 확인"이 붙었다. 네 축이 다 차서
+// 만점이 나온 기업한테 할 말은 아니다. 실측 분포를 보고 85를 경계로 나눈다
+// (한빛정밀 15 / 뉴스 100·특허 5·공시 3·채용 1인 기업 52 / 동일기연급 87 /
+// LG생활건강·삼성전자 85~100).
+const AMPLE_SCORE = 85;
+
 function interpretScore(score: number) {
   if (score < 30) {
     return { interpretation: "외부 정보 부족", tone: "warn" as const };
@@ -188,7 +194,11 @@ function interpretScore(score: number) {
     return { interpretation: "외부 정보 제한적", tone: "warn" as const };
   }
 
-  return { interpretation: "외부 정보 일부 확인", tone: "muted" as const };
+  if (score < AMPLE_SCORE) {
+    return { interpretation: "외부 정보 일부 확인", tone: "muted" as const };
+  }
+
+  return { interpretation: "외부 정보 충분 확인", tone: "muted" as const };
 }
 
 // 점수 구간에 따라 화면 상단 설명 문구를 바꾼다.
@@ -201,7 +211,13 @@ function summarize(score: number): string {
     return "외부 데이터에 흔적이 일부 남아 있지만, 최근 성장 활동을 판단하기에는 부족합니다.";
   }
 
-  return "외부 데이터에 흔적이 남아 있지만, 내부 거래만큼 성장을 직접 보여주지는 않습니다.";
+  if (score < AMPLE_SCORE) {
+    return "외부 데이터에 흔적이 남아 있지만, 내부 거래만큼 성장을 직접 보여주지는 않습니다.";
+  }
+
+  // 공개 정보가 충분한 기업에도 이 서비스의 전제는 그대로다. 공개 정보는
+  // 활동의 결과가 드러난 뒤에야 쌓이므로, 최근 거래는 내부에서만 보인다.
+  return "외부 데이터에 활동이 충분히 드러나 있습니다. 다만 공개 정보는 결과가 드러난 뒤에 쌓이므로, 최근 거래는 내부 데이터에서만 확인됩니다.";
 }
 
 export function calculateVisibility(
