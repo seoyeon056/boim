@@ -108,7 +108,7 @@ export default function CompanyPage() {
             }}
             placeholder=""
             autoComplete="off"
-            className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3.5 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
+            className="h-[50px] w-full rounded-md border border-zinc-200 bg-white px-4 text-[16px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
           />
         </div>
       </div>
@@ -193,7 +193,7 @@ export default function CompanyPage() {
                     setIsDiagnosing(true);
                     router.push(withCompany("/visibility", company.id));
                   }}
-                  className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+                  className="mt-3 inline-flex h-12 w-full items-center justify-center rounded-md bg-[#2A211C] text-[16px] font-semibold text-white transition-colors hover:bg-[#12100E]"
                 >
                   이 기업 진단하기
                 </button>

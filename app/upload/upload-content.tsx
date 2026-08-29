@@ -671,7 +671,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
             type="button"
             onClick={handleAnalyze}
             disabled={!allHandled || isAnalyzing}
-            className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
+            className="inline-flex h-[50px] items-center justify-center rounded-md bg-[#2A211C] px-10 text-[16px] font-semibold text-white transition-colors hover:bg-[#12100E] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
           >
             {isAnalyzing ? "문서 확인 중…" : "내부 문서 분석 시작"}
           </button>

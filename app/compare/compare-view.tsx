@@ -71,7 +71,7 @@ export function CompareView({
       footer={
         <Link
           href={withCompany("/share", visibility.companyId)}
-          className="inline-flex h-11 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+          className="inline-flex h-[50px] items-center justify-center rounded-md bg-[#2A211C] px-10 text-[16px] font-semibold text-white transition-colors hover:bg-[#12100E]"
         >
           최종 진단 보기
         </Link>
