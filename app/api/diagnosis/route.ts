@@ -25,6 +25,37 @@ function label(raw: unknown): string {
   return typeof raw === "string" ? raw.slice(0, MAX_TEXT) : "";
 }
 
+const EXTERNAL_SOURCES = ["news", "patent", "job", "disclosure"] as const;
+
+// 확인하지 못한 축은 0건이라고 적지 않는다. 숫자로 넘기면 LLM이 "특허가 없어"
+// 같은 문장을 만들고, 그 문장이 진단서에 그대로 실린다.
+function describeExternalCounts(body: Record<string, unknown>): string {
+  const missing = new Set(
+    (Array.isArray(body.unavailable) ? body.unavailable : []).filter(
+      (item): item is string =>
+        typeof item === "string" &&
+        (EXTERNAL_SOURCES as readonly string[]).includes(item),
+    ),
+  );
+
+  const value = (
+    key: (typeof EXTERNAL_SOURCES)[number],
+    text: string,
+    count: unknown,
+    isAtLeast?: unknown,
+  ) =>
+    missing.has(key)
+      ? `${text} 확인 불가(외부 서비스 응답 없음, 값을 추측하지 마세요)`
+      : `${text} ${num(count).toLocaleString()}건${isAtLeast === true ? " 이상" : ""}`;
+
+  return [
+    value("news", "뉴스", body.newsCount, body.newsCountIsAtLeast),
+    value("patent", "특허", body.patentCount, body.patentCountIsAtLeast),
+    value("job", "채용공고", body.jobCount),
+    value("disclosure", "최근 1년 공시", body.disclosureCount),
+  ].join(" · ");
+}
+
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
 
@@ -52,7 +83,7 @@ export async function POST(request: NextRequest) {
 
 [외부에서 확인되는 정보]
 가시성 점수: ${num(body.visibilityScore)}점 / 100점 (${label(body.visibilityInterpretation)})
-뉴스 ${num(body.newsCount)}건 · 특허 ${num(body.patentCount)}건 · 채용공고 ${num(body.jobCount)}건 · 최근 1년 공시 ${num(body.disclosureCount)}건
+${describeExternalCounts(body)}
 
 [내부 거래에서 확인되는 신호]
 거래처 증가율: ${num(body.customerGrowthRate)}% (${num(body.previousCustomersCount)}곳 → ${num(body.recentCustomersCount)}곳) — ${label(body.growthStatus)}
