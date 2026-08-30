@@ -56,9 +56,16 @@ export type DiagnosisInput = {
   visibilityScore: number;
   visibilityInterpretation: string;
   newsCount: number;
+  // 화면이 "300건 이상"으로 적는 값을 프롬프트만 "300건"으로 보내면, LLM이
+  // 하한을 확정 수치처럼 문장에 쓴다.
+  newsCountIsAtLeast?: boolean;
   patentCount: number;
+  patentCountIsAtLeast?: boolean;
   jobCount: number;
   disclosureCount: number;
+  // 외부 서비스가 대답하지 않아 확인하지 못한 축. 건수는 0으로 채워져 있지만
+  // "없다"는 뜻이 아니므로 그대로 보내면 LLM이 "채용 공고가 없어"라고 쓴다.
+  unavailable: string[];
   customerGrowthRate: number;
   previousCustomersCount: number;
   recentCustomersCount: number;
