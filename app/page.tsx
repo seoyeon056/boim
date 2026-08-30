@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { FlowReset } from "./flow-reset";
+
 const highlights = [
   {
     no: "01",
@@ -73,10 +75,14 @@ function SignalField() {
 
 export default function Home() {
   return (
-    <>
-      <section className="relative isolate overflow-hidden border-b border-zinc-100">
+    // 랜딩은 헤더(3rem)를 뺀 화면 높이에 딱 맞춘다. 히어로가 남는 세로 공간을
+    // 전부 차지하며 내용을 가운데 정렬하고, 카드 줄은 바닥에 붙어 스크롤 없이
+    // 한 화면에 들어온다. (글자 크기·간격은 그대로, 여백만 유동적으로 조절)
+    <div className="flex min-h-[calc(100dvh-3rem)] flex-col">
+      <FlowReset />
+      <section className="relative isolate flex flex-1 items-center overflow-hidden border-b border-zinc-100">
         <SignalField />
-        <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center px-10 py-28 text-center md:py-36">
+        <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center px-10 py-10 text-center">
           <div className="flex max-w-3xl flex-col items-center gap-6">
             <span className="animate-fade-in-up text-[15px] font-semibold tracking-tight text-zinc-600" style={{ animationDelay: "0ms" }}>
               기업 성장 진단 서비스
@@ -102,7 +108,7 @@ export default function Home() {
         </div>
       </section>
 
-      <div className="mx-auto w-full max-w-6xl px-10 pb-20 pt-16">
+      <div className="mx-auto w-full max-w-6xl shrink-0 px-10 pb-10 pt-8">
         <div className="flex flex-col gap-6">
           <span className="text-[15px] font-bold tracking-tight text-zinc-700">
             이런 기업에게 필요합니다
@@ -129,6 +135,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -86,7 +86,7 @@ export async function getSignals(companyId?: string) {
 export async function getReviewSample(companyId?: string) {
   const company = await getCompany(companyId);
 
-  return transactionsOf(company.id).slice(0, 2);
+  return transactionsOf(company.id).slice(0, 5);
 }
 
 // 검색어와 기업명을 비교 가능한 형태로 맞춘다.

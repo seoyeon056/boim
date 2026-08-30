@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -71,156 +71,6 @@ function isValidDate(raw: string): boolean {
   }
 
   return true;
-}
-
-// 수기 입력과 달력 선택을 모두 허용하는 날짜 필드.
-// 네이티브 date 피커는 브라우저마다 모양이 달라, 직접 만든 달력 팝업을 쓴다.
-function DateInput({
-  value,
-  invalid,
-  onChange,
-  onFocus,
-  tone = "plain",
-}: {
-  value: string;
-  invalid: boolean;
-  onChange: (v: string) => void;
-  onFocus?: () => void;
-  tone?: "plain" | "muted";
-}) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const base0 = isValidDate(value) && value.length === 10 ? new Date(value) : new Date();
-  const [view, setView] = useState({ y: base0.getFullYear(), m: base0.getMonth() });
-
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [open]);
-
-  function openPicker() {
-    onFocus?.();
-    const b = isValidDate(value) && value.length === 10 ? new Date(value) : new Date();
-    setView({ y: b.getFullYear(), m: b.getMonth() });
-    setOpen((v) => !v);
-  }
-
-  function pick(day: number) {
-    onChange(`${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
-    setOpen(false);
-  }
-
-  const firstDay = new Date(view.y, view.m, 1).getDay();
-  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array.from({ length: firstDay }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  const selected = isValidDate(value) && value.length === 10 ? new Date(value) : null;
-  const today = new Date();
-
-  return (
-    <div className="relative" ref={wrapRef}>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={value}
-        placeholder="2026-02-08"
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={onFocus}
-        className={`h-10 w-full rounded-md border px-3 pr-10 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-500 ${
-          invalid ? "border-[#8a4a2e]" : "border-zinc-200"
-        } ${tone === "muted" ? "bg-zinc-50" : "bg-white"}`}
-      />
-      <button
-        type="button"
-        onClick={openPicker}
-        aria-label="달력에서 선택"
-        aria-expanded={open}
-        className={`absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-zinc-100 hover:text-zinc-700 ${open ? "bg-zinc-100 text-zinc-700" : "text-zinc-400"}`}
-      >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-          <rect x="2" y="3.5" width="12" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M2 6.75h12M5.5 2v2.5M10.5 2v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-11 z-30 w-[248px] rounded-lg border border-zinc-200 bg-white p-3 shadow-lg">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }))}
-              className="flex h-7 w-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-              aria-label="이전 달"
-            >
-              ‹
-            </button>
-            <span className="font-mono text-[13px] font-semibold text-zinc-900">
-              {view.y}. {String(view.m + 1).padStart(2, "0")}
-            </span>
-            <button
-              type="button"
-              onClick={() => setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }))}
-              className="flex h-7 w-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-              aria-label="다음 달"
-            >
-              ›
-            </button>
-          </div>
-
-          <div className="mt-2.5 grid grid-cols-7 gap-y-0.5">
-            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-              <span key={d} className="flex h-6 items-center justify-center text-[10px] text-zinc-400">{d}</span>
-            ))}
-            {cells.map((day, i) => {
-              if (day === null) return <span key={`e${i}`} />;
-              const isSel = selected !== null && selected.getFullYear() === view.y && selected.getMonth() === view.m && selected.getDate() === day;
-              const isToday = today.getFullYear() === view.y && today.getMonth() === view.m && today.getDate() === day;
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => pick(day)}
-                  className={`mx-auto flex h-7 w-7 items-center justify-center rounded font-mono text-[12px] transition-colors ${
-                    isSel
-                      ? "bg-zinc-900 font-semibold text-white"
-                      : isToday
-                        ? "font-semibold text-zinc-900 underline decoration-zinc-300 underline-offset-2 hover:bg-zinc-100"
-                        : "text-zinc-600 hover:bg-zinc-100"
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-2.5 flex items-center justify-between border-t border-zinc-100 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                const t = new Date();
-                onChange(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`);
-                setOpen(false);
-              }}
-              className="text-[11px] text-zinc-500 transition-colors hover:text-zinc-900"
-            >
-              오늘로 설정
-            </button>
-            <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-zinc-400 transition-colors hover:text-zinc-700">
-              닫기
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function tierOf(confidence: number): Tier {
@@ -314,13 +164,6 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   const [status, setStatus] = useState<ViewStatus>("loading");
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
-  // 거래가 20건이면 한 건에 카드 네 장이라 화면이 80장이 된다. 기본은 접어 두고
-  // 손볼 게 있는 거래만 펼친다.
-  //
-  // "확인이 필요하면 펼침"을 기본으로 두고, 사용자가 누른 줄만 그 반대로
-  // 뒤집는다. effect 안에서 setState 하지 않으려면 열림 여부를 상태로 들고
-  // 있는 대신 이렇게 렌더 시점에 계산해야 한다.
-  const [flippedRows, setFlippedRows] = useState<Set<number>>(new Set());
   const [insight, setInsight] = useState<string | null>(null);
   const [extractionOutcome, setExtractionOutcome] = useState<string | null>(null);
 
@@ -329,14 +172,14 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     const outcome = sessionStorage.getItem("boimExtractionOutcome");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(nextStatus);
-     
+
     setExtractionOutcome(outcome);
     if (!result) return;
 
     setTransactions(result);
 
     // 안내 문장은 서버를 거치지 않고 여기서 만든다.
-     
+
     setInsight(buildReviewGuidance(buildReviewStats(result)));
   }, []);
 
@@ -379,7 +222,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     });
   }
 
-  // 이 거래에 아직 손볼 게 남았는가. 펼침 기본값이자 접힌 줄의 배지가 된다.
+  // 이 거래에 아직 손볼 게 남았는가. 표의 상태 칸에 쓴다.
   function pendingOf(tx: Transaction, txIndex: number): number {
     return FIELD_META.filter(
       ({ key }) =>
@@ -388,41 +231,44 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     ).length;
   }
 
-  // 기본으로 펼쳐 두는 줄: 손볼 게 있는 줄 + 맨 첫 줄.
-  // 데모 데이터엔 확인 필요 항목이 없어 아무것도 안 펼쳐지는데, 그러면 이 줄이
-  // 접었다 펼 수 있다는 걸 사용자가 눈치채지 못한다. 첫 줄만 열어 둔다.
-  function defaultRowOpen(txIndex: number, pending: number): boolean {
-    return pending > 0 || txIndex === 0;
+  // 한 거래 줄에서 아직 확인 안 된 낮은 신뢰도 필드를 한꺼번에 확인 처리한다.
+  function confirmRow(txIndex: number, tx: Transaction) {
+    FIELD_META.forEach(({ key }) => {
+      if (requiresConfirmation(tx[key].confidence)) confirmField(txIndex, key);
+    });
   }
 
-  // 기본값과 사용자가 뒤집었는지를 XOR 한다.
-  function isRowOpen(txIndex: number, pending: number): boolean {
-    return flippedRows.has(txIndex) !== defaultRowOpen(txIndex, pending);
+  function confirmAll() {
+    if (!transactions) return;
+    transactions.forEach((tx, txIndex) => confirmRow(txIndex, tx));
   }
 
-  function toggleRow(txIndex: number) {
-    setFlippedRows((prev) => {
+  // 확인 처리한 줄(또는 전체)을 다시 검토 대상으로 되돌린다.
+  function reEditRow(txIndex: number, tx: Transaction) {
+    setConfirmed((prev) => {
       const next = new Set(prev);
-      if (next.has(txIndex)) {
-        next.delete(txIndex);
-      } else {
-        next.add(txIndex);
-      }
+      FIELD_META.forEach(({ key }) => {
+        if (requiresConfirmation(tx[key].confidence)) {
+          next.delete(confirmKey(txIndex, key));
+        }
+      });
       return next;
     });
   }
 
-  // 전부 펼치거나 전부 접는다. 기본값과 다른 줄만 뒤집힌 것으로 표시한다.
-  function setAllRows(open: boolean) {
+  function reEditAll() {
     if (!transactions) return;
-    setFlippedRows(
-      new Set(
-        transactions
-          .map((tx, index) => ({ index, pending: pendingOf(tx, index) }))
-          .filter(({ index, pending }) => defaultRowOpen(index, pending) !== open)
-          .map(({ index }) => index),
-      ),
-    );
+    setConfirmed((prev) => {
+      const next = new Set(prev);
+      transactions.forEach((tx, txIndex) => {
+        FIELD_META.forEach(({ key }) => {
+          if (requiresConfirmation(tx[key].confidence)) {
+            next.delete(confirmKey(txIndex, key));
+          }
+        });
+      });
+      return next;
+    });
   }
 
   function handleConfirm() {
@@ -489,7 +335,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     <StepShell
       step="Step 04"
       title="AI 분석 결과 확인"
-      description="신뢰도가 낮은 항목만 직접 확인해 주세요."
+      description="신뢰도가 낮은 항목만 직접 확인해 주세요. 어느 값이든 눌러서 바로 고칠 수 있습니다."
       backTo={withCompany("/upload", companyId)}
       companyId={companyId}
       footer={
@@ -562,209 +408,146 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
         </p>
       )}
 
-      {/* 거래 여러 건을 순서대로 렌더링 */}
-      {transactions.length > 1 && (
-        <div className="mt-6 flex items-center justify-between gap-4">
-          <span className="text-[13px] text-zinc-500">
-            거래 {transactions.length}건 — 확인이 필요한 항목만 펼쳐 두었습니다
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setAllRows(true)}
-              className="h-8 rounded-md border border-zinc-200 px-3 text-[13px] text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
-            >
-              전체 펼치기
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllRows(false)}
-              className="h-8 rounded-md border border-zinc-200 px-3 text-[13px] text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
-            >
-              전체 접기
-            </button>
-          </div>
-        </div>
-      )}
-
-      {transactions.map((tx, txIndex) => {
-        const pending = pendingOf(tx, txIndex);
-        const open = isRowOpen(txIndex, pending);
-
-        return (
-        <div key={txIndex} className="mt-2">
-          {/* 접힌 줄 — 값을 한 줄로 보여줘서 펼치지 않고도 훑을 수 있게 한다. */}
+      {/* 거래 목록 — 표.
+          예전에는 거래마다 필드 카드 네 장을 세로로 쌓아서, 21건이면 화면이
+          한없이 길어졌다(그래서 줄마다 펼침/접힘 토글을 달았다). 이제 한 줄에
+          한 거래를 놓고, 건수가 많아도 스크롤 영역 안에 가둬 화면 길이를
+          고정한다. 값은 셀에서 바로 고친다. */}
+      <div className="mt-6 flex items-center justify-between gap-4">
+        <span className="text-[13px] text-zinc-500">
+          거래 {transactions.length}건
+          {needReview > 0
+            ? ` · 확인이 필요한 항목 ${needReview}개`
+            : " · 모두 자동 확인되었습니다"}
+        </span>
+        {needReview > 0 && (
           <button
             type="button"
-            onClick={() => toggleRow(txIndex)}
-            aria-expanded={open}
-            className={`group flex w-full items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition-colors ${
-              pending > 0
-                ? "border-amber-200 hover:border-amber-300"
-                : "border-zinc-100 hover:border-zinc-300"
-            }`}
+            onClick={allConfirmed ? reEditAll : confirmAll}
+            className="h-8 shrink-0 rounded-md border border-zinc-200 px-3 text-[13px] text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
           >
-            <span
-              aria-hidden
-              className={`inline-block w-6 shrink-0 text-center font-mono text-[28px] leading-none text-zinc-500 transition-transform group-hover:text-zinc-800 ${
-                open ? "rotate-90" : ""
-              }`}
-            >
-              ▸
-            </span>
-            <span className="w-12 shrink-0 font-mono text-[12px] text-zinc-400">
-              {txIndex + 1}/{transactions.length}
-            </span>
-            <span className="w-24 shrink-0 font-mono text-[13px] text-zinc-700">
-              {String(tx.date.value)}
-            </span>
-            <span className="w-40 shrink-0 truncate text-[14px] text-zinc-900">
-              {String(tx.customer.value)}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-500">
-              {String(tx.item.value)}
-            </span>
-            <span className="shrink-0 font-mono text-[14px] font-medium tabular-nums text-zinc-900">
-              {fieldText("amount", tx.amount.value)}
-            </span>
-            {pending > 0 ? (
-              <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-medium text-amber-600">
-                확인 {pending}
-              </span>
-            ) : (
-              <span className="flex shrink-0 items-center gap-1 text-[12px] text-emerald-500">
-                <IconCheck /> 자동 확인
-              </span>
-            )}
+            {allConfirmed ? "다시 확인하기" : "전부 확인 처리"}
           </button>
+        )}
+      </div>
 
-          {open && (
-          <div className="mt-2 grid auto-rows-fr grid-cols-1 gap-2 md:grid-cols-2">
-          {FIELD_META.map(({ key, label, type }) => {
-            const field = tx[key];
-            const tier = tierOf(field.confidence);
-            const isConfirmed = confirmed.has(confirmKey(txIndex, key));
-            const editable =
-              requiresConfirmation(field.confidence) && !isConfirmed;
-            const isDate = key === "date";
-            const dateBad = isDate && !isValidDate(String(field.value));
+      <div className="mt-2 max-h-[460px] overflow-auto rounded-lg border border-zinc-200">
+        <table className="w-full min-w-[660px] border-collapse text-left">
+          <thead className="sticky top-0 z-10 bg-zinc-50">
+            <tr className="text-[11px] uppercase tracking-wide text-zinc-400">
+              <th className="w-10 px-2 py-2 text-center font-medium">#</th>
+              <th className="w-32 px-2 py-2 font-medium">거래 날짜</th>
+              <th className="w-44 px-2 py-2 font-medium">거래처</th>
+              <th className="px-2 py-2 font-medium">품목</th>
+              <th className="w-36 px-2 py-2 text-right font-medium">거래금액</th>
+              <th className="w-24 px-2 py-2 text-center font-medium">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map((tx, txIndex) => {
+              const pending = pendingOf(tx, txIndex);
+              const rowDateBad = !isValidDate(String(tx.date.value));
+              const rowHadFlag = FIELD_META.some(({ key }) =>
+                requiresConfirmation(tx[key].confidence),
+              );
+              const rowReviewed = rowHadFlag && pending === 0 && !rowDateBad;
 
-            return (
-              <div
-                key={key}
-                className="rounded-lg border border-zinc-100 bg-white px-4 py-3 transition-colors hover:border-zinc-200"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[13px] text-zinc-500">
-                    {label}
-                  </span>
+              return (
+                <tr
+                  key={txIndex}
+                  className={`border-t border-zinc-100 align-middle ${
+                    pending > 0 || rowDateBad
+                      ? "bg-amber-50/40"
+                      : rowReviewed
+                        ? "bg-emerald-50/30"
+                        : "bg-white"
+                  }`}
+                >
+                  <td className="px-2 py-1.5 text-center font-mono text-[11px] text-zinc-400">
+                    {txIndex + 1}
+                  </td>
 
-                  {tier === "high" && (
-                    <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                      <IconCheck /> 자동 확인
-                    </span>
-                  )}
-                  {tier !== "high" && isConfirmed && (
-                    <button
-                      type="button"
-                      onClick={() => reEditField(txIndex, key)}
-                      className="flex items-center gap-1 text-[11px] text-emerald-500 transition-colors hover:text-emerald-700"
-                    >
-                      <IconCheck /> 확인 완료 · 수정
-                    </button>
-                  )}
-                  {tier === "medium" && !isConfirmed && (
-                    <span className="text-[11px] text-amber-500">확인 권장</span>
-                  )}
-                  {tier === "low" && !isConfirmed && (
-                    <span className="text-[11px] text-red-500">확인 필요</span>
-                  )}
-                </div>
+                  {FIELD_META.map(({ key, type }) => {
+                    const field = tx[key];
+                    const tier = tierOf(field.confidence);
+                    const isConfirmed = confirmed.has(confirmKey(txIndex, key));
+                    const flag =
+                      requiresConfirmation(field.confidence) && !isConfirmed;
+                    const bad = key === "date" && !isValidDate(String(field.value));
+                    const align = key === "amount" ? "text-right" : "text-left";
 
-                {editable ? (
-                  <div className="mt-2 flex flex-col gap-2">
-                    {tier === "low" && (
-                      <p className="text-xs leading-5 text-red-400">
-                        AI가 정확하게 읽지 못했습니다. 값을 확인하고 수정해
-                        주세요.
-                      </p>
-                    )}
-                    {tier === "medium" && (
-                      <p className="text-xs leading-5 text-amber-500">
-                        한 번 더 확인하는 것을 권장합니다.
-                      </p>
-                    )}
-                    {isDate ? (
-                      <DateInput
-                        value={String(field.value)}
-                        invalid={dateBad}
-                        onChange={(next) => updateValue(txIndex, key, next)}
-                      />
+                    return (
+                      <td key={key} className="px-2 py-1.5">
+                        <input
+                          type={key === "amount" ? "text" : type}
+                          inputMode={
+                            key === "amount"
+                              ? "numeric"
+                              : key === "date"
+                                ? "numeric"
+                                : undefined
+                          }
+                          value={fieldText(key, field.value)}
+                          placeholder={key === "date" ? "2026-02-08" : undefined}
+                          onChange={(event) =>
+                            updateValue(txIndex, key, event.target.value)
+                          }
+                          onFocus={() => reEditField(txIndex, key)}
+                          title={
+                            tier === "low"
+                              ? "AI가 정확하게 읽지 못했습니다. 값을 확인해 주세요."
+                              : tier === "medium"
+                                ? "한 번 더 확인하는 것을 권장합니다."
+                                : undefined
+                          }
+                          className={`h-8 w-full rounded border bg-transparent px-2 font-mono text-[13px] text-zinc-900 outline-none transition-colors focus:border-zinc-500 ${align} ${
+                            bad
+                              ? "border-red-400 bg-red-50/50"
+                              : flag
+                                ? tier === "low"
+                                  ? "border-red-300 bg-red-50/40"
+                                  : "border-amber-300 bg-amber-50/40"
+                                : "border-transparent hover:border-zinc-200"
+                          }`}
+                        />
+                      </td>
+                    );
+                  })}
+
+                  <td className="px-2 py-1.5 text-center">
+                    {rowDateBad ? (
+                      <span className="text-[11px] font-medium text-red-500">
+                        날짜 확인
+                      </span>
+                    ) : pending > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => confirmRow(txIndex, tx)}
+                        className="rounded border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-50"
+                      >
+                        확인 {pending}
+                      </button>
+                    ) : rowReviewed ? (
+                      <button
+                        type="button"
+                        onClick={() => reEditRow(txIndex, tx)}
+                        title="다시 확인"
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-emerald-600 transition-colors hover:bg-emerald-50"
+                      >
+                        <IconCheck /> 확인함
+                      </button>
                     ) : (
-                      <input
-                        type={key === "amount" ? "text" : type}
-                        inputMode={key === "amount" ? "numeric" : undefined}
-                        value={fieldText(key, field.value)}
-                        onChange={(event) =>
-                          updateValue(txIndex, key, event.target.value)
-                        }
-                        className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition-colors focus:border-zinc-400"
-                      />
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500">
+                        <IconCheck /> 자동
+                      </span>
                     )}
-                    {dateBad && (
-                      <p className="text-[11px] text-red-500">
-                        2026 / 2026-02 / 2026-02-08 형식으로 입력해 주세요.
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => confirmField(txIndex, key)}
-                      disabled={dateBad}
-                      className="h-9 rounded-md bg-zinc-900 text-xs font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
-                    >
-                      이 값이 맞습니다
-                    </button>
-                  </div>
-                ) : (
-                  // 자동 확인된 항목도, 한 번 확인한 항목도 그대로 고칠 수 있게 둔다.
-                  // 신뢰도가 높아도 AI 가 잘못 읽을 수 있어서 손댈 길을 막지 않는다.
-                  // (수정 버튼을 따로 누르게 하면 오타를 발견해도 한 단계 더 걸린다.)
-                  <div className="mt-1 flex flex-col gap-1.5">
-                    {isDate ? (
-                      <DateInput
-                        value={String(field.value)}
-                        invalid={dateBad}
-                        onChange={(next) => updateValue(txIndex, key, next)}
-                        onFocus={() => reEditField(txIndex, key)}
-                        tone="muted"
-                      />
-                    ) : (
-                      <input
-                        type={key === "amount" ? "text" : type}
-                        inputMode={key === "amount" ? "numeric" : undefined}
-                        value={fieldText(key, field.value)}
-                        onChange={(event) =>
-                          updateValue(txIndex, key, event.target.value)
-                        }
-                        onFocus={() => reEditField(txIndex, key)}
-                        className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-mono text-sm font-medium text-zinc-900 outline-none transition-colors focus:border-zinc-400"
-                      />
-                    )}
-                    {dateBad && (
-                      <p className="text-[11px] text-red-500">
-                        2026 / 2026-02 / 2026-02-08 형식으로 입력해 주세요.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          </div>
-          )}
-        </div>
-        );
-      })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </StepShell>
   );
 }

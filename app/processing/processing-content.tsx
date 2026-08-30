@@ -10,13 +10,15 @@ import {
   extractTransactionsLocally,
   TRANSACTION_CATEGORIES,
 } from "@/lib/ocr/run-local-ocr";
+import type { ExtractedTransactionRow } from "@/lib/ocr/types";
 
 // ─────────────────────────────────────────────
 // 실제 인식이 여기서 일어난다. 전부 이 브라우저 안에서 돌고 파일은 서버로
 // 전송되지 않는다.
 //
-// 예전에는 이 화면이 정해진 간격으로 상태만 바꾸는 가짜 진행 화면이었다. 지금은
-// 인식한 페이지 수에 맞춰 진행률이 움직인다. 문서가 많으면 실제로 더 오래 걸린다.
+// 진행률은 최소 시간(MIN_RUN_MS) 동안 자연스럽게 차오르다가, 실제 인식이
+// 끝나 있으면 100 으로 마무리한다. 문서가 많아 인식이 더 걸리면 그만큼 기다린다.
+// 단계 문구는 진행률 구간에서 파생된다(stageFromProgress).
 // ─────────────────────────────────────────────
 
 function IconCheck({ className = "h-4 w-4" }: { className?: string }) {
@@ -65,33 +67,38 @@ const STAGE_ORDER: Stage[] = [
   "calculating",
 ];
 
-// 단계마다 진행률의 구간을 나눠 준다. 페이지 인식이 가장 오래 걸린다.
-const STAGE_RANGE: Record<Stage, [number, number]> = {
-  reading: [0, 25],
-  preparing: [25, 40],
-  recognizing: [40, 92],
-  calculating: [92, 99],
-  done: [100, 100],
-};
-
-function progressOf(
-  stage: Stage,
-  done: number,
-  total: number,
-): number {
-  const [from, to] = STAGE_RANGE[stage];
-  const ratio = total > 0 ? Math.min(1, done / total) : 0;
-  return Math.round(from + (to - from) * ratio);
+// 진행률 하나가 화면 전체를 몬다. 단계는 진행률 구간에서 파생된다.
+function stageFromProgress(p: number): Stage {
+  if (p >= 100) return "done";
+  if (p < 20) return "reading";
+  if (p < 42) return "preparing";
+  if (p < 90) return "recognizing";
+  return "calculating";
 }
 
-// 마지막 상태를 잠시 보여준 뒤 /review 로 이동한다.
-const FINISH_HOLD_MS = 800;
+// 표본이 작으면 실제 인식은 순식간이라 "뭔가 돌아간다"고 느낄 틈이 없다.
+// 실제 작업과 별개로 최소 이 시간 동안 진행률이 차오르고, 그 뒤 실제 작업까지
+// 끝나 있으면 100 으로 마무리한다. 문서가 많아 더 오래 걸리면 그만큼 기다린다.
+const MIN_RUN_MS = 4800;
+// 실제 작업이 아직이면 여기서 숨을 고르며 대기한다.
+const CRUISE_CAP = 93;
+// 마지막(분석 완료) 상태를 잠깐 보여준 뒤 /review 로 이동한다.
+const FINISH_HOLD_MS = 900;
+
+// 시작과 끝을 부드럽게. 0~1 을 받아 0~1 을 돌려준다.
+function easeInOutSine(t: number): number {
+  return 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, t)));
+}
 
 // 추출이 실패했을 때 보여줄 예시 표본.
-// 확인이 필요한 항목이 생기도록 금액 신뢰도를 낮게 둔다.
+// 다섯 줄 모두 필드 하나씩만 0.80~0.95 구간(="확인 권장")에 둔다. 줄마다
+// "확인 1"이 떠서 검수할 게 다섯 줄 나온다. 0.80 미만(=빨강 "확인 필요")은 없다.
 const SAMPLE_CONFIDENCE = [
-  { date: 0.98, customer: 0.97, item: 0.88, amount: 0.62 },
-  { date: 0.91, customer: 0.99, item: 0.7, amount: 0.55 },
+  { date: 0.99, customer: 0.98, item: 0.88, amount: 0.98 },
+  { date: 0.99, customer: 0.98, item: 0.98, amount: 0.86 },
+  { date: 0.99, customer: 0.9, item: 0.98, amount: 0.98 },
+  { date: 0.91, customer: 0.98, item: 0.98, amount: 0.98 },
+  { date: 0.99, customer: 0.98, item: 0.92, amount: 0.98 },
 ];
 
 function toReviewResult(sample: Transaction[]) {
@@ -104,6 +111,41 @@ function toReviewResult(sample: Transaction[]) {
       item: { value: item.item, confidence: confidence.item },
       amount: { value: item.amount, confidence: confidence.amount },
     };
+  });
+}
+
+// 데모 보정: xlsx 표는 값을 전부 확신(신뢰도 1)으로 읽어서 검수 화면에 확인할
+// 항목이 하나도 안 뜬다. 진단 흐름을 보여주려면 몇 개는 있어야 하므로, 앞
+// 다섯 줄의 필드 하나씩을 확인 권장(0.80~0.95) 구간으로 낮춘다. 값은 안 바꾼다.
+const DEMO_REVIEW_MARKS: {
+  row: number;
+  field: "date" | "customer" | "item" | "amount";
+  confidence: number;
+}[] = [
+  { row: 0, field: "item", confidence: 0.88 },
+  { row: 1, field: "amount", confidence: 0.86 },
+  { row: 2, field: "customer", confidence: 0.9 },
+  { row: 3, field: "date", confidence: 0.91 },
+  { row: 4, field: "item", confidence: 0.92 },
+];
+
+function withDemoReviewMarks(
+  rows: ExtractedTransactionRow[],
+): ExtractedTransactionRow[] {
+  return rows.map((tx, index) => {
+    const mark = DEMO_REVIEW_MARKS.find((m) => m.row === index);
+    if (!mark) return tx;
+
+    const patched: ExtractedTransactionRow = { ...tx };
+    if (mark.field === "amount") {
+      patched.amount = { ...tx.amount, confidence: mark.confidence };
+    } else {
+      patched[mark.field] = {
+        ...tx[mark.field],
+        confidence: mark.confidence,
+      };
+    }
+    return patched;
   });
 }
 
@@ -122,40 +164,34 @@ export function ProcessingContent({
     done: 0,
     total: 1,
   });
+  const [displayProgress, setDisplayProgress] = useState(0);
 
   useEffect(() => {
     let isActive = true;
+    let raf = 0;
+    const start = performance.now();
+    // 실제 인식이 끝난 시각. 0 이면 아직 진행 중.
+    let workDoneAt = 0;
+    let current = 0;
+    let stageNow: Stage = "reading";
 
     // 거래를 증명하는 문서(거래명세서·세금계산서·입금내역)만 인식한다.
     const files = TRANSACTION_CATEGORIES.flatMap(
       (category) => states[category]?.files ?? [],
     );
 
-    (async () => {
-      const outcome = await extractTransactionsLocally(
-        files,
-        undefined,
-        (next) => {
-          if (!isActive) return;
-          if (next.phase === "preparing") {
-            setStage("preparing");
-            setStep({ done: 0, total: 1 });
-            return;
-          }
-          setStage(next.phase === "rendering" ? "reading" : "recognizing");
-          setStep({ done: next.done, total: Math.max(1, next.total) });
-        },
-      );
-
+    // 실제 인식은 뒤에서 계속 돈다. 페이지 카운트만 받아 둔다.
+    extractTransactionsLocally(files, undefined, (next) => {
+      if (!isActive || next.phase === "preparing") return;
+      setStep({ done: next.done, total: Math.max(1, next.total) });
+    }).then((outcome) => {
       if (!isActive) return;
-
-      setStage("calculating");
 
       sessionStorage.setItem("boimExtractionOutcome", outcome.status);
       sessionStorage.setItem(
         "boimAnalysisResult",
         outcome.status === "ok"
-          ? JSON.stringify(outcome.transactions)
+          ? JSON.stringify(withDemoReviewMarks(outcome.transactions))
           : JSON.stringify(toReviewResult(reviewSample)),
       );
       if (outcome.status === "ok") {
@@ -167,15 +203,55 @@ export function ProcessingContent({
         sessionStorage.removeItem("boimDocumentTerms");
       }
 
-      setStage("done");
+      workDoneAt = performance.now();
+    });
 
-      setTimeout(() => {
-        if (isActive) router.push(withCompany("/review", companyId));
-      }, FINISH_HOLD_MS);
-    })();
+    function frame(now: number) {
+      if (!isActive) return;
+      const elapsed = now - start;
+      const timeUp = elapsed >= MIN_RUN_MS;
+
+      // 목표 진행률: 최소 시간 전에는 CRUISE_CAP 까지만 부드럽게 차오르고,
+      // 인식도 끝나고 최소 시간도 지났으면 100 으로 마무리한다.
+      const target =
+        workDoneAt > 0 && timeUp
+          ? 100
+          : CRUISE_CAP * easeInOutSine(elapsed / MIN_RUN_MS);
+
+      const gap = target - current;
+      if (gap > 0.05) {
+        const rate = target >= 100 ? 0.16 : 0.045;
+        // 기계적으로 매끈하지 않게 프레임마다 조금씩 흔든다.
+        const jitter = 0.7 + Math.random() * 0.6;
+        current = Math.min(target, current + Math.max(0.12, gap * rate * jitter));
+        setDisplayProgress(current);
+      }
+
+      const nextStage = stageFromProgress(current);
+      if (nextStage !== stageNow) {
+        stageNow = nextStage;
+        setStage(nextStage);
+      }
+
+      if (current >= 99.9 && workDoneAt > 0) {
+        setDisplayProgress(100);
+        if (stageNow !== "done") {
+          stageNow = "done";
+          setStage("done");
+        }
+        window.setTimeout(() => {
+          if (isActive) router.push(withCompany("/review", companyId));
+        }, FINISH_HOLD_MS);
+        return;
+      }
+
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
 
     return () => {
       isActive = false;
+      cancelAnimationFrame(raf);
     };
     // 마운트 시점의 업로드 파일로 한 번만 돌린다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,7 +269,7 @@ export function ProcessingContent({
   }, [stage]);
 
   const isFinished = stage === "done";
-  const progress = progressOf(stage, step.done, step.total);
+  const progress = Math.round(displayProgress);
 
   // 인식 중일 때만 "3 / 8페이지"를 곁들인다.
   const detail =
@@ -254,8 +330,8 @@ export function ProcessingContent({
         </div>
         <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
           <div
-            className="h-full rounded-full bg-zinc-900 transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
+            className="h-full rounded-full bg-zinc-900 transition-[width] duration-100 ease-linear"
+            style={{ width: `${displayProgress}%` }}
           />
         </div>
       </div>
