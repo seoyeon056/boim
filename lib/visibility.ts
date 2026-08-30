@@ -1,14 +1,14 @@
 import type { ExternalPresence, ExternalSource } from "@/data/visibility";
 
 // 외부 가시성 계산 로직.
-// 뉴스·특허·채용공고·공시 건수만 입력으로 받아서 점수와 해석 문구를 만든다.
+// 뉴스·특허·고용·공시를 입력으로 받아서 점수와 해석 문구를 만든다.
 // 페이지가 문구를 직접 하드코딩하지 않도록 해석까지 여기서 책임진다.
 
 // tone: "warn"(주황, 강조) = 정보 없음/부족 / "muted"(회색) = 흔적 일부 확인
 export type MetricTone = "warn" | "muted";
 
 export type VisibilityMetric = {
-  key: "news" | "patent" | "job" | "disclosure" | "visibility";
+  key: "news" | "patent" | "employment" | "disclosure" | "visibility";
   label: string;
   value: string;
   interpretation: string;
@@ -28,14 +28,16 @@ export type Visibility = {
   newsCountIsAtLeast?: boolean;
   patentCount: number;
   patentCountIsAtLeast?: boolean;
-  jobCount: number;
+  employeeCount: number;
+  employeeChange?: number;
+  employmentAsOf?: string;
   disclosureCount: number;
   visibilityScore: number;
 
   interpretations: {
     news: string;
     patent: string;
-    job: string;
+    employment: string;
     disclosure: string;
     visibility: string;
   };
@@ -66,7 +68,9 @@ const METRICS = {
   news: { weight: 35, full: 500, few: 10 },
   patent: { weight: 25, full: 50, few: 3 },
   disclosure: { weight: 25, full: 30, few: 5 },
-  job: { weight: 15, full: 10, few: 2 },
+  // 고용은 건수가 아니라 사람 수다. 3인 이상 법인만 자료에 들어오므로 바닥이
+  // 3명이고, 이 서비스가 보는 B2B 제조 중소기업은 대체로 두 자리다.
+  employment: { weight: 15, full: 100, few: 10 },
 } as const;
 
 const NOTICE =
@@ -92,7 +96,7 @@ export function calculateVisibilityScore(presence: ExternalPresence): number {
     ["news", presence.newsCount, METRICS.news],
     ["patent", presence.patentCount, METRICS.patent],
     ["disclosure", presence.disclosureCount ?? 0, METRICS.disclosure],
-    ["job", presence.jobCount, METRICS.job],
+    ["employment", presence.employeeCount, METRICS.employment],
   ] as const;
 
   let earned = 0;
@@ -121,7 +125,7 @@ function band(count: number, few: number): "none" | "few" | "many" {
 }
 
 // 뉴스·특허가 0건인 건 이 서비스가 지적하려는 상태라 주황으로 강조한다.
-// 채용·공시 0건은 소규모 법인에서 정상이라 회색으로 둔다.
+// 고용·공시 기록 없음은 소규모 법인에서 정상이라 회색으로 둔다.
 function interpretNews(count: number) {
   const level = band(count, METRICS.news.few);
   if (level === "none") {
@@ -147,18 +151,32 @@ function interpretPatent(count: number) {
   return { interpretation: "공개 기술 흔적 다수 확인", tone: "muted" as const };
 }
 
-function interpretJob(count: number) {
-  const level = band(count, METRICS.job.few);
-  if (level === "none") {
-    return { interpretation: "공개 채용 활동 없음", tone: "muted" as const };
+// 규모와 증감을 한 문장에 담는다. 규모만 보면 오래된 회사가 늘 유리하고,
+// 증감만 보면 3명이 4명 된 회사가 제일 좋아 보인다.
+function interpretEmployment(count: number, change?: number) {
+  if (count === 0) {
+    // 3인 미만 법인은 국민연금 자료 자체에 안 들어온다. "고용이 없다"가 아니다.
+    return { interpretation: "국민연금 가입 기록 없음", tone: "muted" as const };
   }
-  if (level === "few") {
+
+  const size = band(count, METRICS.employment.few) === "few" ? "소규모" : "일정 규모";
+
+  if (change === undefined) {
+    return { interpretation: `${size} 고용 확인`, tone: "muted" as const };
+  }
+  if (change > 0) {
     return {
-      interpretation: "공개 채용 활동 소수 확인",
+      interpretation: `${size} 고용, 최근 6개월 ${change}명 증가`,
       tone: "muted" as const,
     };
   }
-  return { interpretation: "공개 채용 활동 확인", tone: "muted" as const };
+  if (change < 0) {
+    return {
+      interpretation: `${size} 고용, 최근 6개월 ${-change}명 감소`,
+      tone: "warn" as const,
+    };
+  }
+  return { interpretation: `${size} 고용, 최근 6개월 변동 없음`, tone: "muted" as const };
 }
 
 function interpretDisclosure(count: number) {
@@ -179,9 +197,22 @@ const UNAVAILABLE_METRIC = {
   tone: "warn" as const,
 };
 
+// 고용만 사유가 다르다. 국민연금 자료는 가입자 3인 이상 법인사업장부터 들어오고,
+// 같은 이름의 회사가 둘 이상이면 어느 쪽인지 가릴 수 없어 판단을 접는다. 그런
+// 경우까지 "응답 없음"이라고 적으면 서비스 장애처럼 읽힌다.
+const UNAVAILABLE_EMPLOYMENT = {
+  value: "확인 불가",
+  interpretation: "국민연금 가입 사업장에서 찾지 못함",
+  tone: "warn" as const,
+};
+
+function unavailableFor(key: ExternalSource) {
+  return key === "employment" ? UNAVAILABLE_EMPLOYMENT : UNAVAILABLE_METRIC;
+}
+
 // 60점 위가 전부 한 구간이라 100점에도 "일부 확인"이 붙었다. 네 축이 다 차서
 // 만점이 나온 기업한테 할 말은 아니다. 실측 분포를 보고 85를 경계로 나눈다
-// (한빛정밀 15 / 뉴스 100·특허 5·공시 3·채용 1인 기업 52 / 동일기연급 87 /
+// (한빛정밀 15 / 뉴스 100·특허 5·공시 3·소규모 고용 기업 52 / 동일기연급 87 /
 // LG생활건강·삼성전자 85~100).
 const AMPLE_SCORE = 85;
 
@@ -236,12 +267,15 @@ export function calculateVisibility(
     read: { interpretation: string; tone: MetricTone },
   ): VisibilityMetric =>
     missing.has(key)
-      ? { key, label, ...UNAVAILABLE_METRIC }
+      ? { key, label, ...unavailableFor(key) }
       : { key, label, value, ...read };
 
   const news = interpretNews(presence.newsCount);
   const patent = interpretPatent(presence.patentCount);
-  const job = interpretJob(presence.jobCount);
+  const employment = interpretEmployment(
+    presence.employeeCount,
+    presence.employeeChange,
+  );
   const disclosureCount = presence.disclosureCount ?? 0;
   const disclosure = interpretDisclosure(disclosureCount);
   const visibility = interpretScore(visibilityScore);
@@ -255,7 +289,9 @@ export function calculateVisibility(
     newsCountIsAtLeast: presence.newsCountIsAtLeast,
     patentCount: presence.patentCount,
     patentCountIsAtLeast: presence.patentCountIsAtLeast,
-    jobCount: presence.jobCount,
+    employeeCount: presence.employeeCount,
+    employeeChange: presence.employeeChange,
+    employmentAsOf: presence.employmentAsOf,
     disclosureCount,
     visibilityScore,
 
@@ -268,9 +304,9 @@ export function calculateVisibility(
       patent: missing.has("patent")
         ? UNAVAILABLE_METRIC.interpretation
         : patent.interpretation,
-      job: missing.has("job")
-        ? UNAVAILABLE_METRIC.interpretation
-        : job.interpretation,
+      employment: missing.has("employment")
+        ? UNAVAILABLE_EMPLOYMENT.interpretation
+        : employment.interpretation,
       disclosure: missing.has("disclosure")
         ? UNAVAILABLE_METRIC.interpretation
         : disclosure.interpretation,
@@ -292,7 +328,12 @@ export function calculateVisibility(
         `${presence.patentCount.toLocaleString()}건${presence.patentCountIsAtLeast ? " 이상" : ""}`,
         patent,
       ),
-      metricFor("job", "채용공고", `${presence.jobCount.toLocaleString()}건`, job),
+      metricFor(
+        "employment",
+        "고용 규모",
+        `${presence.employeeCount.toLocaleString()}명`,
+        employment,
+      ),
       metricFor(
         "disclosure",
         "공시",

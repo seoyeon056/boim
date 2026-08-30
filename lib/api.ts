@@ -61,10 +61,11 @@ export type DiagnosisInput = {
   newsCountIsAtLeast?: boolean;
   patentCount: number;
   patentCountIsAtLeast?: boolean;
-  jobCount: number;
+  employeeCount: number;
+  employeeChange?: number;
   disclosureCount: number;
   // 외부 서비스가 대답하지 않아 확인하지 못한 축. 건수는 0으로 채워져 있지만
-  // "없다"는 뜻이 아니므로 그대로 보내면 LLM이 "채용 공고가 없어"라고 쓴다.
+  // "없다"는 뜻이 아니므로 그대로 보내면 LLM이 "고용 기록이 없어"라고 쓴다.
   unavailable: string[];
   customerGrowthRate: number;
   previousCustomersCount: number;

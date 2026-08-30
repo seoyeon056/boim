@@ -9,7 +9,7 @@ import { LoadingSteps } from "@/app/loading-steps";
 
 const DIAGNOSE_STEPS = [
   "기업 정보를 확인하는 중",
-  "뉴스·특허·채용 공개 정보를 모으는 중",
+  "뉴스·특허·고용 공개 정보를 모으는 중",
   "외부 가시성 점수를 분석하는 중",
 ];
 

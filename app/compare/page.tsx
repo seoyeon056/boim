@@ -3,6 +3,11 @@ import { getSignals, getVisibility } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import { CompareView } from "./compare-view";
 
+// 국민연금 사업장명 검색이 9초 안팎으로 고정 지연이 있다(공공데이터포털 쪽
+// 응답 속도이고, 페이지 크기를 줄여도 같다). 배포 환경의 기본 함수 타임아웃에
+// 걸리면 고용 축만 "확인 불가"가 되는 게 아니라 화면 전체가 죽는다.
+export const maxDuration = 30;
+
 export default async function ComparePage(props: PageProps<"/compare">) {
   const companyId = readCompanyId((await props.searchParams).company);
 

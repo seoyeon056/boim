@@ -5,13 +5,29 @@ import {
   type ExternalSource,
 } from "@/data/visibility";
 import { fetchNewsCount } from "@/lib/external/news";
-import { fetchJobCount } from "@/lib/external/jobs";
+import { fetchEmployment } from "@/lib/external/employment";
 import { fetchPatentCount } from "@/lib/external/patents";
 import { fetchDisclosureCount } from "@/lib/external/disclosures";
+import { fetchDartProfile } from "@/lib/external/dart";
 
 // 네 API를 병렬로 호출하고, 키가 설정된 항목만 실제 값으로 덮어쓴다.
 // 키가 없거나 호출이 실패한 항목은 기존 합성 데이터(data/visibility.ts)를 그대로 쓴다.
 // 그래서 뉴스 API 키만 먼저 등록해도 뉴스만 실 데이터로 바뀌고 나머지는 안 깨진다.
+
+// 검색으로 고른 실제 기업은 id가 DART 고유번호(8자리)다.
+const CORP_CODE = /^\d{8}$/;
+
+// 국민연금 쪽은 사업자등록번호 앞 6자리만 공개한다. 동명 회사를 가르려면
+// 전체 번호가 필요한데, 그건 DART 기업개황에만 있다. 여기서 미리 받아 둔다.
+async function findBizrNo(companyId: string): Promise<string | undefined> {
+  if (!CORP_CODE.test(companyId)) {
+    return undefined;
+  }
+
+  const profile = await fetchDartProfile(companyId);
+  return profile?.bizrNo || undefined;
+}
+
 export async function getExternalPresence(
   companyId: string,
   companyName: string,
@@ -25,10 +41,11 @@ export async function getExternalPresence(
   }
 
   const isDemoCompany = hasSyntheticPresence(companyId);
+  const bizrNo = await findBizrNo(companyId);
 
-  const [news, jobCount, patent, disclosureCount] = await Promise.all([
+  const [news, employment, patent, disclosureCount] = await Promise.all([
     fetchNewsCount(companyName),
-    fetchJobCount(companyName),
+    fetchEmployment(companyName, bizrNo),
     fetchPatentCount(companyName),
     fetchDisclosureCount(companyName),
   ]);
@@ -40,7 +57,7 @@ export async function getExternalPresence(
   if (!isDemoCompany) {
     if (!news) unavailable.push("news");
     if (patent === null) unavailable.push("patent");
-    if (jobCount === null) unavailable.push("job");
+    if (!employment) unavailable.push("employment");
     if (disclosureCount === null) unavailable.push("disclosure");
   }
 
@@ -49,7 +66,9 @@ export async function getExternalPresence(
     unavailable,
     newsCount: news?.count ?? fallback.newsCount,
     newsCountIsAtLeast: news ? news.isAtLeast : undefined,
-    jobCount: jobCount ?? fallback.jobCount,
+    employeeCount: employment?.employeeCount ?? fallback.employeeCount,
+    employeeChange: employment?.employeeChange,
+    employmentAsOf: employment?.asOf,
     patentCount: patent?.count ?? fallback.patentCount,
     patentCountIsAtLeast: patent ? patent.isAtLeast : undefined,
     disclosureCount: disclosureCount ?? fallback.disclosureCount ?? 0,

@@ -1,9 +1,9 @@
 // 기업별 외부 공개 정보 수집 결과(합성 데이터).
-// 뉴스·특허·채용공고·공시 "건수"만 원본 데이터로 두고,
+// 뉴스·특허·고용·공시를 원본 데이터로 두고,
 // 가시성 점수와 해석 문구는 lib/visibility.ts 에서 계산한다.
 // data/transactions.ts 에서 성장 신호를 계산하는 방식과 같은 구조다.
 // 외부 공개 정보의 네 축.
-export type ExternalSource = "news" | "patent" | "job" | "disclosure";
+export type ExternalSource = "news" | "patent" | "employment" | "disclosure";
 
 export type ExternalPresence = {
   companyId: string;
@@ -22,7 +22,13 @@ export type ExternalPresence = {
   // "정확한 수치"가 아니라 "적어도 이만큼은 있다"는 뜻이다. 합성 데이터는
   // 처음부터 정확한 값이라 항상 false(미지정 시 기본값).
   patentCountIsAtLeast?: boolean;
-  jobCount: number;
+  // 국민연금 가입자 수. 채용공고 건수를 대신한다. 공고는 회사가 안 올리면
+  // 0이지만 가입자 수는 의무 신고라 홍보를 안 하는 회사에도 남는다.
+  employeeCount: number;
+  // 6개월 전 대비 증감(명). 비교할 과거 자료가 없으면 없다.
+  employeeChange?: number;
+  // 가입자 수의 기준 시점(YYYYMM).
+  employmentAsOf?: string;
   // DART 최근 1년 공시 건수. 공시는 법인 등록과 보고 의무가 있는 회사만 남기는
   // 기록이라, 아래 합성 데이터의 소규모 법인들은 전부 0건이다. 30줄에 똑같이
   // 0을 쓰는 대신 생략하고, 값이 없으면 0으로 읽는다.
@@ -30,42 +36,42 @@ export type ExternalPresence = {
 };
 
 export const externalPresences: ExternalPresence[] = [
-  { companyId: "hanbit", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "gaon-motion", newsCount: 1, patentCount: 1, jobCount: 0 },
-  { companyId: "seorim-sensor", newsCount: 0, patentCount: 3, jobCount: 0 },
-  { companyId: "bluepeak-energy", newsCount: 1, patentCount: 2, jobCount: 1 },
-  { companyId: "nuri-packaging", newsCount: 0, patentCount: 1, jobCount: 0 },
-  { companyId: "miraeon-robotics", newsCount: 1, patentCount: 3, jobCount: 0 },
-  { companyId: "haedam-biotech", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "bridgeon-tech", newsCount: 1, patentCount: 1, jobCount: 1 },
-  { companyId: "monoleaf-materials", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "wavecore-solutions", newsCount: 1, patentCount: 0, jobCount: 1 },
-  { companyId: "dawon-circuit", newsCount: 0, patentCount: 3, jobCount: 1 },
-  { companyId: "saebom-meditech", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "orbit-factory", newsCount: 1, patentCount: 1, jobCount: 1 },
-  { companyId: "puremesh-filter", newsCount: 0, patentCount: 1, jobCount: 0 },
-  { companyId: "neulchan-foodtech", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "corelink-optics", newsCount: 1, patentCount: 3, jobCount: 0 },
-  { companyId: "maruchem", newsCount: 1, patentCount: 3, jobCount: 1 },
-  { companyId: "innoharbor", newsCount: 1, patentCount: 2, jobCount: 0 },
-  { companyId: "solbit-display", newsCount: 0, patentCount: 3, jobCount: 1 },
-  { companyId: "greenstep-mobility", newsCount: 2, patentCount: 2, jobCount: 1 },
-  { companyId: "onul-airtech", newsCount: 0, patentCount: 1, jobCount: 0 },
-  { companyId: "namu-composites", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "pixelwave-vision", newsCount: 1, patentCount: 0, jobCount: 0 },
-  { companyId: "daram-logistics", newsCount: 0, patentCount: 2, jobCount: 1 },
-  { companyId: "crestell-battery", newsCount: 1, patentCount: 3, jobCount: 0 },
-  { companyId: "harin-semicon", newsCount: 2, patentCount: 3, jobCount: 1 },
-  { companyId: "cloudmill-tech", newsCount: 1, patentCount: 0, jobCount: 1 },
-  { companyId: "yeoul-water", newsCount: 0, patentCount: 2, jobCount: 0 },
-  { companyId: "novacell-materials", newsCount: 1, patentCount: 3, jobCount: 1 },
-  { companyId: "doori-automation", newsCount: 0, patentCount: 2, jobCount: 1 },
+  { companyId: "hanbit", newsCount: 0, patentCount: 2, employeeCount: 18 },
+  { companyId: "gaon-motion", newsCount: 1, patentCount: 1, employeeCount: 42 },
+  { companyId: "seorim-sensor", newsCount: 0, patentCount: 3, employeeCount: 27 },
+  { companyId: "bluepeak-energy", newsCount: 1, patentCount: 2, employeeCount: 63 },
+  { companyId: "nuri-packaging", newsCount: 0, patentCount: 1, employeeCount: 34 },
+  { companyId: "miraeon-robotics", newsCount: 1, patentCount: 3, employeeCount: 51 },
+  { companyId: "haedam-biotech", newsCount: 0, patentCount: 2, employeeCount: 23 },
+  { companyId: "bridgeon-tech", newsCount: 1, patentCount: 1, employeeCount: 38 },
+  { companyId: "monoleaf-materials", newsCount: 0, patentCount: 2, employeeCount: 46 },
+  { companyId: "wavecore-solutions", newsCount: 1, patentCount: 0, employeeCount: 31 },
+  { companyId: "dawon-circuit", newsCount: 0, patentCount: 3, employeeCount: 57 },
+  { companyId: "saebom-meditech", newsCount: 0, patentCount: 2, employeeCount: 29 },
+  { companyId: "orbit-factory", newsCount: 1, patentCount: 1, employeeCount: 44 },
+  { companyId: "puremesh-filter", newsCount: 0, patentCount: 1, employeeCount: 36 },
+  { companyId: "neulchan-foodtech", newsCount: 0, patentCount: 2, employeeCount: 41 },
+  { companyId: "corelink-optics", newsCount: 1, patentCount: 3, employeeCount: 52 },
+  { companyId: "maruchem", newsCount: 1, patentCount: 3, employeeCount: 68 },
+  { companyId: "innoharbor", newsCount: 1, patentCount: 2, employeeCount: 48 },
+  { companyId: "solbit-display", newsCount: 0, patentCount: 3, employeeCount: 61 },
+  { companyId: "greenstep-mobility", newsCount: 2, patentCount: 2, employeeCount: 73 },
+  { companyId: "onul-airtech", newsCount: 0, patentCount: 1, employeeCount: 33 },
+  { companyId: "namu-composites", newsCount: 0, patentCount: 2, employeeCount: 39 },
+  { companyId: "pixelwave-vision", newsCount: 1, patentCount: 0, employeeCount: 26 },
+  { companyId: "daram-logistics", newsCount: 0, patentCount: 2, employeeCount: 55 },
+  { companyId: "crestell-battery", newsCount: 1, patentCount: 3, employeeCount: 64 },
+  { companyId: "harin-semicon", newsCount: 2, patentCount: 3, employeeCount: 87 },
+  { companyId: "cloudmill-tech", newsCount: 1, patentCount: 0, employeeCount: 32 },
+  { companyId: "yeoul-water", newsCount: 0, patentCount: 2, employeeCount: 45 },
+  { companyId: "novacell-materials", newsCount: 1, patentCount: 3, employeeCount: 79 },
+  { companyId: "doori-automation", newsCount: 0, patentCount: 2, employeeCount: 58 },
 ];
 
 const EMPTY_PRESENCE: Omit<ExternalPresence, "companyId"> = {
   newsCount: 0,
   patentCount: 0,
-  jobCount: 0,
+  employeeCount: 0,
   disclosureCount: 0,
 };
 
