@@ -25,7 +25,7 @@ function label(raw: unknown): string {
   return typeof raw === "string" ? raw.slice(0, MAX_TEXT) : "";
 }
 
-const EXTERNAL_SOURCES = ["news", "patent", "job", "disclosure"] as const;
+const EXTERNAL_SOURCES = ["news", "patent", "employment", "disclosure"] as const;
 
 // 확인하지 못한 축은 0건이라고 적지 않는다. 숫자로 넘기면 LLM이 "특허가 없어"
 // 같은 문장을 만들고, 그 문장이 진단서에 그대로 실린다.
@@ -42,17 +42,18 @@ function describeExternalCounts(body: Record<string, unknown>): string {
     key: (typeof EXTERNAL_SOURCES)[number],
     text: string,
     count: unknown,
+    unit: string,
     isAtLeast?: unknown,
   ) =>
     missing.has(key)
       ? `${text} 확인 불가(외부 서비스 응답 없음, 값을 추측하지 마세요)`
-      : `${text} ${num(count).toLocaleString()}건${isAtLeast === true ? " 이상" : ""}`;
+      : `${text} ${num(count).toLocaleString()}${unit}${isAtLeast === true ? " 이상" : ""}`;
 
   return [
-    value("news", "뉴스", body.newsCount, body.newsCountIsAtLeast),
-    value("patent", "특허", body.patentCount, body.patentCountIsAtLeast),
-    value("job", "채용공고", body.jobCount),
-    value("disclosure", "최근 1년 공시", body.disclosureCount),
+    value("news", "뉴스", body.newsCount, "건", body.newsCountIsAtLeast),
+    value("patent", "특허", body.patentCount, "건", body.patentCountIsAtLeast),
+    value("employment", "국민연금 가입자", body.employeeCount, "명"),
+    value("disclosure", "최근 1년 공시", body.disclosureCount, "건"),
   ].join(" · ");
 }
 

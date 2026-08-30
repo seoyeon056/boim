@@ -126,7 +126,7 @@ export function ShareContent({
       newsCountIsAtLeast: view.newsCountIsAtLeast,
       patentCount: view.patentCount,
       patentCountIsAtLeast: view.patentCountIsAtLeast,
-      jobCount: view.jobCount,
+      employeeCount: view.employeeCount,
       disclosureCount: view.disclosureCount,
       unavailable: view.unavailable,
       customerGrowthRate: values.customerGrowthRate,

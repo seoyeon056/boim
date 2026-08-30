@@ -3,7 +3,7 @@ import Link from "next/link";
 const highlights = [
   {
     no: "01",
-    title: "뉴스·특허·채용 정보가 적은 B2B 제조기업",
+    title: "뉴스·특허 등 공개 정보가 적은 B2B 제조기업",
     body: "외부에 잘 드러나지 않는 기업일수록 BO:IM의 진단이 필요합니다.",
   },
   {

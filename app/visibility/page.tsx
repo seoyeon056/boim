@@ -5,6 +5,11 @@ import StepShell from "@/app/step-shell";
 import { ScoreCard } from "./score-card";
 import { generateVisibilityInsight } from "@/lib/llm/insights";
 
+// 국민연금 사업장명 검색이 9초 안팎으로 고정 지연이 있다(공공데이터포털 쪽
+// 응답 속도이고, 페이지 크기를 줄여도 같다). 배포 환경의 기본 함수 타임아웃에
+// 걸리면 고용 축만 "확인 불가"가 되는 게 아니라 화면 전체가 죽는다.
+export const maxDuration = 30;
+
 export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const companyId = readCompanyId((await props.searchParams).company);
 
@@ -41,7 +46,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
 
   const score = visibility.visibilityScore;
 
-  // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·채용·공시로 나눠 보여준다.
+  // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·고용·공시로 나눠 보여준다.
   const scoreMetric = visibility.metrics.find((m) => m.key === "visibility");
   const breakdown = visibility.metrics.filter((m) => m.key !== "visibility");
 
@@ -49,7 +54,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     <StepShell
       step="Step 02"
       title="외부 가시성 점수"
-      description={`${visibility.company}의 뉴스·특허·채용·공시 공개 정보를 기반으로 측정합니다.`}
+      description={`${visibility.company}의 뉴스·특허·고용·공시 공개 정보를 기반으로 측정합니다.`}
       backTo="/company"
       companyId={visibility.companyId}
       footer={

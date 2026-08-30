@@ -56,7 +56,12 @@ function presentAxes(visibility: Visibility): {
       unit: "건",
       isAtLeast: visibility.patentCountIsAtLeast,
     },
-    { key: "job", label: "채용 공고", count: visibility.jobCount, unit: "건" },
+    {
+      key: "employment",
+      label: "고용 규모",
+      count: visibility.employeeCount,
+      unit: "명",
+    },
     {
       key: "disclosure",
       label: "공시",

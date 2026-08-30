@@ -3,31 +3,33 @@ import type { Signals } from "@/lib/signals";
 import { generateDiagnosisText } from "@/lib/llm/providers";
 import { MASKED_CUSTOMER_LABEL, restoreCustomerName } from "@/lib/llm/customer-mask";
 
-// Step 02(외부 가시성) 요약. 뉴스·특허·채용·공시 건수는 원래 공개 정보라 마스킹이 필요 없다.
+// Step 02(외부 가시성) 요약. 뉴스·특허·고용·공시는 원래 공개 정보라 마스킹이 필요 없다.
 // 확인하지 못한 축은 0건이라고 적지 않는다. 숫자로 넘기면 LLM이 "특허가 없어"
 // 같은 문장을 만들어 버리고, 그 문장이 화면과 진단서에 그대로 실린다.
 function describeCounts(visibility: Visibility): string {
   const unavailable = new Set(visibility.unavailable);
   const value = (
-    key: "news" | "patent" | "job" | "disclosure",
+    key: "news" | "patent" | "employment" | "disclosure",
     label: string,
     count: number,
+    unit: string,
     isAtLeast?: boolean,
   ) =>
     unavailable.has(key)
       ? `${label} 확인 불가(외부 서비스 응답 없음, 값을 추측하지 마세요)`
-      : `${label} ${count.toLocaleString()}건${isAtLeast ? " 이상" : ""}`;
+      : `${label} ${count.toLocaleString()}${unit}${isAtLeast ? " 이상" : ""}`;
 
   return [
-    value("news", "뉴스", visibility.newsCount, visibility.newsCountIsAtLeast),
+    value("news", "뉴스", visibility.newsCount, "건", visibility.newsCountIsAtLeast),
     value(
       "patent",
       "특허",
       visibility.patentCount,
+      "건",
       visibility.patentCountIsAtLeast,
     ),
-    value("job", "채용공고", visibility.jobCount),
-    value("disclosure", "최근 1년 공시", visibility.disclosureCount),
+    value("employment", "국민연금 가입자", visibility.employeeCount, "명"),
+    value("disclosure", "최근 1년 공시", visibility.disclosureCount, "건"),
   ].join(" / ");
 }
 
