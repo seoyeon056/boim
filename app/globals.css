@@ -98,21 +98,8 @@ body {
   animation-iteration-count: infinite;
 }
 
-/* 가운데 따뜻한 띠의 완급. 주기가 길고(22s) 폭이 좁아(1 → 0.55 → 1) 순간순간은
-   눈치채기 어렵고, 화면이 아주 느리게 숨 쉬는 느낌만 남는다. */
-@keyframes signalGlow {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.55; }
-}
-
-.signal-glow {
-  animation: signalGlow 22s ease-in-out infinite;
-  will-change: opacity;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .signal-word { animation: none; opacity: 0.55; }
-  .signal-glow { animation: none; }
 }
 
 h1, h2, h3 {
