@@ -58,17 +58,6 @@ function SignalField() {
           {w.text}
         </span>
       ))}
-      {/* 가운데 세로 띠. 문장이 놓이는 영역에 배경(크림)보다 한 톤 짙은 따뜻한
-          크림을 얹어, 스포트라이트처럼 문장 주변을 감싸고 좌우 글자 영역과
-          갈라놓는다. 가장자리 페이드로 경계를 부드럽게 둔다.
-          signal-glow: 그 따뜻한 기운이 아주 느리게 옅어졌다 돌아온다. */}
-      <div
-        className="signal-glow absolute inset-y-0 left-1/2 w-[56%] -translate-x-1/2"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(246,240,231,0) 4%, #f6f0e7 18%, #f6f0e7 82%, rgba(246,240,231,0) 96%, transparent 100%)",
-        }}
-      />
     </div>
   );
 }
