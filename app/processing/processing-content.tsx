@@ -328,10 +328,13 @@ export function ProcessingContent({
             {progress}%
           </span>
         </div>
-        <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
+        <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+          {/* rAF 루프가 프레임마다 값을 밀어 올리므로 CSS transition 은 두지
+              않는다(둘이 겹치면 막대가 숫자보다 한참 뒤처진다). 막대 폭과 표시
+              숫자를 같은 정수값에 묶어 항상 일치시킨다. */}
           <div
-            className="h-full rounded-full bg-zinc-900 transition-[width] duration-100 ease-linear"
-            style={{ width: `${displayProgress}%` }}
+            className="h-full rounded-full bg-zinc-900"
+            style={{ width: `${progress}%` }}
           />
         </div>
       </div>
