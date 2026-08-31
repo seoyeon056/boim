@@ -110,6 +110,22 @@ export default function CompanyPage() {
             autoComplete="off"
             className="h-[50px] w-full rounded-md border border-zinc-200 bg-white px-4 text-[16px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
           />
+          <p className="text-[11px] leading-5 text-zinc-400">
+            시연용 기업은{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("한빛정밀");
+                setCompanies([]);
+                setSelectedCompany(null);
+                setErrorMessage("");
+              }}
+              className="font-medium text-zinc-500 underline decoration-zinc-300 decoration-dotted underline-offset-2 transition-colors hover:text-zinc-800 hover:decoration-zinc-500"
+            >
+              한빛정밀
+            </button>
+            이지만, 실제 기업도 검색할 수 있습니다.
+          </p>
         </div>
       </div>
 

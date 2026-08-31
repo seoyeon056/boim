@@ -234,6 +234,20 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     addFiles(categoryId, event.dataTransfer?.files ?? null, null);
   }
 
+  // 목록의 파일 이름을 누르면 그 파일을 그대로 내려받는다. 샘플이든 직접 올린
+  // 파일이든 메모리에 실제 File 로 들고 있어서, 열어 보고 내용을 확인할 수 있다.
+  function downloadFile(file: File) {
+    const url = URL.createObjectURL(file);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = file.name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // 브라우저가 내려받기를 시작할 틈을 준 뒤 해제한다.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function removeFile(categoryId: string, fileIndex: number) {
     setStates((prev) => {
       const current = prev[categoryId];
@@ -560,9 +574,32 @@ export function UploadContent({ companyId }: { companyId?: string }) {
                         className="flex items-center justify-between gap-2 rounded-md bg-zinc-50 px-3 py-2"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-zinc-700">
-                            {file.name}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => downloadFile(file)}
+                            title="파일 내려받아 확인"
+                            className="flex w-full items-center gap-1 text-left"
+                          >
+                            <span className="truncate text-xs font-medium text-zinc-700 underline decoration-zinc-300 decoration-dotted underline-offset-2 transition-colors hover:text-zinc-900 hover:decoration-zinc-500">
+                              {file.name}
+                            </span>
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 14 14"
+                              fill="none"
+                              aria-hidden="true"
+                              className="shrink-0 text-zinc-300"
+                            >
+                              <path
+                                d="M7 2v7m0 0l3-3m-3 3L4 6M2.5 11.5h9"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
                           <p className="font-mono text-[11px] text-zinc-400">
                             {formatBytes(file.size)}
                           </p>

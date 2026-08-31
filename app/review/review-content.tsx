@@ -500,13 +500,13 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                                 ? "한 번 더 확인하는 것을 권장합니다."
                                 : undefined
                           }
-                          className={`h-8 w-full rounded border bg-transparent px-2 font-mono text-[13px] text-zinc-900 outline-none transition-colors focus:border-zinc-500 ${align} ${
+                          className={`h-8 w-full rounded border bg-transparent px-2 font-mono text-[13px] text-zinc-900 outline-none transition-colors focus:border-solid focus:border-zinc-500 focus:bg-white ${align} ${
                             bad
-                              ? "border-red-400 bg-red-50/50"
+                              ? "border-dashed border-red-400 bg-white"
                               : flag
                                 ? tier === "low"
-                                  ? "border-red-300 bg-red-50/40"
-                                  : "border-amber-300 bg-amber-50/40"
+                                  ? "border-dashed border-red-400 bg-white"
+                                  : "border-dashed border-amber-400 bg-white"
                                 : "border-transparent hover:border-zinc-200"
                           }`}
                         />
@@ -523,7 +523,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       <button
                         type="button"
                         onClick={() => confirmRow(txIndex, tx)}
-                        className="rounded border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-[#7e4d39] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#5f3a2b]"
                       >
                         확인 {pending}
                       </button>
@@ -531,8 +531,8 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                       <button
                         type="button"
                         onClick={() => reEditRow(txIndex, tx)}
-                        title="다시 확인"
-                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-emerald-600 transition-colors hover:bg-emerald-50"
+                        title="다시 확인하기"
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-600 transition-colors hover:bg-emerald-50"
                       >
                         <IconCheck /> 확인함
                       </button>
