@@ -10,9 +10,22 @@ import { fetchPatentCount } from "@/lib/external/patents";
 import { fetchDisclosureCount } from "@/lib/external/disclosures";
 import { fetchDartProfile } from "@/lib/external/dart";
 
-// 네 API를 병렬로 호출하고, 키가 설정된 항목만 실제 값으로 덮어쓴다.
-// 키가 없거나 호출이 실패한 항목은 기존 합성 데이터(data/visibility.ts)를 그대로 쓴다.
-// 그래서 뉴스 API 키만 먼저 등록해도 뉴스만 실 데이터로 바뀌고 나머지는 안 깨진다.
+// 네 API를 병렬로 호출한다.
+//
+// "키가 없다"와 "불렀는데 실패했다"를 갈라서 다르게 다룬다. 예전에는 둘 다
+// 합성 데이터(data/visibility.ts)로 되돌렸는데, 그 탓에 같은 기업을 연달아
+// 조회하면 값이 오락가락했다. 실측: 한빛정밀을 네 번 부르면 8명·8명·18명·8명이
+// 나왔다(18명은 합성값). 국민연금 조회가 간헐적으로 타임아웃할 때마다 지어낸
+// 값이 측정값 자리에 조용히 들어앉은 것이다. 비교 화면은 18명, 진단서는 8명이
+// 되어 한 흐름 안에서 두 화면이 다른 숫자를 말했다.
+//
+// 지금은 이렇게 나눈다.
+//
+//   키가 없다   → 그 축은 애초에 연결된 적이 없다. 데모 기업이면 합성값을 쓴다.
+//                 배포 시점에 정해지는 조건이라 요청마다 바뀌지 않는다.
+//   호출 실패   → "확인 불가"로 적고 배점에서 뺀다. 값을 대신 채우지 않는다.
+//
+// 못 받은 것을 지어내지 않으면 화면들이 서로 다른 말을 할 일도 없다.
 
 // 검색으로 고른 실제 기업은 id가 DART 고유번호(8자리)다.
 const CORP_CODE = /^\d{8}$/;
@@ -43,6 +56,14 @@ export async function getExternalPresence(
   const isDemoCompany = hasSyntheticPresence(companyId);
   const bizrNo = await findBizrNo(companyId);
 
+  // 키가 등록돼 있는 축. 여기 없는 축은 부른 적이 없으므로 실패가 아니다.
+  const configured = {
+    news: Boolean(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET),
+    patent: Boolean(process.env.KIPRIS_SERVICE_KEY),
+    employment: Boolean(process.env.KOOKMIN_API_KEY),
+    disclosure: Boolean(process.env.DART_SEARCH_KEY),
+  } as const;
+
   const [news, employment, patent, disclosureCount] = await Promise.all([
     fetchNewsCount(companyName),
     fetchEmployment(companyName, bizrNo),
@@ -50,27 +71,51 @@ export async function getExternalPresence(
     fetchDisclosureCount(companyName),
   ]);
 
-  // 데모 기업은 합성 데이터가 곧 정답이라 폴백이 정상 동작이다. 검색으로 찾은
-  // 실제 기업은 폴백할 값이 없어 0이 되므로, 대답하지 않은 축을 그대로 적어
-  // 화면과 진단서가 "0건"이라고 단정하지 않게 한다.
+  // 값을 못 받은 축을 어떻게 다룰지 한곳에서 정한다.
+  //
+  //   키가 있는데 못 받았다  → 실패. "확인 불가"로 적고 배점에서 뺀다.
+  //   키가 없다 + 데모 기업   → 합성값을 쓴다(데모 기업은 그게 정답이다).
+  //   키가 없다 + 실제 기업   → 채울 값이 없다. 역시 "확인 불가".
   const unavailable: ExternalSource[] = [];
-  if (!isDemoCompany) {
-    if (!news) unavailable.push("news");
-    if (patent === null) unavailable.push("patent");
-    if (!employment) unavailable.push("employment");
-    if (disclosureCount === null) unavailable.push("disclosure");
+
+  function resolve<T>(
+    source: ExternalSource,
+    answer: T | null | undefined,
+    synthetic: number,
+  ): { answered: T | null; count: number } {
+    if (answer !== null && answer !== undefined) {
+      return { answered: answer, count: 0 };
+    }
+    if (!configured[source] && isDemoCompany) {
+      return { answered: null, count: synthetic };
+    }
+    unavailable.push(source);
+    return { answered: null, count: 0 };
   }
+
+  const newsAxis = resolve("news", news, fallback.newsCount);
+  const patentAxis = resolve("patent", patent, fallback.patentCount);
+  const employmentAxis = resolve(
+    "employment",
+    employment,
+    fallback.employeeCount,
+  );
+  const disclosureAxis = resolve(
+    "disclosure",
+    disclosureCount,
+    fallback.disclosureCount ?? 0,
+  );
 
   return {
     companyId,
     unavailable,
-    newsCount: news?.count ?? fallback.newsCount,
-    newsCountIsAtLeast: news ? news.isAtLeast : undefined,
-    employeeCount: employment?.employeeCount ?? fallback.employeeCount,
-    employeeChange: employment?.employeeChange,
-    employmentAsOf: employment?.asOf,
-    patentCount: patent?.count ?? fallback.patentCount,
-    patentCountIsAtLeast: patent ? patent.isAtLeast : undefined,
-    disclosureCount: disclosureCount ?? fallback.disclosureCount ?? 0,
+    newsCount: newsAxis.answered?.count ?? newsAxis.count,
+    newsCountIsAtLeast: newsAxis.answered?.isAtLeast,
+    employeeCount: employmentAxis.answered?.employeeCount ?? employmentAxis.count,
+    employeeChange: employmentAxis.answered?.employeeChange,
+    employmentAsOf: employmentAxis.answered?.asOf,
+    patentCount: patentAxis.answered?.count ?? patentAxis.count,
+    patentCountIsAtLeast: patentAxis.answered?.isAtLeast,
+    disclosureCount: disclosureAxis.answered ?? disclosureAxis.count,
   };
 }
