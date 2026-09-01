@@ -28,7 +28,21 @@ const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" }
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
 
-const PERIOD = "2026년 01월 – 2026년 06월";
+// 분석 기간은 계산 결과에서 가져온다.
+//
+// 예전에는 "2026년 01월 – 2026년 06월" 문자열을 박아 두었다. 어떤 문서를 올려도
+// 이 기간이 찍혀서, 같은 진단서 안에서 "분석 기간 6개월"과 "12개월 중 12개월에
+// 거래 발생"이 나란히 적히는 일이 실제로 있었다.
+const PERIOD_UNKNOWN = "확인된 거래 없음";
+
+function periodOf(values: SignalsResult | null): string {
+  if (!values?.periodStart || !values.periodEnd) {
+    return PERIOD_UNKNOWN;
+  }
+  return values.periodStart === values.periodEnd
+    ? values.periodStart
+    : `${values.periodStart} – ${values.periodEnd}`;
+}
 
 // 붙임은 실제로 제출된 문서만 적는다. 예전에는 이 여섯 개를 고정으로 늘어놓고
 // "각 1부"라고 썼는데, 문서를 하나도 올리지 않아도 그대로 나왔다. 공문서 형식의
@@ -118,7 +132,7 @@ export function ShareContent({
     count: number,
   ): Promise<string> {
     const { diagnosis: text } = await fetchDiagnosis({
-      period: PERIOD,
+      period: periodOf(values),
       transactionCount: count,
       visibilityScore: view.visibilityScore,
       visibilityInterpretation: view.interpretations.visibility,
@@ -166,7 +180,7 @@ export function ShareContent({
   const infoRows: { label: string; value: string }[][] = [
     [
       { label: "기 업 명", value: companyName },
-      { label: "분석 기간", value: PERIOD },
+      { label: "분석 기간", value: periodOf(signals) },
     ],
     [
       {
@@ -193,6 +207,7 @@ export function ShareContent({
           ? `${item.prefix}${item.value}${item.suffix}`
           : "—",
         tone: item.tone,
+        evaluable: item.evaluable,
         note: item.detail,
       }))
     : [];
@@ -241,7 +256,7 @@ export function ShareContent({
             기업성장진단보고서
           </h1>
           <p className="mt-2 text-[12px] tracking-[0.2em] text-zinc-500">
-            {PERIOD.replace("–", "~")}
+            {periodOf(signals).replace("–", "~")}
           </p>
         </div>
 
@@ -330,7 +345,7 @@ export function ShareContent({
                       {signal.value}
                     </td>
                     <td className="border border-zinc-300 py-2.5 text-center text-[12px] font-bold text-zinc-900">
-                      {signal.tone === "positive" ? "긍정" : "주의"}
+                      {signal.evaluable ? STATUS_TEXT[signal.tone] : "판단 보류"}
                     </td>
                     <td className="border border-zinc-300 px-3 py-2.5 text-[12px] text-zinc-600">
                       {signal.note}
