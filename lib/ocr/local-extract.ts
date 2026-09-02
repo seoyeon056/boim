@@ -192,6 +192,9 @@ type ColumnRanges = Partial<Record<keyof typeof COLUMN_ALIASES, Cell>>;
 // 헤더 행을 찾아 각 열의 위치를 기억한다.
 // 헤더를 못 찾으면 열 매핑을 포기하고 값의 생김새로만 판단한다.
 function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
+  // 금액+날짜만 있는 후보. 진짜 표 머리를 끝까지 찾아보고 없을 때만 쓴다.
+  let weaker: { index: number; columns: ColumnRanges } | null = null;
+
   for (let index = 0; index < lines.length; index += 1) {
     const columns: ColumnRanges = {};
     for (const cell of lines[index]) {
@@ -201,13 +204,26 @@ function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
         }
       }
     }
-    // 금액 열은 반드시 있어야 하고, 날짜나 품목 중 하나만 더 있으면 표로 본다.
-    // 견적서처럼 행에 날짜 열이 아예 없는 표가 실제로 있다(날짜는 문서 상단에만).
-    if (columns.amount && (columns.date || columns.item)) {
+
+    // 품목 열이 있는 행이 진짜 표 머리다. 가장 구체적인 후보라 바로 확정한다.
+    // 견적서처럼 행에 날짜 열이 아예 없는 표도 여기서 잡힌다(날짜는 문서 상단에만).
+    if (columns.amount && columns.item) {
       return { index, columns };
     }
+
+    // 금액+날짜만 있는 행도 표 머리일 수 있지만, 먼저 나온다고 바로 쓰면 안 된다.
+    //
+    // 전자세금계산서는 품목 표 위에 "작성일자 / 공급가액(원) / 세액(원) / 비고"
+    // 요약 칸이 먼저 나온다. "작성일자"는 날짜 별칭 "일자"를, "공급가액(원)"은
+    // 금액 별칭 "공급가액"을 포함해서 이 조건에 걸린다. 그걸 헤더로 확정하면
+    // 품목 열이 없는 채로 확정되고, 아래 품목 세 줄이 전부 "품목이 빈 행"으로
+    // 버려진다(실측: 5,000,000 / 1,500,000 / 800,000 세 건이 통째로 사라졌다).
+    if (!weaker && columns.amount && columns.date) {
+      weaker = { index, columns };
+    }
   }
-  return { index: -1, columns: {} };
+
+  return weaker ?? { index: -1, columns: {} };
 }
 
 // 헤더 셀과 가로로 가장 많이 겹치는 셀을 그 열의 값으로 본다.
