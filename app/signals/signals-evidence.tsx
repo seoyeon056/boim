@@ -6,11 +6,24 @@ import {
   serverUploadSnapshot,
   subscribeUpload,
 } from "@/lib/uploaded-documents";
+import { documentCategories } from "@/data/documentCategories";
 
 // 통계 요약과 판단 근거 문서 목록.
 // 업로드 내역(sessionStorage)은 브라우저에만 있으므로 이 부분만 클라이언트에서 읽는다.
 
 const DEFAULT_CATEGORY_COUNT = 6;
+
+// 지표 계산에 실제로 쓰이는 카테고리(거래명세서·세금계산서·입금내역).
+// data/documentCategories.ts 의 analyzed 플래그가 그 목록이고,
+// lib/ocr/run-local-ocr.ts 의 TRANSACTION_CATEGORIES 와 같은 세 종류다.
+//
+// 나머지 셋(발주서·견적서·계약서)은 인식 대상이 아니다. 그런데 목록이 여섯 줄
+// 모두에 "N건 반영"이라고 적고 있었다. 파일 개수를 세는 말이라 거짓은 아니지만,
+// 읽는 사람은 "이 문서가 지표에 들어갔다"로 이해한다. 실제로는 진단서 붙임에
+// 이름만 오른다. 무엇에 쓰였는지를 그대로 적는다.
+const ANALYZED_CATEGORIES = new Set(
+  documentCategories.filter((c) => c.analyzed).map((c) => c.id),
+);
 
 export function SignalsEvidence({
   customerCount,
@@ -95,7 +108,11 @@ export function SignalsEvidence({
                     </span>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-zinc-400">
-                    {used ? `${doc.fileCount}건 반영` : "문서 없음"}
+                    {!used
+                      ? "문서 없음"
+                      : ANALYZED_CATEGORIES.has(doc.categoryId)
+                        ? `${doc.fileCount}건 · 지표 반영`
+                        : `${doc.fileCount}건 · 붙임`}
                   </span>
                 </li>
               );
