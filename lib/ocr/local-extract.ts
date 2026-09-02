@@ -245,8 +245,60 @@ function cellForColumn(row: Cell[], header: Cell | undefined): Cell | undefined 
   return best && bestDistance <= header.box.width * 1.5 ? best : undefined;
 }
 
+// 칸이 좁으면 회사명이 다음 줄로 넘어간다. 넘어간 조각을 찾아 돌려준다.
+//
+// 실측(전자세금계산서): 거래처가 "㈜한국테크놀로"로 잘려 나왔다. 원문은 이렇다.
+//
+//   y=104.1  101-86-1234 | 상호(법인 | (주)한국테크놀로 | 214-85-6789 | …
+//   y=109.6  등록번호 | 등록번호                       ← 다른 열의 라벨
+//   y=115.1  5 | ) | 지 | 0 | ) | 스                  ← 넘어간 조각들
+//
+// 넘어간 줄이 바로 다음 줄이 아니라는 점(사이에 라벨 줄이 낀다), 그리고 여섯
+// 조각 중 왼쪽 끝이 맞는 건 회사명 둘뿐이라는 점(나머지는 가운데 정렬)이 걸려서
+// 줄 단위로 통째 병합하는 방식은 쓰지 않았다. 거래처 값에만 좁게 붙인다.
+//
+// 조건을 좁게 잡는다. 표의 다음 행을 회사명 뒤에 붙이면 없는 거래처를 만들어낸다.
+//   - 왼쪽 끝이 같을 것(가운데 정렬된 다른 칸은 여기서 걸러진다)
+//   - 글자 높이의 1.6배 안쪽에 있을 것(표의 행 간격은 이보다 넓다. 위 문서에서
+//     넘어간 줄은 1.29배, 품목 표의 행 간격은 2.47배였다)
+//   - 짧을 것. 넘어가는 건 이름의 꼬리라 한두 글자다
+const WRAP_PITCH = 1.6;
+const WRAP_ALIGN = 1.5;
+const WRAP_MAX_LENGTH = 3;
+
+function wrappedTail(lines: Cell[][], from: number, cell: Cell): string {
+  const height = cell.box.height || 10;
+
+  for (let index = from + 1; index < lines.length; index += 1) {
+    const row = lines[index];
+    if (row.length === 0) {
+      continue;
+    }
+
+    const gap = row[0].box.y - cell.box.y;
+    if (gap <= 0) {
+      continue;
+    }
+    if (gap > height * WRAP_PITCH) {
+      return "";
+    }
+
+    const tail = row.find(
+      (candidate) =>
+        Math.abs(candidate.box.x - cell.box.x) <= WRAP_ALIGN &&
+        candidate.text.length <= WRAP_MAX_LENGTH,
+    );
+    if (tail) {
+      return tail.text;
+    }
+  }
+
+  return "";
+}
+
 function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
-  for (const row of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const row = lines[index];
     for (const cell of row) {
       if (!CUSTOMER_LABELS.some((label) => normalize(cell.text).includes(label))) {
         continue;
@@ -255,12 +307,20 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
       // "거래처: 한빛금속(주) 담당자: 김OO"처럼 뒤에 다른 라벨이 이어지면 끊는다.
       const inline = valueAfterLabel(cell.text, CUSTOMER_LABELS);
       if (inline && looksLikeCompany(inline)) {
-        return { value: cleanCompanyName(stripCustomerDecoration(inline)), confidence: cell.confidence };
+        return {
+          value: cleanCompanyName(stripCustomerDecoration(inline)),
+          confidence: cell.confidence,
+        };
       }
       // 라벨 옆 셀에 값이 있는 경우
       const next = row[row.indexOf(cell) + 1];
       if (next && looksLikeCompany(next.text)) {
-        return { value: cleanCompanyName(stripCustomerDecoration(next.text)), confidence: next.confidence };
+        return {
+          value: cleanCompanyName(
+            stripCustomerDecoration(next.text + wrappedTail(lines, index, next)),
+          ),
+          confidence: next.confidence,
+        };
       }
     }
   }
