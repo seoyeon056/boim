@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSignals, getVisibility } from "@/lib/engine";
+import { getVisibility } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import { CompareView } from "./compare-view";
 
@@ -12,13 +12,9 @@ export default async function ComparePage(props: PageProps<"/compare">) {
   const companyId = readCompanyId((await props.searchParams).company);
 
   let visibility;
-  let signalResult;
 
   try {
-    [visibility, signalResult] = await Promise.all([
-      getVisibility(companyId),
-      getSignals(companyId),
-    ]);
+    visibility = await getVisibility(companyId);
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-12">
@@ -41,11 +37,6 @@ export default async function ComparePage(props: PageProps<"/compare">) {
   }
 
   // 외부 지표는 lib/visibility.ts 에서 건수에 맞는 해석과 tone까지 계산해서 온다.
-  return (
-    <CompareView
-      companyId={companyId}
-      visibility={visibility}
-      serverSignals={signalResult}
-    />
-  );
+  // 내부 성장 신호는 브라우저의 검수 결과에서만 나오므로 CompareView가 직접 읽는다.
+  return <CompareView companyId={companyId} visibility={visibility} />;
 }

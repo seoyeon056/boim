@@ -4,13 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { withCompany } from "@/lib/company-link";
-import type { Transaction } from "@/data/transactions";
 import { useUploadStore } from "@/app/upload/upload-store";
 import {
   extractTransactionsLocally,
+  SETTLEMENT_CATEGORIES,
   TRANSACTION_CATEGORIES,
 } from "@/lib/ocr/run-local-ocr";
-import type { ExtractedTransactionRow } from "@/lib/ocr/types";
 
 // ─────────────────────────────────────────────
 // 실제 인식이 여기서 일어난다. 전부 이 브라우저 안에서 돌고 파일은 서버로
@@ -19,6 +18,9 @@ import type { ExtractedTransactionRow } from "@/lib/ocr/types";
 // 진행률은 최소 시간(MIN_RUN_MS) 동안 자연스럽게 차오르다가, 실제 인식이
 // 끝나 있으면 100 으로 마무리한다. 문서가 많아 인식이 더 걸리면 그만큼 기다린다.
 // 단계 문구는 진행률 구간에서 파생된다(stageFromProgress).
+//
+// 추출이 실패하거나 거래를 한 건도 못 찾으면 예시 데이터로 대체하지 않는다.
+// 결과를 비운 채 넘겨서 다음 화면이 "산정 불가"로 처리하게 한다.
 // ─────────────────────────────────────────────
 
 function IconCheck({ className = "h-4 w-4" }: { className?: string }) {
@@ -90,71 +92,10 @@ function easeInOutSine(t: number): number {
   return 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, t)));
 }
 
-// 추출이 실패했을 때 보여줄 예시 표본.
-// 다섯 줄 모두 필드 하나씩만 0.80~0.95 구간(="확인 권장")에 둔다. 줄마다
-// "확인 1"이 떠서 검수할 게 다섯 줄 나온다. 0.80 미만(=빨강 "확인 필요")은 없다.
-const SAMPLE_CONFIDENCE = [
-  { date: 0.99, customer: 0.98, item: 0.88, amount: 0.98 },
-  { date: 0.99, customer: 0.98, item: 0.98, amount: 0.86 },
-  { date: 0.99, customer: 0.9, item: 0.98, amount: 0.98 },
-  { date: 0.91, customer: 0.98, item: 0.98, amount: 0.98 },
-  { date: 0.99, customer: 0.98, item: 0.92, amount: 0.98 },
-];
-
-function toReviewResult(sample: Transaction[]) {
-  return sample.map((item, index) => {
-    const confidence = SAMPLE_CONFIDENCE[index] ?? SAMPLE_CONFIDENCE[0];
-
-    return {
-      date: { value: item.date, confidence: confidence.date },
-      customer: { value: item.customer, confidence: confidence.customer },
-      item: { value: item.item, confidence: confidence.item },
-      amount: { value: item.amount, confidence: confidence.amount },
-    };
-  });
-}
-
-// 데모 보정: xlsx 표는 값을 전부 확신(신뢰도 1)으로 읽어서 검수 화면에 확인할
-// 항목이 하나도 안 뜬다. 진단 흐름을 보여주려면 몇 개는 있어야 하므로, 앞
-// 다섯 줄의 필드 하나씩을 확인 권장(0.80~0.95) 구간으로 낮춘다. 값은 안 바꾼다.
-const DEMO_REVIEW_MARKS: {
-  row: number;
-  field: "date" | "customer" | "item" | "amount";
-  confidence: number;
-}[] = [
-  { row: 0, field: "item", confidence: 0.88 },
-  { row: 1, field: "amount", confidence: 0.86 },
-  { row: 2, field: "customer", confidence: 0.9 },
-  { row: 3, field: "date", confidence: 0.91 },
-  { row: 4, field: "item", confidence: 0.92 },
-];
-
-function withDemoReviewMarks(
-  rows: ExtractedTransactionRow[],
-): ExtractedTransactionRow[] {
-  return rows.map((tx, index) => {
-    const mark = DEMO_REVIEW_MARKS.find((m) => m.row === index);
-    if (!mark) return tx;
-
-    const patched: ExtractedTransactionRow = { ...tx };
-    if (mark.field === "amount") {
-      patched.amount = { ...tx.amount, confidence: mark.confidence };
-    } else {
-      patched[mark.field] = {
-        ...tx[mark.field],
-        confidence: mark.confidence,
-      };
-    }
-    return patched;
-  });
-}
-
 export function ProcessingContent({
   companyId,
-  reviewSample,
 }: {
   companyId?: string;
-  reviewSample: Transaction[];
 }) {
   const router = useRouter();
   const { states } = useUploadStore();
@@ -175,32 +116,51 @@ export function ProcessingContent({
     let current = 0;
     let stageNow: Stage = "reading";
 
-    // 거래를 증명하는 문서(거래명세서·세금계산서·입금내역)만 인식한다.
+    // 매출을 증명하는 문서(거래명세서·세금계산서)만 거래로 인식한다.
+    // 입금내역은 입금 확인용이라 별도 경로로 건수만 센다.
     const files = TRANSACTION_CATEGORIES.flatMap(
+      (category) => states[category]?.files ?? [],
+    );
+    const settlementFiles = SETTLEMENT_CATEGORIES.flatMap(
       (category) => states[category]?.files ?? [],
     );
 
     // 실제 인식은 뒤에서 계속 돈다. 페이지 카운트만 받아 둔다.
-    extractTransactionsLocally(files, undefined, (next) => {
-      if (!isActive || next.phase === "preparing") return;
-      setStep({ done: next.done, total: Math.max(1, next.total) });
-    }).then((outcome) => {
+    extractTransactionsLocally(
+      files,
+      undefined,
+      (next) => {
+        if (!isActive || next.phase === "preparing") return;
+        setStep({ done: next.done, total: Math.max(1, next.total) });
+      },
+      settlementFiles,
+    ).then((outcome) => {
       if (!isActive) return;
 
       sessionStorage.setItem("boimExtractionOutcome", outcome.status);
-      sessionStorage.setItem(
-        "boimAnalysisResult",
-        outcome.status === "ok"
-          ? JSON.stringify(withDemoReviewMarks(outcome.transactions))
-          : JSON.stringify(toReviewResult(reviewSample)),
-      );
+
       if (outcome.status === "ok") {
+        sessionStorage.setItem(
+          "boimAnalysisResult",
+          JSON.stringify(outcome.transactions),
+        );
         sessionStorage.setItem(
           "boimDocumentTerms",
           JSON.stringify(outcome.terms),
         );
+        if (outcome.settlement) {
+          sessionStorage.setItem(
+            "boimSettlement",
+            JSON.stringify(outcome.settlement),
+          );
+        } else {
+          sessionStorage.removeItem("boimSettlement");
+        }
       } else {
+        // 예시 데이터로 대체하지 않는다. 결과를 비워 다음 화면이 산정 불가로 처리한다.
+        sessionStorage.removeItem("boimAnalysisResult");
         sessionStorage.removeItem("boimDocumentTerms");
+        sessionStorage.removeItem("boimSettlement");
       }
 
       workDoneAt = performance.now();

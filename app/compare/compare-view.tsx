@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import { withCompany } from "@/lib/company-link";
 import { buildDiagnosis } from "@/lib/diagnosis";
 import { GradeBadge } from "@/app/grade-badge";
+import { SampleDataBadge } from "@/app/sample-badge";
 import StepShell from "@/app/step-shell";
-import type { Signals } from "@/lib/signals";
+import { calculateSignals, type Signals } from "@/lib/signals";
 import type { Visibility } from "@/lib/visibility";
 import { readUploadedSignals } from "@/lib/uploaded-signals";
 
@@ -16,50 +17,58 @@ const statusLabel = {
   caution: "주의",
 };
 
+// 거래 실적이 없을 때 쓰는 빈 신호. 모든 지표가 "—"로 그려지고 등급은 산정 불가.
+const EMPTY_SIGNALS = calculateSignals([]);
+
+type ViewState = "loading" | "none" | "ok";
+
 export function CompareView({
   companyId,
   visibility,
-  serverSignals,
 }: {
   companyId?: string;
   visibility: Visibility;
-  serverSignals: Signals;
 }) {
-  // 서버는 sessionStorage를 못 본다. 업로드·검수한 거래가 있으면 그걸 우선한다.
-  const [signalResult, setSignalResult] = useState<Signals>(serverSignals);
-  const [fromUpload, setFromUpload] = useState(false);
+  // 내부 신호는 사용자가 올려 검수한 거래(sessionStorage)에서만 나온다.
+  const [view, setView] = useState<ViewState>("loading");
+  const [signalResult, setSignalResult] = useState<Signals>(EMPTY_SIGNALS);
+  const [transactionCount, setTransactionCount] = useState(0);
 
   useEffect(() => {
     const uploaded = readUploadedSignals(companyId ?? "");
-    if (!uploaded) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!uploaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setView("none");
+      return;
+    }
     setSignalResult(uploaded.signals);
-     
-    setFromUpload(true);
+    setTransactionCount(uploaded.transactionCount);
+    setView("ok");
   }, [companyId]);
 
   const externalMetrics = visibility.metrics;
+  const hasData = view === "ok";
 
   // 긍정/주의는 lib/signals.ts 가 값을 보고 판단한 결과(statuses)를 그대로 쓴다.
   const internalSignals = signalResult.signals.map((item) => ({
     label: item.label,
-    value: item.evaluable
+    value: hasData && item.evaluable
       ? `${item.prefix}${item.value}${item.suffix}`
       : "—",
     tone: item.tone,
-    evaluable: item.evaluable,
+    evaluable: hasData && item.evaluable,
   }));
 
   const diagnosis = buildDiagnosis(visibility, signalResult);
 
-  const diagnosisEvidence = [
-    fromUpload
-      ? "제출한 문서에서 확인된 거래 기준"
-      : "예시 데이터 기준 (제출 문서에서 거래 내역 미확인)",
-    `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.recentCustomersCount}곳`,
-    `재구매율 ${signalResult.repeatPurchaseRate}%`,
-    `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
-  ];
+  const diagnosisEvidence = hasData
+    ? [
+        `제출해 검수한 거래 ${transactionCount}건 기준`,
+        `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.recentCustomersCount}곳`,
+        `재구매율 ${signalResult.repeatPurchaseRate}%`,
+        `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
+      ]
+    : ["제출된 거래 실적 문서가 없어 내부 성장 신호를 산정하지 못했습니다."];
 
   return (
     <StepShell
@@ -77,6 +86,24 @@ export function CompareView({
         </Link>
       }
     >
+      <div className="mb-3">
+        <SampleDataBadge />
+      </div>
+
+      {view === "loading" && (
+        <div className="mb-4 text-[13px] text-zinc-400">
+          내부 거래 신호를 불러오는 중입니다…
+        </div>
+      )}
+
+      {view === "none" && (
+        <div className="mb-4 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-700">
+          제출된 거래 실적 문서가 없어 내부 성장 신호와 성장 등급은{" "}
+          <b>산정 불가</b>로 처리됩니다. 아래 외부 공개 정보만 참고용으로
+          표시합니다.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* 외부 — 잉크 카드 */}
         <div
@@ -171,7 +198,9 @@ export function CompareView({
             ))}
           </div>
           <p className="mt-6 text-[12px] leading-6" style={{ color: "#A9C0AC" }}>
-            {diagnosis.internalCardNote}
+            {hasData
+              ? diagnosis.internalCardNote
+              : "거래 실적 문서가 없어 성장 신호를 산정하지 못했습니다."}
           </p>
         </div>
       </div>
@@ -183,13 +212,15 @@ export function CompareView({
             BO:IM 진단
           </p>
 
-          <GradeBadge grade={diagnosis.grade} />
+          <GradeBadge grade={hasData ? diagnosis.grade : "산정 불가"} />
         </div>
 
         {/* 한 줄 요약 — 강조 */}
         <div className="mt-3 rounded-md bg-zinc-900 px-4 py-3">
           <p className="text-sm font-semibold leading-6 text-white">
-            {diagnosis.headline}
+            {hasData
+              ? diagnosis.headline
+              : `제출된 내부 거래가 없어 성장 신호는 산정하지 않았습니다. 외부 공개 정보는 가시성 ${visibility.visibilityScore}점 수준으로 확인됩니다.`}
           </p>
         </div>
 

@@ -27,42 +27,43 @@ const GAUGE_UPLOADED = "#1D4533";
 const GAUGE_MISSING = "#BCB0A9";
 const GAUGE_TRACK = "#E9E2DD";
 
-// 시연용 샘플 문서. public/sample 에 실제 파일로 들어 있고, 손으로 올린 파일과
+// 시연용 샘플 문서. public/sample 에 실제 엑셀로 들어 있고, 손으로 올린 파일과
 // 똑같은 인식 경로를 그대로 탄다. 결과를 미리 심어 두지 않는다.
 //
-// 거래명세서는 2026-03 ~ 08 여섯 달치다. 한 달치만 넣으면 관측 기간이 짧아
-// lib/signals.ts 가 "데이터 부족"으로 판정하고 등급이 안 나온다(실제로 그렇다).
-// 여섯 칸을 다 채워서 거래처 6곳 · 거래 21건 · 여섯 달이 나온다.
+// 한빛정밀은 자동차 센서 부품 제조기업이라, 샘플 거래도 전부 그 품목이다.
+// 거래명세서는 2026년 상반기(01~06) 여섯 달치다 — 진단일 이후 날짜가 섞이면
+// 과거 실적에서 빠지므로 완료 거래는 전부 상반기로 맞춰 뒀다.
+// 세금계산서는 미래모터스 명세서의 앞 8건을 그대로 다시 담아, 같은 거래가 두
+// 문서에 있어도 중복 없이 한 건으로 합쳐지는 것을 보여준다.
 const SAMPLE_FILES: { category: string; names: string[] }[] = [
   {
     category: "transaction-statement",
     names: [
-      "거래명세서_202608.xlsx",
+      "거래명세서_미래모터스_2026상반기.xlsx",
       "거래명세서_대성테크_2026상반기.xlsx",
       "거래명세서_한울전자_2026상반기.xlsx",
-      "거래명세서_동방정공_2026하반기.xlsx",
+      "거래명세서_동방정공_2026상반기.xlsx",
     ],
   },
   {
-    // 스캔본이라 브라우저 OCR 경로를 탄다. 인식이 잘 안 되어도 위 엑셀에서
-    // 거래가 이미 나오므로 화면이 비지 않는다.
+    // 미래모터스 명세서와 겹치는 거래라, 중복 제거 뒤 매출이 늘지 않는다.
     category: "tax-invoice",
-    names: ["전자세금계산서_202608.pdf", "기업_내부거래_데모데이터_1장.pdf"],
+    names: ["전자세금계산서_2026상반기.xlsx"],
   },
   {
-    // 명세서에 없는 거래처의 입금이라 중복 없이 거래가 늘어난다.
-    // (중복 제거 기준은 날짜+금액+품목이다 — run-local-ocr.ts 의 dedupe)
+    // 입금 확인용. 매출·거래처 계산에는 합산되지 않는다.
     category: "deposit-history",
     names: ["입금내역_2026상반기.xlsx"],
   },
-  { category: "quotation", names: ["견적서_EST202608.xlsx"] },
   {
-    // 지금은 엔진이 읽지 않는 칸이지만, 나중에 연결해도 그대로 읽히도록
-    // 발주일자·품목·발주금액 열을 갖춰 두었다(확인함: 2건 · 납기 2026-10-15).
+    // 아직 성사되지 않은 거래(3분기 예정). 미래 수요 신호로만 싣는다.
+    category: "quotation",
+    names: ["견적서_미래모터스_2026Q3.xlsx"],
+  },
+  {
     category: "purchase-order",
     names: ["발주서_2026Q3.xlsx"],
   },
-  { category: "contract", names: ["표준소프트웨어라이선스계약서.pdf"] },
 ];
 
 function mimeOf(name: string): string {
@@ -70,12 +71,13 @@ function mimeOf(name: string): string {
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
-// 문서를 두 묶음으로 나눈다. 여섯 개를 한 줄로 늘어놓으면 어디부터 손대야
-// 할지 알 수 없다. 중요도가 아니라 문서가 말해 주는 시점이 다르다.
-//   거래 실적 — 이미 일어난 거래.   성장 신호를 여기서 계산한다.
+// 문서를 세 묶음으로 나눈다. 문서가 말해 주는 시점이 다르다.
+//   거래 실적 — 이미 일어난 매출.   성장 신호를 여기서 계산한다. 최소 한 장 필요.
+//   입금 확인 — 대금 회수 확인용.   매출에는 합산하지 않는다.
 //   거래 흐름 — 예정된 거래와 조건. 진단서에 근거 자료로 함께 싣는다.
 const RECORD_CATEGORIES = documentCategories.filter((c) => c.analyzed);
-const FLOW_CATEGORIES = documentCategories.filter((c) => !c.analyzed);
+const SETTLEMENT_CATEGORIES = documentCategories.filter((c) => c.settlement);
+const FLOW_CATEGORIES = documentCategories.filter((c) => c.future);
 
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
 const ALLOWED_TYPES = [
@@ -119,6 +121,8 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
+  // "샘플 문서 불러오기"로 채운 상태인지. 손으로 파일을 추가하면 해제된다.
+  const [usedSample, setUsedSample] = useState(false);
 
   // 파일 input DOM을 기억해 두었다가 값 초기화(input.value = "")에 사용
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -211,6 +215,8 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     setCategoryError(categoryId, null);
     setIsSaved(false);
     setNotice(null);
+    // 손으로 파일을 더한 순간부터는 "샘플 데이터 기반"이 아니다.
+    setUsedSample(false);
     // 같은 파일을 다시 선택할 수 있도록 input 값을 초기화한다.
     input.value = "";
   }
@@ -352,6 +358,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       setErrors({});
       setIsSaved(false);
       setNotice(null);
+      setUsedSample(true);
     } catch {
       setNotice("샘플 문서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
@@ -368,12 +375,16 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     return sum + (states[category.id]?.files.length ?? 0);
   }, 0);
 
-  // 분석에 쓰이는 문서 세 칸만 정해지면 다음 단계로 넘어간다.
-  // 참고 자료는 비워 둬도 진단이 끝나므로 진행을 막지 않는다.
-  const analyzedHandled = RECORD_CATEGORIES.filter(
+  // 거래 실적 문서(거래명세서·세금계산서) 칸이 모두 정해지고, 그중 최소 한 장은
+  // 실제로 올라와 있어야 분석을 시작할 수 있다. 전부 "없음"이면 계산할 매출이 없다.
+  const recordHandled = RECORD_CATEGORIES.filter(
     (category) => states[category.id].status !== "empty",
   ).length;
-  const allHandled = analyzedHandled === RECORD_CATEGORIES.length;
+  const recordUploaded = RECORD_CATEGORIES.filter(
+    (category) => states[category.id].status === "uploaded",
+  ).length;
+  const allRecordHandled = recordHandled === RECORD_CATEGORIES.length;
+  const canAnalyze = allRecordHandled && recordUploaded > 0;
   const hasUntouched = documentCategories.some(
     (category) => states[category.id].status === "empty",
   );
@@ -382,9 +393,11 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   ).length;
 
   async function handleAnalyze() {
-    if (!allHandled) {
+    if (!canAnalyze) {
       setNotice(
-        "거래명세서·세금계산서·입금내역에 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
+        recordUploaded === 0
+          ? "거래 실적 문서가 없어 분석할 수 없습니다. 거래명세서나 세금계산서를 최소 한 장 올려 주세요."
+          : "거래명세서·세금계산서에 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
       );
       return;
     }
@@ -415,6 +428,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
       categories,
       totalFileCount: categories.reduce((sum, c) => sum + c.fileCount, 0),
       totalUploadSize: categories.reduce((sum, c) => sum + c.totalSize, 0),
+      isSample: usedSample,
     };
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
@@ -424,6 +438,10 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     // 보여줄 수 있다. 여기서 돌리면 사용자가 빈 화면에서 기다리게 된다.
     sessionStorage.removeItem("boimExtractedTransactions");
     sessionStorage.removeItem("boimExtractionOutcome");
+    // 이전 시도의 결과가 남아 다음 화면에 섞이지 않도록 비운다.
+    sessionStorage.removeItem("boimAnalysisResult");
+    sessionStorage.removeItem("boimDocumentTerms");
+    sessionStorage.removeItem("boimSettlement");
 
     setIsSaved(true);
     setNotice(null);
@@ -707,7 +725,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           <button
             type="button"
             onClick={handleAnalyze}
-            disabled={!allHandled || isAnalyzing}
+            disabled={!canAnalyze || isAnalyzing}
             className="inline-flex h-[50px] items-center justify-center rounded-md bg-[#2A211C] px-10 text-[16px] font-semibold text-white transition-colors hover:bg-[#12100E] disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400"
           >
             {isAnalyzing ? "문서 확인 중…" : "내부 문서 분석 시작"}
@@ -737,8 +755,8 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           나머지 모두 없음으로 표시
         </button>
         <span className="text-[13px] text-zinc-500">
-          문서가 없어도 괜찮습니다. 샘플로 거래처 6곳·6개월치 거래 21건을
-          실제로 분석해 볼 수 있습니다.
+          문서가 없어도 괜찮습니다. 샘플(자동차 센서 부품 거래)로 거래처 4곳·상반기
+          거래를 실제로 분석해 볼 수 있습니다.
         </span>
       </div>
 
@@ -750,7 +768,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           <span className="text-[13px] text-zinc-600">
             {uploadedCount > 0 ? "파일 준비 완료" : "문서 준비 현황"}
           </span>
-          {allHandled && (
+          {canAnalyze ? (
             <span className="flex items-center gap-1 text-[13px] text-[#1D4533]">
               <span aria-hidden className="text-zinc-300">,</span>
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
@@ -764,6 +782,12 @@ export function UploadContent({ companyId }: { companyId?: string }) {
               </svg>
               분석 가능
             </span>
+          ) : (
+            allRecordHandled && (
+              <span className="text-[13px] text-red-500">
+                , 거래 실적 문서가 없어 분석할 수 없습니다
+              </span>
+            )
           )}
         </div>
 
@@ -807,7 +831,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
 
       </div>
 
-      {/* ── 두 묶음을 접지 않고 나란히 둔다 ────────────────
+      {/* ── 세 묶음을 접지 않고 나란히 둔다 ────────────────
           접어 두면 "열어서 채워야 할 게 또 있다"로 읽힌다. 전부 보이되
           채운 칸과 빈 칸이 색으로 갈리게 해서, 목록이 아니라 진행 상태로
           보이게 한다. */}
@@ -815,12 +839,25 @@ export function UploadContent({ companyId }: { companyId?: string }) {
         <div className="flex items-baseline gap-2">
           <h2 className="text-[15px] font-semibold text-zinc-900">거래 실적</h2>
           <span className="text-[13px] text-zinc-500">
-            이미 일어난 거래입니다. 성장 신호를 여기서 계산합니다
+            이미 일어난 매출입니다. 성장 신호를 여기서 계산합니다. 최소 한 장 필요
           </span>
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {RECORD_CATEGORIES.map(renderCategoryCard)}
+        </div>
+      </div>
+
+      <div className="mt-7">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-[15px] font-semibold text-zinc-900">입금 확인</h2>
+          <span className="text-[13px] text-zinc-500">
+            대금이 실제로 입금됐는지만 확인합니다. 매출에는 합산하지 않습니다
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {SETTLEMENT_CATEGORIES.map(renderCategoryCard)}
         </div>
       </div>
 
