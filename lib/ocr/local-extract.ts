@@ -24,13 +24,19 @@ type OcrResult = { lines: Cell[][] };
 // 거래명세서마다 열 이름이 조금씩 다르다. 우리가 필요한 네 값에 대응하는 표기를 모아둔다.
 const COLUMN_ALIASES = {
   date: ["거래일자", "일자", "날짜", "거래일", "월/일", "년월일", "월일"],
-  item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격"],
+  // "적요"는 입금내역의 내역 칸이다("전자결제 입금"). 품목 칸이 비어 있으면
+  // 아래에서 행을 통째로 버리기 때문에, 이걸 넣지 않으면 입금내역 전체가 사라진다.
+  item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격", "적요"],
   amount: ["공급가액", "금액", "합계", "합계금액", "총액", "공급가액(원)"],
   quantity: ["수량", "수 량"],
   unitPrice: ["단가", "단 가", "단가(원)"],
+  // 거래처가 행마다 다른 문서가 있다. 입금내역·통장거래내역이 그렇다.
+  // 이 열이 있으면 문서 상단 라벨보다 우선한다(아래 rowsFromOcr 참고).
+  customer: ["보내는분", "받는분", "입금자", "송금인", "거래처명"],
 } as const;
 
 // 거래처는 표 안이 아니라 표 위 라벨에 있는 경우가 대부분이다.
+// 다만 "대부분"이지 전부는 아니다 — COLUMN_ALIASES.customer 를 함께 본다.
 const CUSTOMER_LABELS = ["수신", "공급받는자", "거래처", "상호", "귀하"];
 
 // 라벨 값에는 거래처가 아닌 것들이 자주 섞인다.
@@ -460,6 +466,23 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
       continue;
     }
 
+    // 거래처를 행에서 먼저 찾는다.
+    //
+    // 지금까지 추출기는 "문서 하나 = 거래처 하나"를 전제했다. 거래명세서와
+    // 세금계산서는 그 전제가 맞지만 입금내역은 한 장에 여러 거래처가 섞인다.
+    // 그래서 입금내역 22건이 통째로 빠지고, 새봄테크·한울부품 두 곳은 아예
+    // 없는 거래처가 됐다(실측: 파일에는 94건·6곳인데 화면은 73건·5곳이었다).
+    //
+    // 행에 거래처 열이 없으면 예전처럼 문서 상단 라벨을 쓴다.
+    const customerCell = cellForColumn(row, columns.customer);
+    const rowCustomer =
+      customerCell && looksLikeCompany(customerCell.text)
+        ? {
+            value: cleanCompanyName(stripCustomerDecoration(customerCell.text)),
+            confidence: customerCell.confidence,
+          }
+        : customer;
+
     const quantityCell = cellForColumn(row, columns.quantity);
     const unitPriceCell = cellForColumn(row, columns.unitPrice);
     const quantity = quantityCell ? parseAmount(quantityCell.text) : null;
@@ -467,7 +490,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
 
     extracted.push({
       date: { value: date, confidence: dateCell?.confidence ?? 0 },
-      customer: { value: customer.value, confidence: customer.confidence },
+      customer: { value: rowCustomer.value, confidence: rowCustomer.confidence },
       item: { value: itemText, confidence: itemCell?.confidence ?? 0 },
       amount: { value: amount, confidence: amountCell?.confidence ?? 0 },
       ...(quantity !== null && quantity > 0
