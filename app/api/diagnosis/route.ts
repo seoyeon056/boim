@@ -88,7 +88,7 @@ ${describeExternalCounts(body)}
 
 [내부 거래에서 확인되는 신호]
 거래처 증가율: ${num(body.customerGrowthRate)}% (${num(body.previousCustomersCount)}곳 → ${num(body.recentCustomersCount)}곳) — ${label(body.growthStatus)}
-재구매율: ${num(body.repeatPurchaseRate)}% — ${label(body.repeatStatus)}
+반복거래율: ${num(body.repeatPurchaseRate)}% — ${label(body.repeatStatus)}
 최대 거래처 집중도: ${num(body.topCustomerConcentration)}% (${MASKED_CUSTOMER_LABEL}) — ${label(body.concentrationStatus)}
 
 [작성 지침]
