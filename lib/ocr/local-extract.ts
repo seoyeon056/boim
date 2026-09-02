@@ -24,13 +24,19 @@ type OcrResult = { lines: Cell[][] };
 // 거래명세서마다 열 이름이 조금씩 다르다. 우리가 필요한 네 값에 대응하는 표기를 모아둔다.
 const COLUMN_ALIASES = {
   date: ["거래일자", "일자", "날짜", "거래일", "월/일", "년월일", "월일"],
-  item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격"],
+  // "적요"는 입금내역의 내역 칸이다("전자결제 입금"). 품목 칸이 비어 있으면
+  // 아래에서 행을 통째로 버리기 때문에, 이걸 넣지 않으면 입금내역 전체가 사라진다.
+  item: ["품목", "품명", "상품명", "규격", "내역", "품목및규격", "적요"],
   amount: ["공급가액", "금액", "합계", "합계금액", "총액", "공급가액(원)"],
   quantity: ["수량", "수 량"],
   unitPrice: ["단가", "단 가", "단가(원)"],
+  // 거래처가 행마다 다른 문서가 있다. 입금내역·통장거래내역이 그렇다.
+  // 이 열이 있으면 문서 상단 라벨보다 우선한다(아래 rowsFromOcr 참고).
+  customer: ["보내는분", "받는분", "입금자", "송금인", "거래처명"],
 } as const;
 
 // 거래처는 표 안이 아니라 표 위 라벨에 있는 경우가 대부분이다.
+// 다만 "대부분"이지 전부는 아니다 — COLUMN_ALIASES.customer 를 함께 본다.
 const CUSTOMER_LABELS = ["수신", "공급받는자", "거래처", "상호", "귀하"];
 
 // 라벨 값에는 거래처가 아닌 것들이 자주 섞인다.
@@ -186,6 +192,9 @@ type ColumnRanges = Partial<Record<keyof typeof COLUMN_ALIASES, Cell>>;
 // 헤더 행을 찾아 각 열의 위치를 기억한다.
 // 헤더를 못 찾으면 열 매핑을 포기하고 값의 생김새로만 판단한다.
 function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
+  // 금액+날짜만 있는 후보. 진짜 표 머리를 끝까지 찾아보고 없을 때만 쓴다.
+  let weaker: { index: number; columns: ColumnRanges } | null = null;
+
   for (let index = 0; index < lines.length; index += 1) {
     const columns: ColumnRanges = {};
     for (const cell of lines[index]) {
@@ -195,13 +204,26 @@ function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
         }
       }
     }
-    // 금액 열은 반드시 있어야 하고, 날짜나 품목 중 하나만 더 있으면 표로 본다.
-    // 견적서처럼 행에 날짜 열이 아예 없는 표가 실제로 있다(날짜는 문서 상단에만).
-    if (columns.amount && (columns.date || columns.item)) {
+
+    // 품목 열이 있는 행이 진짜 표 머리다. 가장 구체적인 후보라 바로 확정한다.
+    // 견적서처럼 행에 날짜 열이 아예 없는 표도 여기서 잡힌다(날짜는 문서 상단에만).
+    if (columns.amount && columns.item) {
       return { index, columns };
     }
+
+    // 금액+날짜만 있는 행도 표 머리일 수 있지만, 먼저 나온다고 바로 쓰면 안 된다.
+    //
+    // 전자세금계산서는 품목 표 위에 "작성일자 / 공급가액(원) / 세액(원) / 비고"
+    // 요약 칸이 먼저 나온다. "작성일자"는 날짜 별칭 "일자"를, "공급가액(원)"은
+    // 금액 별칭 "공급가액"을 포함해서 이 조건에 걸린다. 그걸 헤더로 확정하면
+    // 품목 열이 없는 채로 확정되고, 아래 품목 세 줄이 전부 "품목이 빈 행"으로
+    // 버려진다(실측: 5,000,000 / 1,500,000 / 800,000 세 건이 통째로 사라졌다).
+    if (!weaker && columns.amount && columns.date) {
+      weaker = { index, columns };
+    }
   }
-  return { index: -1, columns: {} };
+
+  return weaker ?? { index: -1, columns: {} };
 }
 
 // 헤더 셀과 가로로 가장 많이 겹치는 셀을 그 열의 값으로 본다.
@@ -223,8 +245,60 @@ function cellForColumn(row: Cell[], header: Cell | undefined): Cell | undefined 
   return best && bestDistance <= header.box.width * 1.5 ? best : undefined;
 }
 
+// 칸이 좁으면 회사명이 다음 줄로 넘어간다. 넘어간 조각을 찾아 돌려준다.
+//
+// 실측(전자세금계산서): 거래처가 "㈜한국테크놀로"로 잘려 나왔다. 원문은 이렇다.
+//
+//   y=104.1  101-86-1234 | 상호(법인 | (주)한국테크놀로 | 214-85-6789 | …
+//   y=109.6  등록번호 | 등록번호                       ← 다른 열의 라벨
+//   y=115.1  5 | ) | 지 | 0 | ) | 스                  ← 넘어간 조각들
+//
+// 넘어간 줄이 바로 다음 줄이 아니라는 점(사이에 라벨 줄이 낀다), 그리고 여섯
+// 조각 중 왼쪽 끝이 맞는 건 회사명 둘뿐이라는 점(나머지는 가운데 정렬)이 걸려서
+// 줄 단위로 통째 병합하는 방식은 쓰지 않았다. 거래처 값에만 좁게 붙인다.
+//
+// 조건을 좁게 잡는다. 표의 다음 행을 회사명 뒤에 붙이면 없는 거래처를 만들어낸다.
+//   - 왼쪽 끝이 같을 것(가운데 정렬된 다른 칸은 여기서 걸러진다)
+//   - 글자 높이의 1.6배 안쪽에 있을 것(표의 행 간격은 이보다 넓다. 위 문서에서
+//     넘어간 줄은 1.29배, 품목 표의 행 간격은 2.47배였다)
+//   - 짧을 것. 넘어가는 건 이름의 꼬리라 한두 글자다
+const WRAP_PITCH = 1.6;
+const WRAP_ALIGN = 1.5;
+const WRAP_MAX_LENGTH = 3;
+
+function wrappedTail(lines: Cell[][], from: number, cell: Cell): string {
+  const height = cell.box.height || 10;
+
+  for (let index = from + 1; index < lines.length; index += 1) {
+    const row = lines[index];
+    if (row.length === 0) {
+      continue;
+    }
+
+    const gap = row[0].box.y - cell.box.y;
+    if (gap <= 0) {
+      continue;
+    }
+    if (gap > height * WRAP_PITCH) {
+      return "";
+    }
+
+    const tail = row.find(
+      (candidate) =>
+        Math.abs(candidate.box.x - cell.box.x) <= WRAP_ALIGN &&
+        candidate.text.length <= WRAP_MAX_LENGTH,
+    );
+    if (tail) {
+      return tail.text;
+    }
+  }
+
+  return "";
+}
+
 function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
-  for (const row of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const row = lines[index];
     for (const cell of row) {
       if (!CUSTOMER_LABELS.some((label) => normalize(cell.text).includes(label))) {
         continue;
@@ -233,12 +307,20 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
       // "거래처: 한빛금속(주) 담당자: 김OO"처럼 뒤에 다른 라벨이 이어지면 끊는다.
       const inline = valueAfterLabel(cell.text, CUSTOMER_LABELS);
       if (inline && looksLikeCompany(inline)) {
-        return { value: cleanCompanyName(stripCustomerDecoration(inline)), confidence: cell.confidence };
+        return {
+          value: cleanCompanyName(stripCustomerDecoration(inline)),
+          confidence: cell.confidence,
+        };
       }
       // 라벨 옆 셀에 값이 있는 경우
       const next = row[row.indexOf(cell) + 1];
       if (next && looksLikeCompany(next.text)) {
-        return { value: cleanCompanyName(stripCustomerDecoration(next.text)), confidence: next.confidence };
+        return {
+          value: cleanCompanyName(
+            stripCustomerDecoration(next.text + wrappedTail(lines, index, next)),
+          ),
+          confidence: next.confidence,
+        };
       }
     }
   }
@@ -460,6 +542,23 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
       continue;
     }
 
+    // 거래처를 행에서 먼저 찾는다.
+    //
+    // 지금까지 추출기는 "문서 하나 = 거래처 하나"를 전제했다. 거래명세서와
+    // 세금계산서는 그 전제가 맞지만 입금내역은 한 장에 여러 거래처가 섞인다.
+    // 그래서 입금내역 22건이 통째로 빠지고, 새봄테크·한울부품 두 곳은 아예
+    // 없는 거래처가 됐다(실측: 파일에는 94건·6곳인데 화면은 73건·5곳이었다).
+    //
+    // 행에 거래처 열이 없으면 예전처럼 문서 상단 라벨을 쓴다.
+    const customerCell = cellForColumn(row, columns.customer);
+    const rowCustomer =
+      customerCell && looksLikeCompany(customerCell.text)
+        ? {
+            value: cleanCompanyName(stripCustomerDecoration(customerCell.text)),
+            confidence: customerCell.confidence,
+          }
+        : customer;
+
     const quantityCell = cellForColumn(row, columns.quantity);
     const unitPriceCell = cellForColumn(row, columns.unitPrice);
     const quantity = quantityCell ? parseAmount(quantityCell.text) : null;
@@ -467,7 +566,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
 
     extracted.push({
       date: { value: date, confidence: dateCell?.confidence ?? 0 },
-      customer: { value: customer.value, confidence: customer.confidence },
+      customer: { value: rowCustomer.value, confidence: rowCustomer.confidence },
       item: { value: itemText, confidence: itemCell?.confidence ?? 0 },
       amount: { value: amount, confidence: amountCell?.confidence ?? 0 },
       ...(quantity !== null && quantity > 0

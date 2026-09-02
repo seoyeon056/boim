@@ -84,6 +84,8 @@ function stageFromProgress(p: number): Stage {
 const MIN_RUN_MS = 4800;
 // 실제 작업이 아직이면 여기서 숨을 고르며 대기한다.
 const CRUISE_CAP = 93;
+// CRUISE_CAP 에서 100 까지 달려가는 데 쓰는 시간.
+const FINISH_MS = 700;
 // 마지막(분석 완료) 상태를 잠깐 보여준 뒤 /review 로 이동한다.
 const FINISH_HOLD_MS = 900;
 
@@ -91,6 +93,15 @@ const FINISH_HOLD_MS = 900;
 function easeInOutSine(t: number): number {
   return 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, t)));
 }
+
+// 검수 대상은 실제 신뢰도로만 정한다. 예전에는 앞 다섯 줄의 필드 하나씩을
+// 0.80~0.95 로 낮춰 "확인 권장"을 만들었는데, 그 보정이 추출에 성공한 모든
+// 경우에 걸려 실제 기업 문서에도 임의 항목이 찍혔다. 지금은 조작을 걷어내고,
+// 묶기가 추측인 경로(PDF 텍스트 레이어)의 신뢰도만 사실대로 낮춰서 진짜
+// 의심스러운 값이 검수에 걸리게 했다. lib/ocr/pdf-text.ts 의 TEXT_LAYER_CONFIDENCE 참고.
+//
+// 추출이 실패하거나 거래를 한 건도 못 찾으면 예시 데이터로 대체하지 않는다.
+// 결과를 비운 채 넘겨 다음 화면이 "산정 불가"로 처리하게 한다.
 
 export function ProcessingContent({
   companyId,
@@ -110,10 +121,12 @@ export function ProcessingContent({
   useEffect(() => {
     let isActive = true;
     let raf = 0;
+    const timers: number[] = [];
     const start = performance.now();
     // 실제 인식이 끝난 시각. 0 이면 아직 진행 중.
     let workDoneAt = 0;
-    let current = 0;
+    // 100 까지 달려가기 시작한 시각. 0 이면 아직 순항 중.
+    let finishFrom = 0;
     let stageNow: Stage = "reading";
 
     // 매출을 증명하는 문서(거래명세서·세금계산서)만 거래로 인식한다.
@@ -124,6 +137,59 @@ export function ProcessingContent({
     const settlementFiles = SETTLEMENT_CATEGORIES.flatMap(
       (category) => states[category]?.files ?? [],
     );
+
+    // 진행률은 프레임마다 더하지 않고 경과 시간만으로 계산한다.
+    //
+    // 예전에는 프레임마다 조금씩 더해 나갔다. 그런데 브라우저는 탭이 화면에서
+    // 벗어나면 requestAnimationFrame 을 멈춘다. 그래서 인식을 기다리는 동안
+    // 다른 탭을 보고 오면 그동안의 진행이 통째로 사라졌다. 실제로 인식은 이미
+    // 끝났는데(sessionStorage 에 결과까지 들어 있는데) 화면만 72% 에 멈춰
+    // 다음 단계로 넘어가지 않는 일이 배포본에서 재현됐다.
+    //
+    // 시각의 함수로 두면 프레임을 몇 번 걸렀는지와 무관하게 값이 정해진다.
+    // 화면이 돌아왔을 때 있어야 할 자리로 바로 따라잡는다.
+    function cruiseAt(now: number): number {
+      return CRUISE_CAP * easeInOutSine((now - start) / MIN_RUN_MS);
+    }
+
+    function progressAt(now: number): number {
+      if (finishFrom === 0) {
+        return cruiseAt(now);
+      }
+      const cruise = cruiseAt(finishFrom);
+      const ratio = (now - finishFrom) / FINISH_MS;
+      return cruise + (100 - cruise) * easeInOutSine(ratio);
+    }
+
+    // 인식이 끝났고 최소 시간도 지났으면 마무리 구간을 연다.
+    //
+    // 이동 시각은 진행률이 아니라 타이머로 잡는다. 타이머는 탭이 숨어 있으면
+    // 느려질 뿐 결국 실행되므로, 화면이 안 보이는 동안 인식이 끝나도 흐름이
+    // 멈추지 않는다. 진행률에 걸어 두면 프레임이 오지 않는 동안 영영 멈춘다.
+    function scheduleFinish() {
+      if (finishFrom > 0 || workDoneAt === 0) {
+        return;
+      }
+
+      const wait = Math.max(0, start + MIN_RUN_MS - performance.now());
+
+      timers.push(
+        window.setTimeout(() => {
+          if (!isActive) {
+            return;
+          }
+          finishFrom = performance.now();
+
+          timers.push(
+            window.setTimeout(() => {
+              if (isActive) {
+                router.push(withCompany("/review", companyId));
+              }
+            }, FINISH_MS + FINISH_HOLD_MS),
+          );
+        }, wait),
+      );
+    }
 
     // 실제 인식은 뒤에서 계속 돈다. 페이지 카운트만 받아 둔다.
     extractTransactionsLocally(
@@ -164,44 +230,23 @@ export function ProcessingContent({
       }
 
       workDoneAt = performance.now();
+      scheduleFinish();
     });
 
+    // 프레임 루프는 그리기만 한다. 흐름을 진행시키는 책임은 없다.
     function frame(now: number) {
       if (!isActive) return;
-      const elapsed = now - start;
-      const timeUp = elapsed >= MIN_RUN_MS;
 
-      // 목표 진행률: 최소 시간 전에는 CRUISE_CAP 까지만 부드럽게 차오르고,
-      // 인식도 끝나고 최소 시간도 지났으면 100 으로 마무리한다.
-      const target =
-        workDoneAt > 0 && timeUp
-          ? 100
-          : CRUISE_CAP * easeInOutSine(elapsed / MIN_RUN_MS);
+      const value = Math.min(100, progressAt(now));
+      setDisplayProgress(value);
 
-      const gap = target - current;
-      if (gap > 0.05) {
-        const rate = target >= 100 ? 0.16 : 0.045;
-        // 기계적으로 매끈하지 않게 프레임마다 조금씩 흔든다.
-        const jitter = 0.7 + Math.random() * 0.6;
-        current = Math.min(target, current + Math.max(0.12, gap * rate * jitter));
-        setDisplayProgress(current);
-      }
-
-      const nextStage = stageFromProgress(current);
+      const nextStage = stageFromProgress(value);
       if (nextStage !== stageNow) {
         stageNow = nextStage;
         setStage(nextStage);
       }
 
-      if (current >= 99.9 && workDoneAt > 0) {
-        setDisplayProgress(100);
-        if (stageNow !== "done") {
-          stageNow = "done";
-          setStage("done");
-        }
-        window.setTimeout(() => {
-          if (isActive) router.push(withCompany("/review", companyId));
-        }, FINISH_HOLD_MS);
+      if (value >= 100) {
         return;
       }
 
@@ -212,6 +257,9 @@ export function ProcessingContent({
     return () => {
       isActive = false;
       cancelAnimationFrame(raf);
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
     };
     // 마운트 시점의 업로드 파일로 한 번만 돌린다.
     // eslint-disable-next-line react-hooks/exhaustive-deps

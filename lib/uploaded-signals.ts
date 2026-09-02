@@ -58,27 +58,9 @@ export type UploadedSignals = {
   signals: Signals;
   transactionCount: number;
   // 진단일 이후 날짜라 과거 실적·성장 지표 계산에서 제외한 거래 건수.
+  // (분석 기간은 signals.periodStart/periodEnd 에 이미 들어 있다.)
   futureExcludedCount: number;
-  // 실제 계산에 쓰인 거래의 기간(YYYY-MM). 리포트의 "분석 기간"에 그대로 쓴다.
-  periodStart: string;
-  periodEnd: string;
 };
-
-// "2026-01" → "2026년 01월"
-function formatMonth(ym: string): string {
-  const [y, m] = ym.split("-");
-  return `${y}년 ${m}월`;
-}
-
-// 리포트에 넣을 "2026년 01월 – 2026년 06월" 형태의 문자열.
-export function formatPeriod(start: string, end: string): string {
-  if (!start || !end) {
-    return "";
-  }
-  return start === end
-    ? formatMonth(start)
-    : `${formatMonth(start)} – ${formatMonth(end)}`;
-}
 
 // 업로드·검수된 거래가 있으면 그걸로 계산한 신호를, 없으면 null을 돌려준다.
 // null이면 호출하는 화면이 "산정 불가"로 처리한다(합성 데이터로 대체하지 않는다).
@@ -109,14 +91,10 @@ export function readUploadedSignals(
       return null;
     }
 
-    const months = past.map((item) => item.date.slice(0, 7)).sort();
-
     return {
       signals: calculateSignals(past),
       transactionCount: past.length,
       futureExcludedCount,
-      periodStart: months[0],
-      periodEnd: months[months.length - 1],
     };
   } catch {
     return null;

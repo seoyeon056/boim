@@ -20,7 +20,6 @@ import { isSampleUpload } from "@/lib/uploaded-documents";
 import { buildDiagnosis } from "@/lib/diagnosis";
 import { calculateSignals } from "@/lib/signals";
 import {
-  formatPeriod,
   readSettlementSummary,
   readUploadedSignals,
 } from "@/lib/uploaded-signals";
@@ -36,6 +35,20 @@ const EMPTY_SIGNALS = calculateSignals([]);
 // 공문서 양식의 최종 진단서.
 // 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 읽어온다. 전부 준비되기
 // 전에는 로딩 상태를 보여주고, 인쇄/PDF 버튼도 그동안 비활성화한다.
+//
+// 분석 기간은 계산 결과(signals.periodStart/End)에서 가져온다. 예전에는
+// "2026년 01월 – 2026년 06월" 문자열을 박아 두어, 어떤 문서를 올려도 이 기간이
+// 찍혔다.
+const PERIOD_UNKNOWN = "확인된 거래 없음";
+
+function periodOf(values: SignalsResult | null): string {
+  if (!values?.periodStart || !values.periodEnd) {
+    return PERIOD_UNKNOWN;
+  }
+  return values.periodStart === values.periodEnd
+    ? values.periodStart
+    : `${values.periodStart} – ${values.periodEnd}`;
+}
 
 // 진단서 본문 서체. 나눔명조는 획이 굵고 예스러워 문서가 무거워 보인다.
 // Noto Serif KR 은 획이 가늘고 자간이 정돈돼 있어 같은 문서 톤을 유지하면서 덜 튄다.
@@ -70,9 +83,8 @@ export function ShareContent({
   const hasData = Boolean(uploaded);
   const uploadedCount = uploaded ? uploaded.transactionCount : 0;
   const futureExcludedCount = uploaded ? uploaded.futureExcludedCount : 0;
-  const period = uploaded
-    ? formatPeriod(uploaded.periodStart, uploaded.periodEnd)
-    : "";
+  // 분석 기간은 실제 계산에 쓴 거래에서 나온다(signals.periodStart/End).
+  const period = periodOf(uploaded ? uploaded.signals : null);
 
   // 업로드 내역은 브라우저(sessionStorage)에만 있다. Step 05의 근거 문서
   // 목록과 같은 기록을 읽는다.
@@ -92,9 +104,6 @@ export function ShareContent({
     let isActive = true;
 
     const effective = uploaded ? uploaded.signals : EMPTY_SIGNALS;
-    const effectivePeriod = uploaded
-      ? formatPeriod(uploaded.periodStart, uploaded.periodEnd)
-      : "";
 
     fetchVisibility(companyId)
       .then((visibilityResult) => {
@@ -111,7 +120,6 @@ export function ShareContent({
           visibilityResult,
           effective,
           uploaded.transactionCount,
-          effectivePeriod,
         )
           .then((text) => {
             if (isActive && text) setLlmDiagnosis(text);
@@ -137,10 +145,9 @@ export function ShareContent({
     view: VisibilityResult,
     values: SignalsResult,
     count: number,
-    periodText: string,
   ): Promise<string> {
     const { diagnosis: text } = await fetchDiagnosis({
-      period: periodText || "미상",
+      period: periodOf(values),
       transactionCount: count,
       visibilityScore: view.visibilityScore,
       visibilityInterpretation: view.interpretations.visibility,
@@ -171,7 +178,7 @@ export function ShareContent({
     setLlmState("loading");
     try {
       setLlmDiagnosis(
-        await runDiagnosis(visibility, signals, uploadedCount, period),
+        await runDiagnosis(visibility, signals, uploadedCount),
       );
       setLlmState("idle");
     } catch {
@@ -253,6 +260,7 @@ export function ShareContent({
           ? `${item.prefix}${item.value}${item.suffix}`
           : "—",
         tone: item.tone,
+        evaluable: item.evaluable,
         note: item.detail,
       }))
     : [];
@@ -398,13 +406,7 @@ export function ShareContent({
                       {signal.value}
                     </td>
                     <td className="border border-zinc-300 py-2.5 text-center text-[12px] font-bold text-zinc-900">
-                      {signal.value === "—"
-                        ? "판단 보류"
-                        : signal.tone === "positive"
-                          ? "긍정"
-                          : signal.tone === "neutral"
-                            ? "보통"
-                            : "주의"}
+                      {signal.evaluable ? STATUS_TEXT[signal.tone] : "판단 보류"}
                     </td>
                     <td className="border border-zinc-300 px-3 py-2.5 text-[12px] text-zinc-600">
                       {signal.note}

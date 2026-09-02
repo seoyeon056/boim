@@ -30,7 +30,11 @@ const CHANGE_WINDOW_MONTHS = 6;
 
 // 사업장명 검색은 페이지 크기와 무관하게 9초 안팎이 걸린다(실측: numOfRows를
 // 24로 줄여도 같다). 상세 조회는 60ms 대라 따로 짧게 잡는다.
-const SEARCH_TIMEOUT_MS = 12000;
+//
+// 12초로 뒀더니 여유가 3초뿐이라 같은 기업을 연달아 조회할 때 절반쯤 타임아웃했다.
+// 그때마다 고용 축이 "확인 불가"가 되면서 가시성 점수가 25점과 30점을 오갔다.
+// 라우트에 maxDuration 30 을 걸어 두었으므로 20초까지는 안전하다.
+const SEARCH_TIMEOUT_MS = 20000;
 const DETAIL_TIMEOUT_MS = 4000;
 
 export type Employment = {

@@ -52,6 +52,14 @@ function monthIndex(date: string): number {
   return year * 12 + (month - 1);
 }
 
+// monthIndex 의 역함수. "2026년 01월" 처럼 사람이 읽는 형태로 되돌린다.
+// 진단서가 분석 기간을 문자열로 박아 두지 않고 실제 거래에서 가져오게 하려고 쓴다.
+function monthLabel(index: number): string {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${year}년 ${String(month).padStart(2, "0")}월`;
+}
+
 type Split = {
   previous: Transaction[];
   recent: Transaction[];
@@ -448,6 +456,9 @@ export function calculateSignals(items: Transaction[]) {
     continuityRate: continuity.rate,
     activeMonths: continuity.activeMonths,
     observedMonths: continuity.observedMonths,
+    // 실제 거래가 걸쳐 있는 기간. 거래가 없으면 적을 기간도 없다.
+    periodStart: items.length > 0 ? monthLabel(split.earliestMonth) : null,
+    periodEnd: items.length > 0 ? monthLabel(split.latestMonth) : null,
     trendRate: trend.rate,
     trendComparable: trend.comparable,
 

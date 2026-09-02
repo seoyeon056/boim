@@ -206,8 +206,19 @@ const UNAVAILABLE_EMPLOYMENT = {
   tone: "warn" as const,
 };
 
+// 공시도 사유가 다르다. DART는 회사명 검색을 지원하지 않아 고유번호를 먼저
+// 찾아야 하는데, 등록 법인이 아니면 매핑표에 없다. 조회를 못 한 것이지
+// 서비스가 죽은 것이 아니다.
+const UNAVAILABLE_DISCLOSURE = {
+  value: "확인 불가",
+  interpretation: "전자공시 등록 법인에서 찾지 못함",
+  tone: "warn" as const,
+};
+
 function unavailableFor(key: ExternalSource) {
-  return key === "employment" ? UNAVAILABLE_EMPLOYMENT : UNAVAILABLE_METRIC;
+  if (key === "employment") return UNAVAILABLE_EMPLOYMENT;
+  if (key === "disclosure") return UNAVAILABLE_DISCLOSURE;
+  return UNAVAILABLE_METRIC;
 }
 
 // 60점 위가 전부 한 구간이라 100점에도 "일부 확인"이 붙었다. 네 축이 다 차서
@@ -308,7 +319,7 @@ export function calculateVisibility(
         ? UNAVAILABLE_EMPLOYMENT.interpretation
         : employment.interpretation,
       disclosure: missing.has("disclosure")
-        ? UNAVAILABLE_METRIC.interpretation
+        ? UNAVAILABLE_DISCLOSURE.interpretation
         : disclosure.interpretation,
       visibility: visibility.interpretation,
     },
