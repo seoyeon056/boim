@@ -10,7 +10,6 @@ import {
   extractTransactionsLocally,
   TRANSACTION_CATEGORIES,
 } from "@/lib/ocr/run-local-ocr";
-import type { ExtractedTransactionRow } from "@/lib/ocr/types";
 
 // ─────────────────────────────────────────────
 // 실제 인식이 여기서 일어난다. 전부 이 브라우저 안에서 돌고 파일은 서버로
@@ -116,40 +115,22 @@ function toReviewResult(sample: Transaction[]) {
   });
 }
 
-// 데모 보정: xlsx 표는 값을 전부 확신(신뢰도 1)으로 읽어서 검수 화면에 확인할
-// 항목이 하나도 안 뜬다. 진단 흐름을 보여주려면 몇 개는 있어야 하므로, 앞
-// 다섯 줄의 필드 하나씩을 확인 권장(0.80~0.95) 구간으로 낮춘다. 값은 안 바꾼다.
-const DEMO_REVIEW_MARKS: {
-  row: number;
-  field: "date" | "customer" | "item" | "amount";
-  confidence: number;
-}[] = [
-  { row: 0, field: "item", confidence: 0.88 },
-  { row: 1, field: "amount", confidence: 0.86 },
-  { row: 2, field: "customer", confidence: 0.9 },
-  { row: 3, field: "date", confidence: 0.91 },
-  { row: 4, field: "item", confidence: 0.92 },
-];
-
-function withDemoReviewMarks(
-  rows: ExtractedTransactionRow[],
-): ExtractedTransactionRow[] {
-  return rows.map((tx, index) => {
-    const mark = DEMO_REVIEW_MARKS.find((m) => m.row === index);
-    if (!mark) return tx;
-
-    const patched: ExtractedTransactionRow = { ...tx };
-    if (mark.field === "amount") {
-      patched.amount = { ...tx.amount, confidence: mark.confidence };
-    } else {
-      patched[mark.field] = {
-        ...tx[mark.field],
-        confidence: mark.confidence,
-      };
-    }
-    return patched;
-  });
-}
+// 검수 대상은 실제 신뢰도로만 정한다.
+//
+// 예전에는 여기서 앞 다섯 줄의 필드 하나씩을 0.80~0.95 구간으로 낮췄다. xlsx 표는
+// 값을 전부 확신(1)으로 읽어서 검수 화면에 확인할 항목이 하나도 안 뜨는데, 진단
+// 흐름을 보여주려면 몇 개는 있어야 한다는 이유였다.
+//
+// 그런데 그 보정이 데모에만 걸린 게 아니라 추출에 성공한 모든 경우에 걸렸다.
+// 실제 기업이 자기 문서를 올려도 앞 다섯 줄이 임의로 "확인 권장"으로 찍혔고,
+// 화면은 "N개 항목 중 5개를 확인해 주세요"라고 말했다. 그 5개는 불확실해서가
+// 아니라 코드가 그렇게 정해 둔 것이었다.
+//
+// 더 나쁜 건 정작 잘못 읽은 값은 못 잡았다는 점이다. 세금계산서에서 거래처가
+// "㈜한국테크놀로"로 잘려 나왔는데 신뢰도가 1이라 자동 확인으로 통과했다.
+// 지금은 그 반대다 — 조작을 걷어내고, 묶기가 추측인 경로(PDF 텍스트 레이어)의
+// 신뢰도를 사실대로 낮춰서 진짜 의심스러운 값이 검수에 걸리게 했다.
+// lib/ocr/pdf-text.ts 의 TEXT_LAYER_CONFIDENCE 참고.
 
 export function ProcessingContent({
   companyId,
@@ -248,7 +229,7 @@ export function ProcessingContent({
       sessionStorage.setItem(
         "boimAnalysisResult",
         outcome.status === "ok"
-          ? JSON.stringify(withDemoReviewMarks(outcome.transactions))
+          ? JSON.stringify(outcome.transactions)
           : JSON.stringify(toReviewResult(reviewSample)),
       );
       if (outcome.status === "ok") {

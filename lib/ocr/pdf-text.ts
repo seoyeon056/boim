@@ -26,6 +26,20 @@ export type PdfDocumentLike = {
   }>;
 };
 
+// PDF 텍스트 레이어에서 읽은 값의 신뢰도.
+//
+// 글자 자체는 파일에 들어 있던 것이라 오인식이 없다. 그래서 오래 1로 두었다.
+// 그런데 pdf.js 가 돌려주는 건 "칸"이 아니라 "조각"이다. 한 칸의 글자가 줄바꿈이나
+// 자간 때문에 여러 조각으로 쪼개져 나오고, 그걸 좌표로 다시 묶는 건 우리 추측이다.
+//
+// 실측: 세금계산서의 "(주)한국테크놀로지"가 "(주)한국테크놀로"와 "지" 두 조각으로
+// 나뉘어, 거래처가 "㈜한국테크놀로"로 잘린 채 추출됐다. 그런데 신뢰도가 1이라
+// 자동 확인으로 통과해 검수 화면에 뜨지도 않았다.
+//
+// 읽기가 정확한 것과 값이 온전한 것은 다르다. 묶기가 추측인 이상 확신할 수 없으므로
+// 자동 확인 기준(0.95) 아래로 둔다. 사람이 한 번 보게 하는 편이 맞다.
+const TEXT_LAYER_CONFIDENCE = 0.9;
+
 export async function openPdf(file: File): Promise<PdfDocumentLike> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = `${PDF_ASSETS}pdf.worker.min.mjs`;
@@ -61,8 +75,7 @@ export async function cellsFromPdfText(
       cells.push({
         text,
         box: { x, y, width: text.length * height * 0.6, height },
-        // 읽어낸 값이 아니라 파일에 들어 있던 문자다.
-        confidence: 1,
+        confidence: TEXT_LAYER_CONFIDENCE,
       });
     }
 
