@@ -133,7 +133,8 @@ export default function StepShell({
           */}
           <p className="mt-6 border-t border-zinc-100 pt-4 text-[13px] leading-6 text-zinc-500">
             업로드한 문서는 이 브라우저 안에서 분석되며 서버로 전송되지 않습니다.
-            입력한 값은 진단서 발급 전까지만 보관됩니다.
+            입력한 값은 이 브라우저 탭에만 임시로 남고, 처음 화면으로 돌아가거나
+            ‘새 기업 진단’을 누르면 지워집니다.
           </p>
         </aside>
 

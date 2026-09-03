@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { Signals } from "@/lib/signals";
-import { readUploadedSignals } from "@/lib/uploaded-signals";
+import { readSettlementSummary, readUploadedSignals } from "@/lib/uploaded-signals";
 import { describePaymentTerms, readDocumentTerms } from "@/lib/document-terms";
+import { withCompany } from "@/lib/company-link";
 import { grantAiConsent } from "@/lib/ai-consent";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { josa } from "@/lib/korean";
@@ -11,6 +13,7 @@ import { SignalsEvidence } from "./signals-evidence";
 import { MetricCards, type MetricCardData } from "./metric-cards";
 import { LoadingSteps } from "@/app/loading-steps";
 import { GradeBadge } from "@/app/grade-badge";
+import { SampleDataBadge } from "@/app/sample-badge";
 import { gradeFromSignals } from "@/lib/diagnosis";
 
 const statusLabel = {
@@ -24,6 +27,12 @@ const AI_STEPS = [
   "거래처명을 가리고 비율만 추리는 중",
   "AI 가 해석을 쓰는 중",
 ];
+
+const wonText = (amount: number): string => {
+  if (amount >= 100000000) return (amount / 100000000).toFixed(1) + "억";
+  if (amount >= 10000) return Math.round(amount / 10000).toLocaleString() + "만";
+  return amount.toLocaleString();
+};
 
 // 규칙 기반 해석. LLM을 부르지 않는 기본 상태에서 쓴다.
 //
@@ -67,34 +76,45 @@ function pickNotable(signals: Signals): string {
   return "여섯 지표 모두 뚜렷한 방향이 확인되지 않습니다. 거래 기록이 더 쌓인 뒤에 다시 보시는 편이 정확합니다.";
 }
 
-export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
-  // 서버는 sessionStorage를 못 본다. 업로드·검수한 거래가 있으면 그걸 우선한다.
-  const [signals, setSignals] = useState<Signals>(serverSignals);
-  const [fromUpload, setFromUpload] = useState(false);
+type ViewState = "loading" | "none" | "ok";
+
+export function SignalsView({ companyId }: { companyId?: string }) {
+  // 이 화면의 수치는 오직 사용자가 올려 검수한 거래에서만 나온다. 없으면 산정 불가.
+  const [view, setView] = useState<ViewState>("loading");
+  const [signals, setSignals] = useState<Signals | null>(null);
   const [transactionCount, setTransactionCount] = useState(0);
+  const [futureExcludedCount, setFutureExcludedCount] = useState(0);
+  const [settlement, setSettlement] = useState<{ count: number; total: number } | null>(
+    null,
+  );
   // 결제조건은 거래 건수·금액에 잡히지 않는 정보라 따로 읽어 덧붙인다.
   const [paymentNote, setPaymentNote] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [aiState, setAiState] = useState<"idle" | "loading" | "failed">("idle");
 
   useEffect(() => {
+    const uploaded = readUploadedSignals(companyId ?? "");
+
+    if (!uploaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setView("none");
+      return;
+    }
+
     const terms = readDocumentTerms();
     if (terms) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaymentNote(describePaymentTerms(terms));
     }
 
-    const uploaded = readUploadedSignals("");
-    if (!uploaded) return;
-     
     setSignals(uploaded.signals);
-     
-    setFromUpload(true);
-     
     setTransactionCount(uploaded.transactionCount);
-  }, []);
+    setFutureExcludedCount(uploaded.futureExcludedCount);
+    setSettlement(readSettlementSummary());
+    setView("ok");
+  }, [companyId]);
 
   async function requestAiNotice() {
+    if (!signals) return;
     // 여기서 한 번 동의하면 리포트에서 다시 묻지 않는다.
     grantAiConsent();
     setAiState("loading");
@@ -128,6 +148,32 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
     }
   }
 
+  if (view === "loading") {
+    return (
+      <p className="text-[13px] text-zinc-400">성장 신호를 불러오는 중입니다…</p>
+    );
+  }
+
+  if (view === "none" || !signals) {
+    return (
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-6 py-8 text-center">
+        <p className="text-[15px] font-semibold text-zinc-900">
+          거래 실적 문서가 없어 분석할 수 없습니다
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-[13px] leading-6 text-zinc-500">
+          성장 신호는 업로드해 검수한 거래명세서·세금계산서에서만 계산됩니다.
+          제출된 거래가 없어 성장 등급은 <b>산정 불가</b>로 처리됩니다.
+        </p>
+        <Link
+          href={withCompany("/upload", companyId)}
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
+        >
+          문서 업로드로 돌아가기
+        </Link>
+      </div>
+    );
+  }
+
   const risky = signals.statuses.topCustomerConcentration === "caution";
 
   // 지표 정의는 lib/signals.ts 가 갖는다. 화면은 계산 결과를 그리기만 한다.
@@ -145,8 +191,9 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-4">
-        <span className="text-[11px] text-zinc-400">
+        <span className="flex items-center gap-2 text-[11px] text-zinc-400">
           내부 거래에서 확인한 지표
+          <SampleDataBadge />
         </span>
         <GradeBadge grade={gradeFromSignals(signals)} />
       </div>
@@ -186,13 +233,21 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         )}
       </div>
 
-      {/* 이 수치가 어디서 나왔는지 밝힌다. 예전에는 예시 데이터가 실제 분석
-          결과인 것처럼 보였다. */}
+      {/* 이 수치가 어디서 나왔는지 밝힌다. 실제 계산에 쓴 거래 건수를 그대로 적는다. */}
       <p className="mt-2 text-[11px] leading-5 text-zinc-400">
-        {fromUpload
-          ? "제출한 문서에서 확인된 거래를 근거로 산출한 수치입니다."
-          : "제출한 문서에서 거래 내역을 확인하지 못해 예시 데이터로 산출한 수치입니다."}
+        제출해 검수한 거래 {signals.transactionCount}건을 근거로 산출한 수치입니다.
+        {futureExcludedCount > 0 &&
+          ` 진단일 이후 날짜의 거래 ${futureExcludedCount}건은 제외했습니다.`}
       </p>
+
+      {/* 입금내역은 입금 확인용으로만 확인하고 매출에는 합산하지 않았음을 밝힌다. */}
+      {settlement && (
+        <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+          입금내역에서 입금 {settlement.count}건(합계 {wonText(settlement.total)}원)을
+          확인했습니다. 입금 확인용으로만 참고했으며 매출·거래처 계산에는 합산하지
+          않았습니다.
+        </p>
+      )}
 
       <p
         className="mt-3 max-w-3xl text-[13px] leading-6"
@@ -241,7 +296,6 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
         previousCustomersCount={signals.previousCustomersCount}
         repeatPurchaseRate={signals.repeatPurchaseRate}
       />
-
     </>
   );
 }

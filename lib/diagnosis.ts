@@ -244,7 +244,7 @@ export const GRADE_CRITERIA = [
   { grade: "B+", rule: "긍정 4개" },
   { grade: "B", rule: "긍정 2~3개" },
   { grade: "C", rule: "긍정 1개 이하" },
-  { grade: "—", rule: "평가 가능한 신호 3개 미만이면 등급 없음" },
+  { grade: "산정 불가", rule: "거래 실적이 없거나 평가 가능한 신호가 3개 미만" },
 ];
 
 // 지표가 여섯으로 늘었으므로 구간도 여섯 기준으로 나눈다.
@@ -253,7 +253,7 @@ export function gradeFromSignals(signals: Signals): string {
   // 평가할 수 있는 지표가 모자라면 등급을 만들지 않는다. 긍정 개수만 보면
   // 거래가 없는 기업도 집중도 0%·지속성 100%로 "긍정 2개"를 받아 B가 된다.
   if (!signals.dataSufficient) {
-    return "데이터 부족";
+    return "산정 불가";
   }
 
   const positives = signals.positiveCount;

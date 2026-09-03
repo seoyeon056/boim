@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CompanyResult, searchCompanies } from "@/lib/api";
 import { withCompany } from "@/lib/company-link";
+import { clearFlowState } from "@/app/flow-reset";
+import { useUploadStore } from "@/app/upload/upload-store";
 import StepShell from "@/app/step-shell";
 import { LoadingSteps } from "@/app/loading-steps";
 
@@ -15,6 +17,18 @@ const DIAGNOSE_STEPS = [
 
 export default function CompanyPage() {
   const router = useRouter();
+  const { reset: resetUpload } = useUploadStore();
+
+  // "새 기업 진단"이나 홈에서 온 새 진단은 주소에 ?company= 가 없다. 그때는
+  // 이전 기업의 파일·추출값·선택 상태·분석 결과를 모두 지운다.
+  // 단계 표시줄에서 되돌아온 경우(?company=... 가 붙어 있음)에는 지우지 않는다.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).has("company")) {
+      clearFlowState();
+      resetUpload();
+    }
+  }, [resetUpload]);
 
   // 다음 화면이 서버에서 외부 API 를 부르는 동안 빈 화면이 보이지 않도록,
   // 이동을 시작하면서 무엇을 하고 있는지 알려준다.

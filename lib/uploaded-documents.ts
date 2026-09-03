@@ -42,3 +42,8 @@ export function uploadedCategoryNames(upload: StoredUpload | null): string[] {
     .filter((category) => category.status === "uploaded")
     .map((category) => category.categoryName);
 }
+
+// "샘플 문서 불러오기"로 채운 진단인지.
+export function isSampleUpload(upload: StoredUpload | null): boolean {
+  return Boolean(upload?.isSample);
+}

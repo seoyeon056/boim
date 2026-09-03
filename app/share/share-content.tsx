@@ -11,28 +11,34 @@ import Link from "next/link";
 
 import {
   fetchDiagnosis,
-  fetchSignals,
   fetchVisibility,
   type SignalsResult,
   type VisibilityResult,
 } from "@/lib/api";
 import { withCompany } from "@/lib/company-link";
+import { isSampleUpload } from "@/lib/uploaded-documents";
 import { buildDiagnosis } from "@/lib/diagnosis";
-import { readUploadedSignals } from "@/lib/uploaded-signals";
+import { calculateSignals } from "@/lib/signals";
+import {
+  readSettlementSummary,
+  readUploadedSignals,
+} from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 
 // LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
 const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" } as const;
 
-// 공문서 양식의 최종 진단서.
-// 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 API에서 읽어온다.
+// 거래 실적이 없을 때 쓰는 빈 신호. 모든 지표가 "—", 등급은 산정 불가.
+const EMPTY_SIGNALS = calculateSignals([]);
 
-// 분석 기간은 계산 결과에서 가져온다.
+// 공문서 양식의 최종 진단서.
+// 기업명·점수·성장 신호는 모두 진단 중인 기업에 맞춰 읽어온다. 전부 준비되기
+// 전에는 로딩 상태를 보여주고, 인쇄/PDF 버튼도 그동안 비활성화한다.
 //
-// 예전에는 "2026년 01월 – 2026년 06월" 문자열을 박아 두었다. 어떤 문서를 올려도
-// 이 기간이 찍혀서, 같은 진단서 안에서 "분석 기간 6개월"과 "12개월 중 12개월에
-// 거래 발생"이 나란히 적히는 일이 실제로 있었다.
+// 분석 기간은 계산 결과(signals.periodStart/End)에서 가져온다. 예전에는
+// "2026년 01월 – 2026년 06월" 문자열을 박아 두어, 어떤 문서를 올려도 이 기간이
+// 찍혔다.
 const PERIOD_UNKNOWN = "확인된 거래 없음";
 
 function periodOf(values: SignalsResult | null): string {
@@ -44,10 +50,6 @@ function periodOf(values: SignalsResult | null): string {
     : `${values.periodStart} – ${values.periodEnd}`;
 }
 
-// 붙임은 실제로 제출된 문서만 적는다. 예전에는 이 여섯 개를 고정으로 늘어놓고
-// "각 1부"라고 썼는데, 문서를 하나도 올리지 않아도 그대로 나왔다. 공문서 형식의
-// 진단서에 존재하지 않는 붙임을 적는 셈이라 문서 전체의 신뢰가 흔들린다.
-
 // 진단서 본문 서체. 나눔명조는 획이 굵고 예스러워 문서가 무거워 보인다.
 // Noto Serif KR 은 획이 가늘고 자간이 정돈돼 있어 같은 문서 톤을 유지하면서 덜 튄다.
 const serif = {
@@ -55,6 +57,12 @@ const serif = {
   fontWeight: 400,
   letterSpacing: "0.01em",
 } as const;
+
+const wonText = (amount: number): string => {
+  if (amount >= 100000000) return (amount / 100000000).toFixed(1) + "억";
+  if (amount >= 10000) return Math.round(amount / 10000).toLocaleString() + "만";
+  return amount.toLocaleString();
+};
 
 export function ShareContent({
   companyId,
@@ -66,9 +74,18 @@ export function ShareContent({
   docNo: string;
 }) {
   const [visibility, setVisibility] = useState<VisibilityResult | null>(null);
-  const [signals, setSignals] = useState<SignalsResult | null>(null);
-  // 업로드·검수한 거래로 계산한 신호. 있으면 서버의 합성 데이터 대신 이걸 쓴다.
-  const [uploadedCount, setUploadedCount] = useState<number | null>(null);
+  // 업로드·검수한 거래는 브라우저(sessionStorage)에만 있고 서버는 못 본다.
+  // 첫 클라이언트 렌더에서 한 번 읽는다(effect 안에서 setState 하지 않는다).
+  const [uploaded] = useState(() => readUploadedSignals(companyId ?? ""));
+  const [settlement] = useState(() => readSettlementSummary());
+
+  const signals: SignalsResult = uploaded ? uploaded.signals : EMPTY_SIGNALS;
+  const hasData = Boolean(uploaded);
+  const uploadedCount = uploaded ? uploaded.transactionCount : 0;
+  const futureExcludedCount = uploaded ? uploaded.futureExcludedCount : 0;
+  // 분석 기간은 실제 계산에 쓴 거래에서 나온다(signals.periodStart/End).
+  const period = periodOf(uploaded ? uploaded.signals : null);
+
   // 업로드 내역은 브라우저(sessionStorage)에만 있다. Step 05의 근거 문서
   // 목록과 같은 기록을 읽는다.
   const upload = useSyncExternalStore(
@@ -77,6 +94,8 @@ export function ShareContent({
     serverUploadSnapshot,
   );
   const evidenceDocs = uploadedCategoryNames(upload);
+  const sampleBased = isSampleUpload(upload);
+  const [loadFailed, setLoadFailed] = useState(false);
   // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
   const [llmDiagnosis, setLlmDiagnosis] = useState<string | null>(null);
   const [llmState, setLlmState] = useState<"idle" | "loading" | "failed">("idle");
@@ -84,27 +103,24 @@ export function ShareContent({
   useEffect(() => {
     let isActive = true;
 
-    // 사용자가 올린 문서에서 계산한 신호가 있으면 그걸 우선한다.
-    // 서버는 sessionStorage를 볼 수 없어서 이 판단은 브라우저에서만 가능하다.
-    const uploaded = readUploadedSignals(companyId ?? "");
+    const effective = uploaded ? uploaded.signals : EMPTY_SIGNALS;
 
-    Promise.all([fetchVisibility(companyId), fetchSignals(companyId)])
-      .then(([visibilityResult, signalsResult]) => {
+    fetchVisibility(companyId)
+      .then((visibilityResult) => {
         if (!isActive) return;
-
-        const effective = uploaded ? uploaded.signals : signalsResult;
         setVisibility(visibilityResult);
-        setSignals(effective);
-        setUploadedCount(uploaded ? uploaded.transactionCount : null);
 
-        // Step 05에서 이미 동의했으면 여기서 또 묻지 않는다. 같은 종류의 값을
-        // 보내는 같은 질문이라, 흐름 안에서 두 번 물으면 성가시기만 하다.
-        if (!hasAiConsent()) {
+        // Step 05에서 이미 동의했고, 산정된 거래가 있을 때만 AI 종합 의견을 부른다.
+        if (!uploaded || !hasAiConsent()) {
           return;
         }
 
         setLlmState("loading");
-        return runDiagnosis(visibilityResult, effective, uploaded?.transactionCount ?? 0)
+        return runDiagnosis(
+          visibilityResult,
+          effective,
+          uploaded.transactionCount,
+        )
           .then((text) => {
             if (isActive && text) setLlmDiagnosis(text);
             if (isActive) setLlmState("idle");
@@ -112,18 +128,17 @@ export function ShareContent({
           .catch(() => {
             if (isActive) setLlmState("failed");
           });
-
       })
       .catch(() => {
         if (!isActive) return;
         setVisibility(null);
-        setSignals(null);
+        setLoadFailed(true);
       });
 
     return () => {
       isActive = false;
     };
-  }, [companyId]);
+  }, [companyId, uploaded]);
 
   // 지표와 신호를 받아 종합 의견 문장을 만든다. 자동 생성과 버튼이 같은 경로를 쓴다.
   async function runDiagnosis(
@@ -156,15 +171,14 @@ export function ShareContent({
   }
 
   // AI 종합 의견은 기본으로 부르지 않는다. 이 수치는 사용자가 올린 문서에서 나온
-  // 값이라, 외부 모델로 보낼지를 사용자가 정하게 한다. 기업명과 거래처명은 보내지
-  // 않지만 비율 자체가 그 회사의 영업 정보이기 때문이다.
+  // 값이라, 외부 모델로 보낼지를 사용자가 정하게 한다.
   async function requestLlmDiagnosis() {
-    if (!visibility || !signals) return;
+    if (!visibility || !signals || !hasData) return;
     grantAiConsent();
     setLlmState("loading");
     try {
       setLlmDiagnosis(
-        await runDiagnosis(visibility, signals, uploadedCount ?? 0),
+        await runDiagnosis(visibility, signals, uploadedCount),
       );
       setLlmState("idle");
     } catch {
@@ -172,22 +186,63 @@ export function ShareContent({
     }
   }
 
-  const diagnosis =
-    visibility && signals ? buildDiagnosis(visibility, signals) : null;
+  // 기업명·점수가 준비되기 전까지는 로딩 상태만 보여준다(성장 신호는 이미 있다).
+  const ready = visibility !== null;
 
-  const companyName = visibility ? visibility.company : "불러오는 중";
+  if (!ready) {
+    return (
+      <div
+        className="report-page flex min-h-screen items-center justify-center print:min-h-0"
+        style={{ backgroundColor: "#E9E2DD" }}
+      >
+        <div className="flex flex-col items-center gap-3 text-center">
+          {loadFailed ? (
+            <>
+              <p className="text-sm text-zinc-700">
+                기업 정보를 불러오지 못해 진단서를 완성할 수 없습니다.
+              </p>
+              <Link
+                href={withCompany("/compare", companyId)}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-300 bg-white px-4 text-[13px] text-zinc-700 transition-colors hover:bg-zinc-50"
+              >
+                이전으로 돌아가기
+              </Link>
+            </>
+          ) : (
+            <>
+              <span
+                aria-hidden
+                className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600"
+              />
+              <p className="text-sm text-zinc-600">
+                진단서를 준비하는 중입니다…
+              </p>
+              <p className="text-xs text-zinc-500">
+                기업 정보와 성장 신호가 모두 준비되면 표시됩니다.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const diagnosis = buildDiagnosis(visibility, signals);
+  const grade = hasData ? diagnosis.grade : "산정 불가";
+  const companyName = visibility.company || "확인되지 않은 기업";
+  const periodValue = hasData ? period : "거래 실적 문서 없음";
 
   const infoRows: { label: string; value: string }[][] = [
     [
       { label: "기 업 명", value: companyName },
-      { label: "분석 기간", value: periodOf(signals) },
+      { label: "분석 기간", value: periodValue },
     ],
     [
       {
         label: "외부 가시성 점수",
-        value: visibility ? `${visibility.visibilityScore}점 / 100점` : "-",
+        value: `${visibility.visibilityScore}점 / 100점`,
       },
-      { label: "성장 잠재력 등급", value: diagnosis ? diagnosis.grade : "-" },
+      { label: "성장 잠재력 등급", value: grade },
     ],
     [
       { label: "분석 기관", value: "BO:IM AI 진단 시스템" },
@@ -196,13 +251,11 @@ export function ShareContent({
   ];
 
   // 판정(긍정/주의)은 lib/signals.ts 계산 결과를 그대로 쓴다.
-  // 지표 정의는 lib/signals.ts 가 갖는다. 리포트는 계산 결과를 옮겨 적는다.
-  const growthSignals = signals
+  const growthSignals = hasData
     ? signals.signals.map((item, index) => ({
         no: String(index + 1),
         label: item.label,
-        // 표본이 모자라 판정하지 않은 지표는 수치를 적지 않는다. 인쇄물에 0%가
-        // 남으면 계산이 끝난 값으로 읽힌다.
+        // 표본이 모자라 판정하지 않은 지표는 수치를 적지 않는다.
         value: item.evaluable
           ? `${item.prefix}${item.value}${item.suffix}`
           : "—",
@@ -255,9 +308,16 @@ export function ShareContent({
           <h1 className="text-[26px] font-medium tracking-[0.32em] text-zinc-900">
             기업성장진단보고서
           </h1>
-          <p className="mt-2 text-[12px] tracking-[0.2em] text-zinc-500">
-            {periodOf(signals).replace("–", "~")}
-          </p>
+          {hasData && (
+            <p className="mt-2 text-[12px] tracking-[0.2em] text-zinc-500">
+              {period.replace("–", "~")}
+            </p>
+          )}
+          {sampleBased && (
+            <p className="mt-2 text-[11px] tracking-[0.1em] text-amber-700">
+              ※ 본 보고서는 샘플 데이터(예시) 기반이며 실제 기업 데이터가 아닙니다.
+            </p>
+          )}
         </div>
 
         {/* 수신 · 제목 */}
@@ -329,7 +389,8 @@ export function ShareContent({
                     colSpan={5}
                     className="border border-zinc-300 py-4 text-center text-[12px] text-zinc-500"
                   >
-                    성장 신호를 불러오는 중입니다.
+                    제출된 거래 실적 문서가 없어 내부 성장 신호를 산정하지
+                    못했습니다.
                   </td>
                 </tr>
               ) : (
@@ -355,15 +416,21 @@ export function ShareContent({
               )}
             </tbody>
           </table>
-          {/*
-            이 표의 수치가 무엇에서 나왔는지 밝힌다. 예전에는 업로드 문서가 없거나
-            추출이 실패해도 예시 데이터가 조용히 실제 분석 결과처럼 표시됐다.
-          */}
-          {signals && (
-            <p className="mt-2 text-[11px] leading-5 text-zinc-500">
-              {uploadedCount === null
-                ? "※ 제출된 거래명세서에서 거래 내역을 확인하지 못해, 위 수치는 예시 데이터로 산출되었습니다."
-                : `※ 위 수치는 제출된 거래명세서에서 확인된 거래 ${uploadedCount}건을 근거로 산출되었습니다.`}
+          {/* 이 표의 수치가 무엇에서 나왔는지 밝힌다. 실제 계산에 쓴 거래 건수를 적는다. */}
+          <p className="mt-2 text-[11px] leading-5 text-zinc-500">
+            {hasData
+              ? `※ 위 수치는 제출된 거래명세서·세금계산서에서 확인된 거래 ${uploadedCount}건을 근거로 산출되었습니다.${
+                  futureExcludedCount > 0
+                    ? ` 진단 발행일 이후 날짜의 거래 ${futureExcludedCount}건은 계산에서 제외되었습니다.`
+                    : ""
+                }`
+              : "※ 제출된 거래 실적 문서가 없어 내부 성장 신호와 성장 잠재력 등급을 산정하지 못했습니다."}
+          </p>
+          {settlement && (
+            <p className="mt-1 text-[11px] leading-5 text-zinc-500">
+              ※ 입금내역에서 입금 {settlement.count}건(합계 {wonText(settlement.total)}원)을
+              확인했으며, 입금 확인 목적으로만 참고하고 매출·거래처 계산에는
+              합산하지 않았습니다.
             </p>
           )}
         </section>
@@ -378,42 +445,34 @@ export function ShareContent({
               가/나/다는 축별(외부·내부·리스크) 규칙 기반 문장이라 항상 같은
               수치에서 같은 결론이 나온다. 공문서 양식에는 이 재현성이 필요하다.
               LLM 문장은 그걸 대체하는 게 아니라 "라. 종합 의견"으로 덧붙인다.
-              그래야 LLM이 실패해도 문서 구조가 바뀌지 않는다.
             */}
-            {diagnosis ? (
-              <>
-                <p className="-indent-4 pl-4">가. {diagnosis.external}</p>
-                <p className="-indent-4 pl-4">나. {diagnosis.internal}</p>
-                <p className="-indent-4 pl-4">다. {diagnosis.risk}</p>
-                {llmDiagnosis && (
-                  <p className="-indent-4 pl-4">라. {llmDiagnosis}</p>
-                )}
-                {/* 인쇄물에는 버튼이 남으면 안 된다. */}
-                {!llmDiagnosis && llmState === "loading" && (
-                  <p className="-indent-4 pl-4 text-zinc-400 print:hidden">
-                    라. AI 종합 의견을 작성하는 중입니다…
-                  </p>
-                )}
-                {!llmDiagnosis && llmState !== "loading" && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
-                    <button
-                      type="button"
-                      onClick={requestLlmDiagnosis}
-                      disabled={!signals}
-                      className="inline-flex h-8 items-center rounded-md border border-zinc-300 px-3 text-[12px] text-zinc-700 transition-colors hover:bg-zinc-50 disabled:text-zinc-300"
-                    >
-                      AI 종합 의견 추가
-                    </button>
-                    <span className="text-[11px] text-zinc-500">
-                      {llmState === "failed"
-                        ? "의견을 받지 못했습니다. 위 가·나·다는 규칙 기반으로 작성되었습니다."
-                        : "누르면 위 비율 수치가 외부 AI로 전송됩니다. 기업명·거래처명·문서는 전송되지 않지만, 비율 자체도 이 기업의 영업 정보이니 확인 후 눌러 주세요."}
-                    </span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="-indent-4 pl-4">진단 결과를 불러오는 중입니다.</p>
+            <p className="-indent-4 pl-4">가. {diagnosis.external}</p>
+            <p className="-indent-4 pl-4">나. {diagnosis.internal}</p>
+            <p className="-indent-4 pl-4">다. {diagnosis.risk}</p>
+            {llmDiagnosis && (
+              <p className="-indent-4 pl-4">라. {llmDiagnosis}</p>
+            )}
+            {/* 인쇄물에는 버튼이 남으면 안 된다. */}
+            {hasData && !llmDiagnosis && llmState === "loading" && (
+              <p className="-indent-4 pl-4 text-zinc-400 print:hidden">
+                라. AI 종합 의견을 작성하는 중입니다…
+              </p>
+            )}
+            {hasData && !llmDiagnosis && llmState !== "loading" && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={requestLlmDiagnosis}
+                  className="inline-flex h-8 items-center rounded-md border border-zinc-300 px-3 text-[12px] text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  AI 종합 의견 추가
+                </button>
+                <span className="text-[11px] text-zinc-500">
+                  {llmState === "failed"
+                    ? "의견을 받지 못했습니다. 위 가·나·다는 규칙 기반으로 작성되었습니다."
+                    : "누르면 위 비율 수치가 외부 AI로 전송됩니다. 기업명·거래처명·문서는 전송되지 않지만, 비율 자체도 이 기업의 영업 정보이니 확인 후 눌러 주세요."}
+                </span>
+              </div>
             )}
           </div>
         </section>
@@ -425,7 +484,7 @@ export function ShareContent({
           </h2>
           <p className="-indent-4 pl-4 text-[13px] leading-7 text-zinc-900">
             {evidenceDocs.length === 0
-              ? "제출된 문서가 없어 내부 성장 신호는 예시 데이터로 산출되었습니다. 붙임 없음."
+              ? "제출된 문서가 없어 내부 성장 신호를 산정하지 못했습니다. 붙임 없음."
               : `붙임${evidenceDocs.map((doc, i) => `${i + 1}. ${doc}`).join("　")}　각 1부.`}
           </p>
         </section>
@@ -453,7 +512,9 @@ export function ShareContent({
       <div className="mt-6 flex flex-col gap-2 print:hidden">
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={() => {
+            if (ready) window.print();
+          }}
           className="inline-flex h-10 w-full items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-white transition-all hover:bg-zinc-700 active:scale-[0.98]"
         >
           리포트 인쇄 / PDF 저장

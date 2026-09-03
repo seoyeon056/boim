@@ -11,12 +11,16 @@ export interface DocumentCategory {
   id: string;
   name: string;
   purpose: string;
-  // 성장 신호 계산에 실제로 쓰이는 문서인지. 나머지는 맥락을 보는 참고 자료라
-  // 없어도 진단이 끝난다. 여섯 개를 한 줄로 늘어놓으면 어느 것이 중요한지
-  // 알 수 없어서, 화면에서 두 묶음으로 나누기 위한 표시다.
+  // 성장 신호(매출·거래처) 계산에 실제로 쓰이는 거래 실적 문서인지.
+  // 여기에 해당하는 문서가 최소 한 장은 있어야 분석을 시작할 수 있다.
   analyzed?: boolean;
   // 그중에서도 이것 하나만 있으면 진단이 된다.
   primary?: boolean;
+  // 입금 확인 용도로만 쓰는 문서(입금내역). 매출·거래처 계산에는 합산하지 않고,
+  // "제출한 거래가 실제로 입금됐는지"를 곁들여 보여주는 데만 쓴다.
+  settlement?: boolean;
+  // 아직 일어나지 않은 거래(발주서·견적서·계약서). 미래 수요 신호로만 싣는다.
+  future?: boolean;
 }
 
 // sessionStorage에 저장할 개별 파일의 메타데이터
@@ -43,4 +47,6 @@ export interface StoredUpload {
   categories: StoredCategory[];
   totalFileCount: number;
   totalUploadSize: number;
+  // "샘플 문서 불러오기"로 채운 예시 데이터인지. 결과 화면·진단서에 표시한다.
+  isSample?: boolean;
 }
