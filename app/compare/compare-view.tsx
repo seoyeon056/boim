@@ -57,7 +57,7 @@ export function CompareView({
       ? "제출한 문서에서 확인된 거래 기준"
       : "예시 데이터 기준 (제출 문서에서 거래 내역 미확인)",
     `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.recentCustomersCount}곳`,
-    `재구매율 ${signalResult.repeatPurchaseRate}%`,
+    `반복거래율 ${signalResult.repeatPurchaseRate}%`,
     `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
   ];
 

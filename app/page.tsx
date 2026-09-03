@@ -32,7 +32,7 @@ const highlights = [
 const SIGNAL_WORDS = [
   { text: "거래명세서", top: 14, left: 4, size: 21, dur: 16, delay: 0 },
   { text: "세금계산서", top: 70, left: 6, size: 19, dur: 19, delay: 3 },
-  { text: "재구매율 80%", top: 34, left: 77, size: 23, dur: 16, delay: 1 },
+  { text: "반복거래율 80%", top: 34, left: 77, size: 23, dur: 16, delay: 1 },
   { text: "거래처 +150%", top: 12, left: 79, size: 24, dur: 21, delay: 2 },
   { text: "뉴스 0건", top: 58, left: 85, size: 19, dur: 15, delay: 6 },
   { text: "발주서", top: 86, left: 80, size: 20, dur: 14, delay: 5 },
