@@ -1,5 +1,4 @@
 import { readCompanyId } from "@/lib/company-link";
-import { getReviewSample } from "@/lib/engine";
 import { ProcessingContent } from "./processing-content";
 
 // 선택한 기업 id 를 URL 에서 읽어 클라이언트 화면으로 넘긴다.
@@ -7,9 +6,6 @@ import { ProcessingContent } from "./processing-content";
 //  서버 렌더 결과가 비어버리므로, 읽기는 서버에서 한다.)
 export default async function ProcessingPage(props: PageProps<"/processing">) {
   const companyId = readCompanyId((await props.searchParams).company);
-  const reviewSample = await getReviewSample(companyId);
 
-  return (
-    <ProcessingContent companyId={companyId} reviewSample={reviewSample} />
-  );
+  return <ProcessingContent companyId={companyId} />;
 }

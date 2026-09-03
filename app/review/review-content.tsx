@@ -10,6 +10,7 @@ import {
   type ReviewStats,
 } from "@/lib/llm/review-insight";
 import StepShell from "@/app/step-shell";
+import { SampleDataBadge } from "@/app/sample-badge";
 
 function IconCheck({ className = "h-2.5 w-2.5" }: { className?: string }) {
   return (
@@ -73,6 +74,14 @@ function isValidDate(raw: string): boolean {
   return true;
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
+// 진단일(오늘) 이후 날짜인지. 과거 실적·성장 지표 계산에서 빠진다.
+function isFutureDate(raw: string): boolean {
+  const value = raw.trim();
+  return isValidDate(value) && value.slice(0, 10) > TODAY;
+}
+
 function tierOf(confidence: number): Tier {
   if (confidence >= AUTO_CONFIRM) return "high";
   if (confidence >= REVIEW_SUGGESTED) return "medium";
@@ -119,6 +128,7 @@ function loadResult(): { status: ViewStatus; result: Transaction[] | null } {
   try {
     const parsed = JSON.parse(raw);
     const list = Array.isArray(parsed) ? parsed : [parsed];
+    if (list.length === 0) return { status: "empty", result: null };
     return { status: "ready", result: list.map(toTransaction) };
   } catch {
     return { status: "empty", result: null };
@@ -166,6 +176,8 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
   const [insight, setInsight] = useState<string | null>(null);
   const [extractionOutcome, setExtractionOutcome] = useState<string | null>(null);
+  // 자동 확인된 항목은 기본으로 접어 둔다.
+  const [showAuto, setShowAuto] = useState(false);
 
   useEffect(() => {
     const { status: nextStatus, result } = loadResult();
@@ -292,6 +304,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   if (status === "loading") return null;
 
   if (status === "empty" || !transactions) {
+    const noDocs = !extractionOutcome;
     return (
       <div className="mx-auto w-full max-w-lg px-6 py-12">
         <div className="mt-8 flex flex-col gap-1">
@@ -305,9 +318,25 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
         <div className="mt-8 rounded-lg border border-zinc-100 bg-zinc-50 p-6 text-center">
           <p className="text-sm leading-6 text-zinc-500">
-            분석 결과를 찾을 수 없습니다.
-            <br />
-            거래명세서를 먼저 업로드하세요.
+            {noDocs ? (
+              <>
+                분석 결과를 찾을 수 없습니다.
+                <br />
+                거래명세서를 먼저 업로드하세요.
+              </>
+            ) : extractionOutcome === "blank" ? (
+              <>
+                제출한 PDF가 브라우저에서 백지로 열려 거래를 읽지 못했습니다.
+                <br />
+                이미지(PNG·JPG)로 다시 올려 주세요.
+              </>
+            ) : (
+              <>
+                제출한 문서에서 거래 실적을 찾지 못했습니다.
+                <br />
+                거래명세서·세금계산서를 확인해 다시 올려 주세요.
+              </>
+            )}
           </p>
 
           <Link
@@ -359,6 +388,141 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
 
   const canProceed = allConfirmed;
 
+  const futureCount = transactions.filter((tx) =>
+    isFutureDate(String(tx.date.value)),
+  ).length;
+
+  // 한 줄이 아직 사용자 확인을 기다리는지. 접힘/펼침을 가르는 기준.
+  const rowNeedsAttention = (tx: Transaction, txIndex: number) =>
+    pendingOf(tx, txIndex) > 0 || !isValidDate(String(tx.date.value));
+
+  const indexed = transactions.map((tx, txIndex) => ({ tx, txIndex }));
+  const attentionRows = indexed.filter(({ tx, txIndex }) =>
+    rowNeedsAttention(tx, txIndex),
+  );
+  const autoRows = indexed.filter(
+    ({ tx, txIndex }) => !rowNeedsAttention(tx, txIndex),
+  );
+
+  const renderRow = ({ tx, txIndex }: { tx: Transaction; txIndex: number }) => {
+    const pending = pendingOf(tx, txIndex);
+    const rowDateBad = !isValidDate(String(tx.date.value));
+    const rowFuture = isFutureDate(String(tx.date.value));
+    const rowHadFlag = FIELD_META.some(({ key }) =>
+      requiresConfirmation(tx[key].confidence),
+    );
+    const rowReviewed = rowHadFlag && pending === 0 && !rowDateBad;
+
+    return (
+      <tr
+        key={txIndex}
+        className={`border-t border-zinc-100 align-middle ${
+          pending > 0 || rowDateBad
+            ? "bg-amber-50/40"
+            : rowReviewed
+              ? "bg-emerald-50/30"
+              : "bg-white"
+        }`}
+      >
+        <td className="px-2 py-1.5 text-center font-mono text-[11px] text-zinc-400">
+          {txIndex + 1}
+        </td>
+
+        {FIELD_META.map(({ key, type }) => {
+          const field = tx[key];
+          const tier = tierOf(field.confidence);
+          const isConfirmed = confirmed.has(confirmKey(txIndex, key));
+          const flag = requiresConfirmation(field.confidence) && !isConfirmed;
+          const bad = key === "date" && !isValidDate(String(field.value));
+          const align = key === "amount" ? "text-right" : "text-left";
+
+          return (
+            <td key={key} className="px-2 py-1.5">
+              <input
+                type={key === "amount" ? "text" : type}
+                inputMode={
+                  key === "amount"
+                    ? "numeric"
+                    : key === "date"
+                      ? "numeric"
+                      : undefined
+                }
+                value={fieldText(key, field.value)}
+                placeholder={key === "date" ? "2026-02-08" : undefined}
+                onChange={(event) =>
+                  updateValue(txIndex, key, event.target.value)
+                }
+                onFocus={() => reEditField(txIndex, key)}
+                title={
+                  tier === "low"
+                    ? "AI가 정확하게 읽지 못했습니다. 값을 확인해 주세요."
+                    : tier === "medium"
+                      ? "한 번 더 확인하는 것을 권장합니다."
+                      : undefined
+                }
+                className={`h-8 w-full rounded border bg-transparent px-2 font-mono text-[13px] text-zinc-900 outline-none transition-colors focus:border-solid focus:border-zinc-500 focus:bg-white ${align} ${
+                  bad
+                    ? "border-dashed border-red-400 bg-white"
+                    : flag
+                      ? tier === "low"
+                        ? "border-dashed border-red-400 bg-white"
+                        : "border-dashed border-amber-400 bg-white"
+                      : "border-transparent hover:border-zinc-200"
+                }`}
+              />
+            </td>
+          );
+        })}
+
+        <td className="px-2 py-1.5 text-center">
+          {rowDateBad ? (
+            <span className="text-[11px] font-medium text-red-500">
+              날짜 확인
+            </span>
+          ) : pending > 0 ? (
+            <button
+              type="button"
+              onClick={() => confirmRow(txIndex, tx)}
+              className="inline-flex items-center gap-1 rounded-md bg-[#7e4d39] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#5f3a2b]"
+            >
+              확인 {pending}
+            </button>
+          ) : rowFuture ? (
+            <span className="text-[11px] font-medium text-amber-600">
+              진단일 이후
+            </span>
+          ) : rowReviewed ? (
+            <button
+              type="button"
+              onClick={() => reEditRow(txIndex, tx)}
+              title="다시 확인하기"
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-600 transition-colors hover:bg-emerald-50"
+            >
+              <IconCheck /> 확인함
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500">
+              <IconCheck /> 자동
+            </span>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
+  const TableHead = (
+    <thead className="sticky top-0 z-10 bg-zinc-50">
+      <tr className="text-[11px] uppercase tracking-wide text-zinc-400">
+        <th className="w-10 px-2 py-2 text-center font-medium">#</th>
+        <th className="w-32 px-2 py-2 font-medium">거래 날짜</th>
+        <th className="w-44 px-2 py-2 font-medium">거래처</th>
+        <th className="px-2 py-2 font-medium">품목</th>
+        <th className="w-36 px-2 py-2 text-right font-medium">거래금액</th>
+        <th className="w-24 px-2 py-2 text-center font-medium">상태</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <StepShell
       step="Step 04"
@@ -386,6 +550,10 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
         </div>
       }
     >
+      <div className="mb-3">
+        <SampleDataBadge />
+      </div>
+
       {/* 요약 통계 */}
       <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-100 bg-zinc-100">
         {[
@@ -424,25 +592,15 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
         </p>
       )}
 
-      {/*
-        추출이 실패해 예시 데이터로 대체된 경우를 사용자에게 알린다. 예전에는
-        아무 표시 없이 바뀌어서, 자기 문서가 읽힌 줄 알게 됐다.
-      */}
-      {extractionOutcome && extractionOutcome !== "ok" && (
+      {/* 진단일 이후 거래는 과거 실적·성장 지표 계산에서 빠진다는 것을 알린다. */}
+      {futureCount > 0 && (
         <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-700">
-          {extractionOutcome === "blank"
-            ? "제출한 PDF가 브라우저에서 백지로 열립니다. 한글 폰트가 파일에 포함되지 않은 경우입니다. 아래 값은 예시 데이터이니, 이미지로 다시 올려 주세요."
-            : extractionOutcome === "no-transactions"
-              ? "제출한 문서에서 거래 내역을 찾지 못했습니다. 아래 값은 예시 데이터입니다."
-              : "문서를 분석하지 못했습니다. 아래 값은 예시 데이터입니다."}
+          진단일({TODAY}) 이후 날짜의 거래 {futureCount}건은 과거 실적과 성장 지표
+          계산에서 제외됩니다. 발주·견적 등 예정된 거래라면 그대로 두셔도 됩니다.
         </p>
       )}
 
-      {/* 거래 목록 — 표.
-          예전에는 거래마다 필드 카드 네 장을 세로로 쌓아서, 21건이면 화면이
-          한없이 길어졌다(그래서 줄마다 펼침/접힘 토글을 달았다). 이제 한 줄에
-          한 거래를 놓고, 건수가 많아도 스크롤 영역 안에 가둬 화면 길이를
-          고정한다. 값은 셀에서 바로 고친다. */}
+      {/* 거래 목록 — 확인이 필요한 항목만 먼저, 자동 확인된 항목은 접어 둔다. */}
       <div className="mt-6 flex items-center justify-between gap-4">
         <span className="text-[13px] text-zinc-500">
           거래 {transactions.length}건
@@ -461,123 +619,48 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
         )}
       </div>
 
-      <div className="mt-2 max-h-[460px] overflow-auto rounded-lg border border-zinc-200">
-        <table className="w-full min-w-[660px] border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-zinc-50">
-            <tr className="text-[11px] uppercase tracking-wide text-zinc-400">
-              <th className="w-10 px-2 py-2 text-center font-medium">#</th>
-              <th className="w-32 px-2 py-2 font-medium">거래 날짜</th>
-              <th className="w-44 px-2 py-2 font-medium">거래처</th>
-              <th className="px-2 py-2 font-medium">품목</th>
-              <th className="w-36 px-2 py-2 text-right font-medium">거래금액</th>
-              <th className="w-24 px-2 py-2 text-center font-medium">상태</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((tx, txIndex) => {
-              const pending = pendingOf(tx, txIndex);
-              const rowDateBad = !isValidDate(String(tx.date.value));
-              const rowHadFlag = FIELD_META.some(({ key }) =>
-                requiresConfirmation(tx[key].confidence),
-              );
-              const rowReviewed = rowHadFlag && pending === 0 && !rowDateBad;
+      {/* 확인이 필요한 줄 */}
+      {attentionRows.length > 0 ? (
+        <div className="mt-2 max-h-[420px] overflow-auto rounded-lg border border-zinc-200">
+          <table className="w-full min-w-[660px] border-collapse text-left">
+            {TableHead}
+            <tbody>{attentionRows.map(renderRow)}</tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-[13px] text-emerald-700">
+          <IconCheck className="h-3 w-3" />
+          {needReview > 0
+            ? `확인이 필요한 ${needReview}개 항목을 모두 확인 처리했습니다.`
+            : "확인이 필요한 항목이 없습니다. 모든 값이 자동으로 확인되었습니다."}
+        </div>
+      )}
 
-              return (
-                <tr
-                  key={txIndex}
-                  className={`border-t border-zinc-100 align-middle ${
-                    pending > 0 || rowDateBad
-                      ? "bg-amber-50/40"
-                      : rowReviewed
-                        ? "bg-emerald-50/30"
-                        : "bg-white"
-                  }`}
-                >
-                  <td className="px-2 py-1.5 text-center font-mono text-[11px] text-zinc-400">
-                    {txIndex + 1}
-                  </td>
-
-                  {FIELD_META.map(({ key, type }) => {
-                    const field = tx[key];
-                    const tier = tierOf(field.confidence);
-                    const isConfirmed = confirmed.has(confirmKey(txIndex, key));
-                    const flag =
-                      requiresConfirmation(field.confidence) && !isConfirmed;
-                    const bad = key === "date" && !isValidDate(String(field.value));
-                    const align = key === "amount" ? "text-right" : "text-left";
-
-                    return (
-                      <td key={key} className="px-2 py-1.5">
-                        <input
-                          type={key === "amount" ? "text" : type}
-                          inputMode={
-                            key === "amount"
-                              ? "numeric"
-                              : key === "date"
-                                ? "numeric"
-                                : undefined
-                          }
-                          value={fieldText(key, field.value)}
-                          placeholder={key === "date" ? "2026-02-08" : undefined}
-                          onChange={(event) =>
-                            updateValue(txIndex, key, event.target.value)
-                          }
-                          onFocus={() => reEditField(txIndex, key)}
-                          title={
-                            tier === "low"
-                              ? "AI가 정확하게 읽지 못했습니다. 값을 확인해 주세요."
-                              : tier === "medium"
-                                ? "한 번 더 확인하는 것을 권장합니다."
-                                : undefined
-                          }
-                          className={`h-8 w-full rounded border bg-transparent px-2 font-mono text-[13px] text-zinc-900 outline-none transition-colors focus:border-solid focus:border-zinc-500 focus:bg-white ${align} ${
-                            bad
-                              ? "border-dashed border-red-400 bg-white"
-                              : flag
-                                ? tier === "low"
-                                  ? "border-dashed border-red-400 bg-white"
-                                  : "border-dashed border-amber-400 bg-white"
-                                : "border-transparent hover:border-zinc-200"
-                          }`}
-                        />
-                      </td>
-                    );
-                  })}
-
-                  <td className="px-2 py-1.5 text-center">
-                    {rowDateBad ? (
-                      <span className="text-[11px] font-medium text-red-500">
-                        날짜 확인
-                      </span>
-                    ) : pending > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => confirmRow(txIndex, tx)}
-                        className="inline-flex items-center gap-1 rounded-md bg-[#7e4d39] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-[#5f3a2b]"
-                      >
-                        확인 {pending}
-                      </button>
-                    ) : rowReviewed ? (
-                      <button
-                        type="button"
-                        onClick={() => reEditRow(txIndex, tx)}
-                        title="다시 확인하기"
-                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-600 transition-colors hover:bg-emerald-50"
-                      >
-                        <IconCheck /> 확인함
-                      </button>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500">
-                        <IconCheck /> 자동
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* 자동 확인된 줄 — 기본 접힘 */}
+      {autoRows.length > 0 && (
+        <div className="mt-3 rounded-lg border border-zinc-200">
+          <button
+            type="button"
+            onClick={() => setShowAuto((prev) => !prev)}
+            className="flex w-full items-center justify-between px-4 py-3 text-[13px] text-zinc-600 transition-colors hover:bg-zinc-50"
+            aria-expanded={showAuto}
+          >
+            <span className="inline-flex items-center gap-2">
+              <IconCheck className="h-3 w-3 text-emerald-500" />
+              자동 확인된 거래 {autoRows.length}건
+            </span>
+            <span className="text-zinc-400">{showAuto ? "접기" : "펼치기"}</span>
+          </button>
+          {showAuto && (
+            <div className="max-h-[360px] overflow-auto border-t border-zinc-200">
+              <table className="w-full min-w-[660px] border-collapse text-left">
+                {TableHead}
+                <tbody>{autoRows.map(renderRow)}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </StepShell>
   );
 }

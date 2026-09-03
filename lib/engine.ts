@@ -81,14 +81,6 @@ export async function getSignals(companyId?: string) {
   return calculateSignals(transactionsOf(company.id));
 }
 
-// STEP 4(분석 결과 확인)에서 사용자가 검토할 표본.
-// 실제 거래에서 뽑아 와야 기업을 바꿨을 때 다른 기업 거래처가 보이지 않는다.
-export async function getReviewSample(companyId?: string) {
-  const company = await getCompany(companyId);
-
-  return transactionsOf(company.id).slice(0, 5);
-}
-
 // 검색어와 기업명을 비교 가능한 형태로 맞춘다.
 // 공백을 제거하고 소문자로 바꿔서 "한빛 정밀"과 "한빛정밀", "lg"와 "LG"가 같은 값으로 취급되게 한다.
 function normalizeCompanyName(value: string): string {

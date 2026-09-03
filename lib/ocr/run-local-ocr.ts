@@ -35,6 +35,38 @@ async function getService() {
   }
 }
 
+// 인식을 한 번에 하나씩만 돌린다.
+//
+// 모델은 무거워서 한 번만 띄우고 계속 쓴다(servicePromise). 그런데 그 뒤에 있는
+// ONNX 세션은 동시에 두 번 부를 수 없다. 겹치면 이렇게 죽는다.
+//
+//   Error during text detection: Session already started
+//   Error during model inference: Session mismatch
+//
+// 실측: 개발 서버에서 스캔본을 올리면 위 오류가 네 개(파이프라인 2개 × 검출·인식
+// 2단계) 뜨고 인식 결과가 0건이 됐다. React 개발 모드가 effect 를 두 번 실행해
+// 파이프라인이 겹친 탓이다. 프로덕션 빌드에서는 재현되지 않았지만, 사용자가
+// 분석 중에 뒤로 갔다가 다시 들어오면 프로덕션에서도 같은 일이 난다.
+//
+// 앞의 인식이 끝난 뒤에 다음 인식을 시작하도록 줄을 세운다. 실패해도 줄은
+// 이어져야 하므로 대기용 프라미스에서는 오류를 삼킨다.
+let recognizeQueue: Promise<unknown> = Promise.resolve();
+
+function recognizeInTurn(
+  service: { recognize: (canvas: HTMLCanvasElement) => Promise<unknown> },
+  canvas: HTMLCanvasElement,
+): Promise<unknown> {
+  const next = recognizeQueue.then(
+    () => service.recognize(canvas),
+    () => service.recognize(canvas),
+  );
+  recognizeQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 // 휴대폰 사진은 1200만 화소가 넘는다. 그대로 넣으면 WASM 추론이 몇 분씩 걸려서
 // 화면이 멈춘 것처럼 보인다. 글자를 읽는 데는 긴 변 2000px이면 충분하다(실측 기준
 // 명세서 본문이 이 해상도에서 정확히 인식된다).
@@ -128,11 +160,15 @@ function isBlank(canvas: HTMLCanvasElement): boolean {
   return true;
 }
 
+export type SettlementSummary = { count: number; total: number };
+
 export type LocalOcrOutcome =
   | {
       status: "ok";
       transactions: ExtractedTransactionRow[];
       terms: DocumentTerms;
+      // 입금내역에서 확인한 입금 건수·합계. 매출에는 합산하지 않는다.
+      settlement?: SettlementSummary;
     }
   | { status: "blank" }
   | { status: "no-transactions" }
@@ -143,25 +179,28 @@ export type OcrPhase =
   | { phase: "rendering"; done: number; total: number }
   | { phase: "recognizing"; done: number; total: number };
 
-// 실제로 일어난 거래를 증명하는 문서만 거래로 집계한다.
+// 실제로 일어난 거래(매출)를 증명하는 문서만 거래 실적으로 집계한다.
 //
 // 견적서는 아직 거래가 아니고(제안 단계), 계약서는 조건이지 거래 기록이 아니다.
-// 발주서도 주문이지 이행의 증거는 아니다. 이것들까지 세면 같은 건이 여러 번
-// 잡혀서 거래처 수와 금액이 부풀려진다 — 실제로 실측 5개 파일에서 동일한
-// 라이선스 건이 견적서·명세서에 중복으로 잡혔다.
-//
-// 나머지 문서도 읽기는 한다. 다만 "판단 근거 문서"로만 쓰고 거래로는 세지 않는다.
-export const TRANSACTION_CATEGORIES = [
-  "transaction-statement",
-  "tax-invoice",
-  "deposit-history",
-];
+// 발주서도 주문이지 이행의 증거는 아니다 — 전부 "미래 신호"로만 싣는다.
+// 입금내역은 같은 대금이 명세서와 함께 잡혀 매출을 두 번 세게 하므로, 입금
+// 여부만 확인하고 매출·거래처 계산에는 넣지 않는다.
+export const TRANSACTION_CATEGORIES = ["transaction-statement", "tax-invoice"];
+
+// 입금 확인 전용. 여기서 읽은 값은 "입금 N건 확인"으로만 곁들이고 거래로 세지 않는다.
+export const SETTLEMENT_CATEGORIES = ["deposit-history"];
 
 // 같은 거래가 명세서와 세금계산서에 함께 들어 있는 경우를 한 건으로 본다.
+// 날짜·거래처·금액·품목을 모두 맞춰 본다(거래처가 다르면 다른 거래로 남긴다).
 function dedupe(rows: ExtractedTransactionRow[]): ExtractedTransactionRow[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    const key = `${row.date.value}|${row.amount.value}|${row.item.value.replace(/\s+/g, "")}`;
+    const key = [
+      row.date.value,
+      (row.customer.value ?? "").replace(/\s+/g, ""),
+      row.amount.value,
+      row.item.value.replace(/\s+/g, ""),
+    ].join("|");
     if (seen.has(key)) {
       return false;
     }
@@ -170,14 +209,46 @@ function dedupe(rows: ExtractedTransactionRow[]): ExtractedTransactionRow[] {
   });
 }
 
+// 입금내역 파일에서 입금 건수·합계만 뽑는다. 엑셀·텍스트 PDF만 본다(스캔본은
+// 입금 확인이 주 목적이 아니라 OCR까지 돌리지 않는다). 매출 계산과 분리된 경로다.
+async function summarizeSettlement(files: File[]): Promise<SettlementSummary> {
+  let count = 0;
+  let total = 0;
+  for (const file of files) {
+    try {
+      const read = await readFile(file);
+      if (read.kind !== "cells" || read.lines.length === 0) {
+        continue;
+      }
+      for (const row of rowsFromOcr({ lines: read.lines })) {
+        count += 1;
+        total += row.amount.value;
+      }
+    } catch {
+      // 입금 확인은 곁가지라, 한 파일이 안 읽혀도 전체를 실패로 보지 않는다.
+    }
+  }
+  return { count, total };
+}
+
 export async function extractTransactionsLocally(
   files: File[],
   onProgress?: (done: number, total: number) => void,
   onPhase?: (phase: OcrPhase) => void,
+  settlementFiles: File[] = [],
 ): Promise<LocalOcrOutcome> {
   if (files.length === 0) {
     return { status: "no-transactions" };
   }
+
+  const settlement =
+    settlementFiles.length > 0
+      ? await summarizeSettlement(settlementFiles)
+      : undefined;
+  const withSettlement = (
+    outcome: LocalOcrOutcome & { status: "ok" },
+  ): LocalOcrOutcome =>
+    settlement && settlement.count > 0 ? { ...outcome, settlement } : outcome;
 
   try {
     const transactions: ExtractedTransactionRow[] = [];
@@ -222,7 +293,7 @@ export async function extractTransactionsLocally(
     if (drawn.length === 0) {
       const unique = dedupe(transactions);
       return unique.length > 0
-        ? { status: "ok", transactions: unique, terms }
+        ? withSettlement({ status: "ok", transactions: unique, terms })
         : { status: "no-transactions" };
     }
 
@@ -233,7 +304,7 @@ export async function extractTransactionsLocally(
 
     for (let index = 0; index < drawn.length; index += 1) {
       onPhase?.({ phase: "recognizing", done: index, total: drawn.length });
-      const result = await service.recognize(drawn[index]);
+      const result = await recognizeInTurn(service, drawn[index]);
       transactions.push(...rowsFromOcr(result as { lines: [] }));
       collectTerms(termsFromOcr(result as { lines: [] }));
       onProgress?.(index + 1, drawn.length);
@@ -244,7 +315,7 @@ export async function extractTransactionsLocally(
 
     const unique = dedupe(transactions);
     return unique.length > 0
-      ? { status: "ok", transactions: unique, terms }
+      ? withSettlement({ status: "ok", transactions: unique, terms })
       : { status: "no-transactions" };
   } catch (error) {
     return {

@@ -11,6 +11,7 @@ import { calculateSignals, type Signals } from "@/lib/signals";
 // 추출 결과는 브라우저에만 있고 서버는 볼 수 없다. 그래서 계산도 브라우저에서 한다.
 // lib/signals.ts는 순수 함수라 그대로 쓸 수 있다.
 export const ANALYSIS_STORAGE_KEY = "boimAnalysisResult";
+export const SETTLEMENT_STORAGE_KEY = "boimSettlement";
 
 // Step 04가 저장하는 형태: 필드마다 {value, confidence}가 붙어 있다.
 type ReviewedField = { value?: unknown };
@@ -47,6 +48,12 @@ function toTransaction(raw: unknown, companyId: string): Transaction | null {
   };
 }
 
+// 진단 시점(오늘) 이후의 거래는 과거 실적이 아니다. YYYY-MM-DD 문자열 비교로
+// 충분하다(둘 다 같은 형식).
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export type UploadedSignals = {
   signals: Signals;
   transactionCount: number;
@@ -57,10 +64,13 @@ export type UploadedSignals = {
   // OCR 이 "공급받는자"를 "공급받-는자"로 읽어 거래처가 빈 값이 됐다).
   // 몇 건이 빠졌는지 화면이 말할 수 있게 세어서 함께 돌려준다.
   excludedCount: number;
+  // 진단일 이후 날짜라 과거 실적·성장 지표 계산에서 제외한 거래 건수.
+  // (분석 기간은 signals.periodStart/periodEnd 에 이미 들어 있다.)
+  futureExcludedCount: number;
 };
 
 // 업로드·검수된 거래가 있으면 그걸로 계산한 신호를, 없으면 null을 돌려준다.
-// null이면 호출하는 화면이 서버가 계산한 합성 데이터를 그대로 쓴다.
+// null이면 호출하는 화면이 "산정 불가"로 처리한다(합성 데이터로 대체하지 않는다).
 export function readUploadedSignals(
   companyId: string,
 ): UploadedSignals | null {
@@ -76,19 +86,48 @@ export function readUploadedSignals(
   try {
     const parsed = JSON.parse(raw);
     const rows = Array.isArray(parsed) ? parsed : [parsed];
-    const transactions = rows
+    const all = rows
       .map((row) => toTransaction(row, companyId))
       .filter((item): item is Transaction => item !== null);
 
-    if (transactions.length === 0) {
+    // 거래처·날짜를 못 읽어 빠진 행. (rows = 원본, all = 읽기 성공)
+    const excludedCount = rows.length - all.length;
+
+    const cutoff = today();
+    const past = all.filter((item) => item.date.slice(0, 10) <= cutoff);
+    const futureExcludedCount = all.length - past.length;
+
+    if (past.length === 0) {
       return null;
     }
 
     return {
-      signals: calculateSignals(transactions),
-      transactionCount: transactions.length,
-      excludedCount: rows.length - transactions.length,
+      signals: calculateSignals(past),
+      transactionCount: past.length,
+      excludedCount,
+      futureExcludedCount,
     };
+  } catch {
+    return null;
+  }
+}
+
+export type SettlementSummary = { count: number; total: number };
+
+// 입금내역에서 확인한 입금 건수·합계. 매출에는 합산하지 않고 곁들여 보여주기만 한다.
+export function readSettlementSummary(): SettlementSummary | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = sessionStorage.getItem(SETTLEMENT_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<SettlementSummary>;
+    const count = Number(parsed.count ?? 0);
+    const total = Number(parsed.total ?? 0);
+    return count > 0 ? { count, total } : null;
   } catch {
     return null;
   }

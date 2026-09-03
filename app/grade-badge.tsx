@@ -7,11 +7,16 @@ import {
 // 성장 잠재력 등급과 그 기준 안내.
 // 성장 신호(Step 05)와 비교 화면이 같은 표기를 쓰도록 한곳에 둔다.
 export function GradeBadge({ grade }: { grade: string }) {
+  // A / B+ / C 같은 짧은 등급은 크게, "산정 불가" 같은 문구는 한 단계 줄여 넣는다.
+  const isShort = /^[A-D][+-]?$/.test(grade);
+
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-zinc-400">성장 잠재력</span>
       <span
-        className="font-mono text-[22px] font-medium leading-none"
+        className={`font-mono font-medium leading-none ${
+          isShort ? "text-[22px]" : "text-[14px]"
+        }`}
         style={{ color: "#1D4533" }}
       >
         {grade}
