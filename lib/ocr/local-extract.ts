@@ -104,8 +104,18 @@ export function cleanCompanyName(value: string): string {
     .trim();
 }
 
+// 라벨을 견줄 때 쓰는 정규화.
+//
+// 공백만 지우면 OCR이 글자 사이에 끼워 넣은 부호를 못 넘긴다. 실측: 스캔 PDF에서
+// "공급받는자"가 "공급받-는자"로 읽혔고, 그 탓에 거래처 라벨을 못 찾아 거래처가
+// 빈 값이 됐다. 값("대성정공(주)")은 바로 옆에 멀쩡히 읽혔는데도 그랬다.
+//
+// 거래처가 비면 그 거래는 지표 계산에서 통째로 빠진다(lib/uploaded-signals.ts).
+// 실제로 열 건 중 다섯 건이 조용히 사라졌다. 라벨은 뜻만 맞으면 되므로
+// 구분 기호를 함께 지운다. 괄호는 남긴다 — "상호(법인명)"처럼 괄호 안이
+// 라벨의 일부인 경우가 있어서다.
 function normalize(value: string): string {
-  return value.replace(/\s+/g, "");
+  return value.replace(/[\s\-–—_·‧・.,:;/\|~]/g, "");
 }
 
 function matchesAlias(text: string, aliases: readonly string[]): boolean {
