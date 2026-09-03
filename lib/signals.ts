@@ -9,7 +9,7 @@ import type { Transaction } from "@/data/transactions";
 // 여섯 가지를 본다.
 //   1) 거래처가 늘었는가          거래처 증가율
 //   2) 거래 규모가 늘었는가       거래금액 증가율
-//   3) 한 번 거래하고 마는가      재구매율
+//   3) 한 번 거래하고 마는가      반복거래율
 //   4) 한 곳에 쏠려 있는가        거래처 집중도
 //   5) 꾸준히 거래하는가          거래 지속성
 //   6) 최근에 오르는가 내리는가   최근 추세
@@ -343,7 +343,7 @@ export function calculateSignals(items: Transaction[]) {
     },
     {
       key: "repeatRate",
-      label: "재구매율",
+      label: "반복거래율",
       value: repeatPurchaseRate,
       prefix: "",
       suffix: "%",
@@ -353,7 +353,7 @@ export function calculateSignals(items: Transaction[]) {
         : statuses.repeatPurchaseRate === "positive"
           ? "거래 관계가 비교적 안정적"
           : statuses.repeatPurchaseRate === "neutral"
-            ? "재구매가 일부 거래처에서만 확인됨"
+            ? "반복 거래가 일부만 확인됨"
             : "한 번 거래하고 끝나는 경우가 많음",
       tone: statuses.repeatPurchaseRate,
       evaluable: evaluable.repeatPurchaseRate,

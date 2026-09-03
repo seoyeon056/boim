@@ -6,7 +6,7 @@ import { calculateSignals, type Signals } from "@/lib/signals";
 // 지금까지는 /signals·/compare·/share가 서버에서 getSignals()를 불렀고, 그건
 // data/transactions.ts(합성 데이터)만 읽었다. 정작 사용자가 올린 문서는
 // sessionStorage에 저장된 뒤 아무 데도 쓰이지 않았다. 그래서 어떤 문서를 올려도
-// 거래처 증가율 +150% / 재구매율 80% / 집중도 45%가 똑같이 나왔다.
+// 거래처 증가율 +150% / 반복거래율 80% / 집중도 45%가 똑같이 나왔다.
 //
 // 추출 결과는 브라우저에만 있고 서버는 볼 수 없다. 그래서 계산도 브라우저에서 한다.
 // lib/signals.ts는 순수 함수라 그대로 쓸 수 있다.
@@ -34,7 +34,7 @@ function toTransaction(raw: unknown, companyId: string): Transaction | null {
   const amount = Number(fieldValue(row, "amount") ?? 0);
 
   // 거래처명과 날짜가 없으면 어떤 지표도 계산할 수 없다.
-  // (증가율은 날짜로 기간을 나누고, 집중도·재구매율은 거래처명으로 묶는다.)
+  // (증가율은 날짜로 기간을 나누고, 집중도·반복거래율은 거래처명으로 묶는다.)
   if (!customer || !/^\d{4}-\d{2}/.test(date)) {
     return null;
   }

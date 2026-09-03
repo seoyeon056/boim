@@ -65,7 +65,7 @@ export function CompareView({
     ? [
         `제출해 검수한 거래 ${transactionCount}건 기준`,
         `이전 거래처 ${signalResult.previousCustomersCount}곳 → 현재 ${signalResult.recentCustomersCount}곳`,
-        `재구매율 ${signalResult.repeatPurchaseRate}%`,
+        `반복거래율 ${signalResult.repeatPurchaseRate}%`,
         `최대 거래처 집중도 ${signalResult.topCustomerConcentration}%`,
       ]
     : ["제출된 거래 실적 문서가 없어 내부 성장 신호를 산정하지 못했습니다."];

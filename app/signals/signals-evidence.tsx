@@ -49,7 +49,7 @@ export function SignalsEvidence({
   const stats = [
     { label: "분석 거래처", value: `${customerCount}곳` },
     { label: "이전 기간 거래처", value: `${previousCustomersCount}곳` },
-    { label: "재구매율", value: `${repeatPurchaseRate}%` },
+    { label: "반복거래율", value: `${repeatPurchaseRate}%` },
     { label: "검증 문서", value: `${usedDocs.length}종` },
   ];
 

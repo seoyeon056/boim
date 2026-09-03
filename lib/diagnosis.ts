@@ -122,7 +122,7 @@ function describeExternal(visibility: Visibility): string {
 }
 
 // ── 내부에서 본 모습 ─────────────────────────────────────────
-// 거래처 확보(증가율)와 관계 유지(재구매율)는 다른 이야기다. 네 조합을 각각 쓴다.
+// 거래처 확보(증가율)와 관계 유지(반복거래율)는 다른 이야기다. 네 조합을 각각 쓴다.
 function describeInternal(signals: Signals): string {
   if (!signals.dataSufficient) {
     return `제출한 내부 거래가 ${signals.transactionCount}건뿐이라 성장 신호를 판단하지 않았습니다. 거래 내역이 더 쌓인 뒤에 다시 보시는 편이 정확합니다.`;
@@ -134,18 +134,18 @@ function describeInternal(signals: Signals): string {
   const repeat = `${signals.repeatPurchaseRate}%`;
 
   if (growing && repeating) {
-    return `내부 거래에서는 거래처가 ${flow} 늘고 재구매율도 ${repeat}로 이어져, 새로 확보한 거래처와 기존 관계가 함께 유지되고 있습니다.`;
+    return `내부 거래에서는 거래처가 ${flow} 늘고 반복거래율도 ${repeat}로 이어져, 새로 확보한 거래처와 기존 관계가 함께 유지되고 있습니다.`;
   }
 
   if (growing) {
-    return `내부 거래에서는 거래처가 ${flow} 늘었지만 재구매율이 ${repeat}에 머물러, 새로 확보한 거래처가 반복 거래로 이어지는지는 아직 확인되지 않습니다.`;
+    return `내부 거래에서는 거래처가 ${flow} 늘었지만 반복거래율이 ${repeat}에 머물러, 새로 확보한 거래처가 반복 거래로 이어지는지는 아직 확인되지 않습니다.`;
   }
 
   if (repeating) {
-    return `내부 거래에서는 거래처 수가 ${flow} 바뀌어 확장은 확인되지 않지만, 재구매율 ${repeat}로 기존 거래처와의 관계는 이어지고 있습니다.`;
+    return `내부 거래에서는 거래처 수가 ${flow} 바뀌어 확장은 확인되지 않지만, 반복거래율 ${repeat}로 기존 거래처와의 관계는 이어지고 있습니다.`;
   }
 
-  return `내부 거래에서는 거래처가 ${flow} 바뀌고 재구매율은 ${repeat}로, 신규 확보와 관계 유지 어느 쪽에서도 뚜렷한 신호가 확인되지 않습니다.`;
+  return `내부 거래에서는 거래처가 ${flow} 바뀌고 반복거래율은 ${repeat}로, 신규 확보와 관계 유지 어느 쪽에서도 뚜렷한 신호가 확인되지 않습니다.`;
 }
 
 // ── 거래처 의존 위험 ─────────────────────────────────────────
@@ -203,7 +203,7 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
   // "늘었고 있습니다"처럼 문장이 깨진다.
   const evidence = growing
     ? `거래처가 ${signals.previousCustomersCount}곳에서 ${signals.recentCustomersCount}곳으로 늘고`
-    : `재구매율이 ${signals.repeatPurchaseRate}%로 이어지고`;
+    : `반복거래율이 ${signals.repeatPurchaseRate}%로 이어지고`;
 
   // 밖에서는 안 보이는데 안에서는 신호가 있다 — 이 서비스가 겨냥한 상황이다.
   if (invisible && (growing || repeating)) {
@@ -268,7 +268,10 @@ export function gradeFromSignals(signals: Signals): string {
 export const POSITIVE_CRITERIA = [
   { label: "거래처 증가율", rule: "이전 기간보다 늘면 긍정" },
   { label: "거래금액 증가율", rule: "이전 기간보다 늘면 긍정" },
-  { label: "재구매율", rule: `${REPEAT_GOOD}% 이상이면 긍정` },
+  // 지표 이름은 lib/signals.ts 가 정한다. 여기서 다른 이름을 쓰면 같은 화면에
+  // 두 이름이 나란히 뜬다(실제로 Step 05 기준표는 "재구매율", 지표 카드는
+  // "반복거래율"이었다).
+  { label: "반복거래율", rule: `${REPEAT_GOOD}% 이상이면 긍정` },
   {
     label: "최대 거래처 집중도",
     rule: `${CONCENTRATION_WATCH}% 미만이면 긍정`,
