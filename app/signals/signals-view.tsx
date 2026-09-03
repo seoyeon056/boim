@@ -83,6 +83,9 @@ export function SignalsView({ companyId }: { companyId?: string }) {
   const [view, setView] = useState<ViewState>("loading");
   const [signals, setSignals] = useState<Signals | null>(null);
   const [transactionCount, setTransactionCount] = useState(0);
+  // 거래처·날짜를 읽지 못해 계산에서 뺀 건수. 0 이면 아무 말도 하지 않는다.
+  const [excludedCount, setExcludedCount] = useState(0);
+  // 진단일 이후 날짜라 과거 실적 계산에서 뺀 건수.
   const [futureExcludedCount, setFutureExcludedCount] = useState(0);
   const [settlement, setSettlement] = useState<{ count: number; total: number } | null>(
     null,
@@ -108,6 +111,7 @@ export function SignalsView({ companyId }: { companyId?: string }) {
 
     setSignals(uploaded.signals);
     setTransactionCount(uploaded.transactionCount);
+    setExcludedCount(uploaded.excludedCount);
     setFutureExcludedCount(uploaded.futureExcludedCount);
     setSettlement(readSettlementSummary());
     setView("ok");
@@ -239,6 +243,18 @@ export function SignalsView({ companyId }: { companyId?: string }) {
         {futureExcludedCount > 0 &&
           ` 진단일 이후 날짜의 거래 ${futureExcludedCount}건은 제외했습니다.`}
       </p>
+
+      {/*
+        읽지 못해 뺀 거래가 있으면 반드시 말한다. 예전에는 조용히 버려서, Step 04
+        가 "거래 10건"이라고 한 뒤 Step 05 가 5건으로만 계산하는 일이 있었다.
+        빠진 줄 모르면 지표를 그대로 믿게 된다.
+      */}
+      {excludedCount > 0 && (
+        <p className="mt-2 text-[12px] leading-5 text-amber-700">
+          거래처나 거래일을 읽지 못한 {excludedCount}건은 계산에서 제외했습니다.
+          Step 04로 돌아가 값을 채우면 함께 계산됩니다.
+        </p>
+      )}
 
       {/* 입금내역은 입금 확인용으로만 확인하고 매출에는 합산하지 않았음을 밝힌다. */}
       {settlement && (

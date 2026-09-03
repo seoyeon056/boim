@@ -276,7 +276,35 @@ const WRAP_PITCH = 1.6;
 const WRAP_ALIGN = 1.5;
 const WRAP_MAX_LENGTH = 3;
 
+// 표 머리글이나 라벨은 이어지는 조각이 아니다.
+//
+// 엑셀은 행 간격이 일정해서 "넘어간 줄은 표의 행 간격보다 촘촘하다"는 규칙이
+// 통하지 않는다. 실측: 거래처 바로 아래가 표 머리인 문서에서 "한결기공(주)"에
+// 아랫줄의 "품목"이 붙어 "한결기공㈜품목"이 됐다. 이름·수량·단가처럼 우리가
+// 아는 라벨은 값의 꼬리일 수 없으므로 걸러 낸다.
+function isLabelLike(text: string): boolean {
+  const value = normalize(text);
+  if (value === "") {
+    return false;
+  }
+  if (CUSTOMER_LABELS.some((label) => value.includes(label))) {
+    return true;
+  }
+  if (SUMMARY_WORDS.some((word) => value.includes(word))) {
+    return true;
+  }
+  return Object.values(COLUMN_ALIASES).some((aliases) =>
+    aliases.some((alias) => value.includes(alias)),
+  );
+}
+
 function wrappedTail(lines: Cell[][], from: number, cell: Cell): string {
+  // 엑셀 셀은 그 자체로 완결된 값이다. 칸이 좁아 다음 줄로 넘어가는 일은
+  // 그림이나 PDF 텍스트 레이어에서만 생긴다. 신뢰도 1은 엑셀에서만 나온다.
+  if (cell.confidence >= 1) {
+    return "";
+  }
+
   const height = cell.box.height || 10;
 
   for (let index = from + 1; index < lines.length; index += 1) {
@@ -296,7 +324,8 @@ function wrappedTail(lines: Cell[][], from: number, cell: Cell): string {
     const tail = row.find(
       (candidate) =>
         Math.abs(candidate.box.x - cell.box.x) <= WRAP_ALIGN &&
-        candidate.text.length <= WRAP_MAX_LENGTH,
+        candidate.text.length <= WRAP_MAX_LENGTH &&
+        !isLabelLike(candidate.text),
     );
     if (tail) {
       return tail.text;

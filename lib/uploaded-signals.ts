@@ -57,6 +57,13 @@ function today(): string {
 export type UploadedSignals = {
   signals: Signals;
   transactionCount: number;
+  // 거래처나 날짜를 읽지 못해 계산에서 뺀 행의 수.
+  //
+  // 예전에는 그냥 버리고 아무 말도 하지 않았다. 그래서 Step 04 는 "거래 10건"
+  // 이라고 하는데 Step 05 는 5건으로만 계산하는 일이 실제로 있었다(스캔 PDF 에서
+  // OCR 이 "공급받는자"를 "공급받-는자"로 읽어 거래처가 빈 값이 됐다).
+  // 몇 건이 빠졌는지 화면이 말할 수 있게 세어서 함께 돌려준다.
+  excludedCount: number;
   // 진단일 이후 날짜라 과거 실적·성장 지표 계산에서 제외한 거래 건수.
   // (분석 기간은 signals.periodStart/periodEnd 에 이미 들어 있다.)
   futureExcludedCount: number;
@@ -83,6 +90,9 @@ export function readUploadedSignals(
       .map((row) => toTransaction(row, companyId))
       .filter((item): item is Transaction => item !== null);
 
+    // 거래처·날짜를 못 읽어 빠진 행. (rows = 원본, all = 읽기 성공)
+    const excludedCount = rows.length - all.length;
+
     const cutoff = today();
     const past = all.filter((item) => item.date.slice(0, 10) <= cutoff);
     const futureExcludedCount = all.length - past.length;
@@ -94,6 +104,7 @@ export function readUploadedSignals(
     return {
       signals: calculateSignals(past),
       transactionCount: past.length,
+      excludedCount,
       futureExcludedCount,
     };
   } catch {

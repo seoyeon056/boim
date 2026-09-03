@@ -243,10 +243,22 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     ).length;
   }
 
+  // 비어 있는 값은 "확인했다"고 할 수 없다.
+  //
+  // 거래처나 거래일이 비면 그 거래는 지표 계산에서 통째로 빠진다
+  // (lib/uploaded-signals.ts). 그런데 [전부 확인 처리]가 빈 값까지 확정해 버려서,
+  // 사용자는 다 확인했다고 여기고 넘어가는데 계산에서는 사라졌다. 빈 값은
+  // 확정 대상에서 빼고 검수 목록에 남겨 둔다.
+  function isFilled(tx: Transaction, key: (typeof FIELD_META)[number]["key"]) {
+    return String(tx[key].value ?? "").trim() !== "";
+  }
+
   // 한 거래 줄에서 아직 확인 안 된 낮은 신뢰도 필드를 한꺼번에 확인 처리한다.
   function confirmRow(txIndex: number, tx: Transaction) {
     FIELD_META.forEach(({ key }) => {
-      if (requiresConfirmation(tx[key].confidence)) confirmField(txIndex, key);
+      if (requiresConfirmation(tx[key].confidence) && isFilled(tx, key)) {
+        confirmField(txIndex, key);
+      }
     });
   }
 
@@ -347,18 +359,34 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
   });
   const autoConfirmed = totalFields - needReview;
 
-  const allConfirmed = transactions.every((tx, txIndex) =>
-    FIELD_META.every(
-      ({ key }) =>
-        !requiresConfirmation(tx[key].confidence) ||
-        confirmed.has(confirmKey(txIndex, key)),
-    ),
-  );
+  // 확인이 필요한 항목을 두 가지로 나눈다.
+  //
+  //   값이 있는데 신뢰도가 낮다  → 사람이 확인해야 넘어갈 수 있다
+  //   값을 아예 읽지 못했다      → 채우면 좋지만, 못 채워도 넘어갈 수 있어야 한다
+  //
+  // 둘을 같이 묶으면 막다른 길이 된다. 문서에 거래처 라벨이 없어 이름을 못 읽으면
+  // 사용자도 채울 수 없는데 진행 버튼이 영영 잠긴다. 대신 그 거래가 지표 계산에서
+  // 빠진다는 사실을 아래에 적고, Step 05 도 같은 사실을 다시 알린다.
+  const blockedFields = transactions.reduce((count, tx, txIndex) => {
+    return (
+      count +
+      FIELD_META.filter(
+        ({ key }) =>
+          requiresConfirmation(tx[key].confidence) &&
+          isFilled(tx, key) &&
+          !confirmed.has(confirmKey(txIndex, key)),
+      ).length
+    );
+  }, 0);
 
-  const datesValid = transactions.every((tx) =>
-    isValidDate(String(tx.date.value)),
-  );
-  const canProceed = allConfirmed && datesValid;
+  // 읽지 못해 계산에서 빠질 거래. 값을 채우면 사라진다.
+  const unreadableRows = transactions.filter(
+    (tx) => !isFilled(tx, "customer") || !isValidDate(String(tx.date.value)),
+  ).length;
+
+  const allConfirmed = blockedFields === 0;
+
+  const canProceed = allConfirmed;
 
   const futureCount = transactions.filter((tx) =>
     isFutureDate(String(tx.date.value)),
@@ -504,11 +532,6 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       companyId={companyId}
       footer={
         <div className="flex flex-col items-end gap-2">
-          {!datesValid && (
-            <p className="text-xs text-red-500">
-              거래 날짜 형식을 확인해 주세요.
-            </p>
-          )}
           <button
             type="button"
             onClick={handleConfirm}
@@ -517,6 +540,13 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
           >
             내용 확인 완료
           </button>
+          {unreadableRows > 0 && (
+            <p className="mt-2 text-[12px] leading-5 text-amber-700">
+              거래처나 거래일을 읽지 못한 {unreadableRows}건이 있습니다. 값을
+              채우지 않고 진행하면 이 {unreadableRows}건은 성장 신호 계산에서
+              제외됩니다.
+            </p>
+          )}
         </div>
       }
     >
