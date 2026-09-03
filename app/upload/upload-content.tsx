@@ -27,52 +27,48 @@ const GAUGE_UPLOADED = "#1D4533";
 const GAUGE_MISSING = "#BCB0A9";
 const GAUGE_TRACK = "#E9E2DD";
 
-// 시연용 샘플 문서. public/sample 에 실제 엑셀로 들어 있고, 손으로 올린 파일과
+// 시연용 샘플 문서. public/sample 에 실제 파일로 들어 있고, 손으로 올린 파일과
 // 똑같은 인식 경로를 그대로 탄다. 결과를 미리 심어 두지 않는다.
 //
-// 한빛정밀은 자동차 센서 부품 제조기업이라, 샘플 거래도 전부 그 품목이다.
-// 거래명세서는 2026년 상반기(01~06) 여섯 달치다 — 진단일 이후 날짜가 섞이면
-// 과거 실적에서 빠지므로 완료 거래는 전부 상반기로 맞춰 뒀다.
-// 세금계산서는 미래모터스 명세서의 앞 8건을 그대로 다시 담아, 같은 거래가 두
-// 문서에 있어도 중복 없이 한 건으로 합쳐지는 것을 보여준다.
+//   거래명세서 4개   거래처 4곳(미래모터스·대성테크·한울전자·동방정공) 각 18건
+//   세금계산서 PDF   스캔본이라 OCR 을 태운다 — 신뢰도가 낮은 항목이 나와
+//                    Step 04 검수 흐름을 그대로 보여준다
+//   입금내역         입금 확인용. 매출·거래처 계산에는 합산하지 않는다
+//                    (run-local-ocr.ts 의 SETTLEMENT_CATEGORIES)
+//   견적서·계약서·발주서  미래 신호. 성장 지표 계산에는 쓰지 않는다
 //
-//   거래명세서 4개  72건  미래모터스·대성테크·한울전자·동방정공 각 18
-//   세금계산서 1개   8건  미래모터스(명세서와 중복 → dedupe 후 0건 추가)
-//   입금내역 1개    20건  입금 확인용, 매출·거래처에 합산하지 않음
-//   견적서·발주서        미래 신호. 성장 지표 계산에는 쓰지 않음
+// 동방정공 명세서에는 하반기(진단일 이후) 날짜가 섞여 있어, /signals 에서
+// "진단일 이후 거래는 제외했습니다" 경고가 함께 뜬다(날짜 검증 동작 확인용).
 //
-// → 성장 신호 계산에 들어가는 거래는 72건·거래처 4곳·2026 상반기.
-// **추출 결과가 달라지면 화면 안내 문구도 같이 고친다.** 안내와 실제가 다르면
-// 값이 틀린 것보다 나쁘다 — 화면이 하는 말을 못 믿게 된다.
+// 화면 안내 문구에 하드코딩된 숫자를 두지 않는다 — 추출 결과가 바뀔 때마다
+// 어긋났다. "진단 흐름 전체를 분석해 볼 수 있습니다" 로만 적는다.
 const SAMPLE_FILES: { category: string; names: string[] }[] = [
   {
     category: "transaction-statement",
     names: [
-      "거래명세서_미래모터스_2026상반기.xlsx",
+      "거래명세서_202608.xlsx",
       "거래명세서_대성테크_2026상반기.xlsx",
       "거래명세서_한울전자_2026상반기.xlsx",
-      "거래명세서_동방정공_2026상반기.xlsx",
+      "거래명세서_동방정공_2026하반기.xlsx",
     ],
   },
   {
-    // 미래모터스 명세서와 겹치는 거래라, 중복 제거 뒤 매출이 늘지 않는다.
+    // 스캔본이라 브라우저 OCR 경로를 탄다. 인식이 잘 안 되어도 위 엑셀에서
+    // 거래가 이미 나오므로 화면이 비지 않는다.
     category: "tax-invoice",
-    names: ["전자세금계산서_2026상반기.xlsx"],
+    names: ["전자세금계산서_202608.pdf", "기업_내부거래_데모데이터_1장.pdf"],
   },
   {
-    // 입금 확인용. 매출·거래처 계산에는 합산되지 않는다.
+    // 명세서에 없는 거래처의 입금이라 중복 없이 거래가 늘어난다.
     category: "deposit-history",
     names: ["입금내역_2026상반기.xlsx"],
   },
-  {
-    // 아직 성사되지 않은 거래(3분기 예정). 미래 수요 신호로만 싣는다.
-    category: "quotation",
-    names: ["견적서_미래모터스_2026Q3.xlsx"],
-  },
+  { category: "quotation", names: ["견적서_EST202608.xlsx"] },
   {
     category: "purchase-order",
     names: ["발주서_2026Q3.xlsx"],
   },
+  { category: "contract", names: ["표준소프트웨어라이선스계약서.pdf"] },
 ];
 
 function mimeOf(name: string): string {
@@ -80,13 +76,18 @@ function mimeOf(name: string): string {
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
-// 문서를 세 묶음으로 나눈다. 문서가 말해 주는 시점이 다르다.
-//   거래 실적 — 이미 일어난 매출.   성장 신호를 여기서 계산한다. 최소 한 장 필요.
-//   입금 확인 — 대금 회수 확인용.   매출에는 합산하지 않는다.
+// 문서를 두 묶음으로 나눈다. 문서가 말해 주는 시점이 다르다.
+//   거래 실적 — 이미 일어난 거래. 성장 신호를 여기서 계산한다.
+//              (입금내역은 이 묶음에 함께 두되 입금 확인용으로만 쓰고 매출에는
+//               합산하지 않는다 — lib/ocr/run-local-ocr.ts 의 TRANSACTION_CATEGORIES)
 //   거래 흐름 — 예정된 거래와 조건. 진단서에 근거 자료로 함께 싣는다.
-const RECORD_CATEGORIES = documentCategories.filter((c) => c.analyzed);
-const SETTLEMENT_CATEGORIES = documentCategories.filter((c) => c.settlement);
+const RECORD_CATEGORIES = documentCategories.filter(
+  (c) => c.analyzed || c.settlement,
+);
 const FLOW_CATEGORIES = documentCategories.filter((c) => c.future);
+// 분석을 시작하려면 매출을 증명하는 문서(거래명세서·세금계산서)가 최소 한 장
+// 있어야 한다. 입금내역만으로는 성장 신호를 계산할 수 없다.
+const ANALYZED_CATEGORIES = documentCategories.filter((c) => c.analyzed);
 
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"];
 const ALLOWED_TYPES = [
@@ -384,16 +385,17 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     return sum + (states[category.id]?.files.length ?? 0);
   }, 0);
 
-  // 거래 실적 문서(거래명세서·세금계산서) 칸이 모두 정해지고, 그중 최소 한 장은
-  // 실제로 올라와 있어야 분석을 시작할 수 있다. 전부 "없음"이면 계산할 매출이 없다.
+  // 거래 실적 칸이 모두 정해지고, 그중 매출을 증명하는 문서(거래명세서·세금계산서)가
+  // 최소 한 장은 실제로 올라와 있어야 분석을 시작할 수 있다.
+  // 전부 "없음"이거나 입금내역만 있으면 계산할 매출이 없다.
   const recordHandled = RECORD_CATEGORIES.filter(
     (category) => states[category.id].status !== "empty",
   ).length;
-  const recordUploaded = RECORD_CATEGORIES.filter(
+  const analyzedUploaded = ANALYZED_CATEGORIES.filter(
     (category) => states[category.id].status === "uploaded",
   ).length;
   const allRecordHandled = recordHandled === RECORD_CATEGORIES.length;
-  const canAnalyze = allRecordHandled && recordUploaded > 0;
+  const canAnalyze = allRecordHandled && analyzedUploaded > 0;
   const hasUntouched = documentCategories.some(
     (category) => states[category.id].status === "empty",
   );
@@ -404,9 +406,9 @@ export function UploadContent({ companyId }: { companyId?: string }) {
   async function handleAnalyze() {
     if (!canAnalyze) {
       setNotice(
-        recordUploaded === 0
+        analyzedUploaded === 0
           ? "거래 실적 문서가 없어 분석할 수 없습니다. 거래명세서나 세금계산서를 최소 한 장 올려 주세요."
-          : "거래명세서·세금계산서에 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
+          : "모든 문서 칸에 파일을 선택하거나 ‘해당 문서 없음’을 표시해 주세요.",
       );
       return;
     }
@@ -764,8 +766,8 @@ export function UploadContent({ companyId }: { companyId?: string }) {
           나머지 모두 없음으로 표시
         </button>
         <span className="text-[13px] text-zinc-500">
-          문서가 없어도 괜찮습니다. 샘플(자동차 센서 부품 거래)로 거래처 4곳·2026
-          상반기 거래 72건을 실제로 분석해 볼 수 있습니다.
+          문서가 없어도 괜찮습니다. 샘플 문서로 진단 흐름 전체를 실제로 분석해 볼
+          수 있습니다.
         </span>
       </div>
 
@@ -840,7 +842,7 @@ export function UploadContent({ companyId }: { companyId?: string }) {
 
       </div>
 
-      {/* ── 세 묶음을 접지 않고 나란히 둔다 ────────────────
+      {/* ── 두 묶음을 접지 않고 나란히 둔다 ────────────────
           접어 두면 "열어서 채워야 할 게 또 있다"로 읽힌다. 전부 보이되
           채운 칸과 빈 칸이 색으로 갈리게 해서, 목록이 아니라 진행 상태로
           보이게 한다. */}
@@ -848,25 +850,12 @@ export function UploadContent({ companyId }: { companyId?: string }) {
         <div className="flex items-baseline gap-2">
           <h2 className="text-[15px] font-semibold text-zinc-900">거래 실적</h2>
           <span className="text-[13px] text-zinc-500">
-            이미 일어난 매출입니다. 성장 신호를 여기서 계산합니다. 최소 한 장 필요
+            이미 일어난 거래입니다. 성장 신호를 여기서 계산합니다
           </span>
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {RECORD_CATEGORIES.map(renderCategoryCard)}
-        </div>
-      </div>
-
-      <div className="mt-7">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-[15px] font-semibold text-zinc-900">입금 확인</h2>
-          <span className="text-[13px] text-zinc-500">
-            대금이 실제로 입금됐는지만 확인합니다. 매출에는 합산하지 않습니다
-          </span>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {SETTLEMENT_CATEGORIES.map(renderCategoryCard)}
         </div>
       </div>
 
