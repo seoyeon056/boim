@@ -72,6 +72,8 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
   const [signals, setSignals] = useState<Signals>(serverSignals);
   const [fromUpload, setFromUpload] = useState(false);
   const [transactionCount, setTransactionCount] = useState(0);
+  // 거래처·날짜를 읽지 못해 계산에서 뺀 건수. 0 이면 아무 말도 하지 않는다.
+  const [excludedCount, setExcludedCount] = useState(0);
   // 결제조건은 거래 건수·금액에 잡히지 않는 정보라 따로 읽어 덧붙인다.
   const [paymentNote, setPaymentNote] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
@@ -92,6 +94,7 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
     setFromUpload(true);
      
     setTransactionCount(uploaded.transactionCount);
+    setExcludedCount(uploaded.excludedCount);
   }, []);
 
   async function requestAiNotice() {
@@ -193,6 +196,18 @@ export function SignalsView({ serverSignals }: { serverSignals: Signals }) {
           ? "제출한 문서에서 확인된 거래를 근거로 산출한 수치입니다."
           : "제출한 문서에서 거래 내역을 확인하지 못해 예시 데이터로 산출한 수치입니다."}
       </p>
+
+      {/*
+        읽지 못해 뺀 거래가 있으면 반드시 말한다. 예전에는 조용히 버려서, Step 04
+        가 "거래 10건"이라고 한 뒤 Step 05 가 5건으로만 계산하는 일이 있었다.
+        빠진 줄 모르면 지표를 그대로 믿게 된다.
+      */}
+      {fromUpload && excludedCount > 0 && (
+        <p className="mt-2 text-[12px] leading-5 text-amber-700">
+          거래처나 거래일을 읽지 못한 {excludedCount}건은 계산에서 제외했습니다.
+          Step 04로 돌아가 값을 채우면 함께 계산됩니다.
+        </p>
+      )}
 
       <p
         className="mt-3 max-w-3xl text-[13px] leading-6"

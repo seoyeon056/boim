@@ -50,6 +50,13 @@ function toTransaction(raw: unknown, companyId: string): Transaction | null {
 export type UploadedSignals = {
   signals: Signals;
   transactionCount: number;
+  // 거래처나 날짜를 읽지 못해 계산에서 뺀 행의 수.
+  //
+  // 예전에는 그냥 버리고 아무 말도 하지 않았다. 그래서 Step 04 는 "거래 10건"
+  // 이라고 하는데 Step 05 는 5건으로만 계산하는 일이 실제로 있었다(스캔 PDF 에서
+  // OCR 이 "공급받는자"를 "공급받-는자"로 읽어 거래처가 빈 값이 됐다).
+  // 몇 건이 빠졌는지 화면이 말할 수 있게 세어서 함께 돌려준다.
+  excludedCount: number;
 };
 
 // 업로드·검수된 거래가 있으면 그걸로 계산한 신호를, 없으면 null을 돌려준다.
@@ -80,6 +87,7 @@ export function readUploadedSignals(
     return {
       signals: calculateSignals(transactions),
       transactionCount: transactions.length,
+      excludedCount: rows.length - transactions.length,
     };
   } catch {
     return null;
