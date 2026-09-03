@@ -35,6 +35,38 @@ async function getService() {
   }
 }
 
+// 인식을 한 번에 하나씩만 돌린다.
+//
+// 모델은 무거워서 한 번만 띄우고 계속 쓴다(servicePromise). 그런데 그 뒤에 있는
+// ONNX 세션은 동시에 두 번 부를 수 없다. 겹치면 이렇게 죽는다.
+//
+//   Error during text detection: Session already started
+//   Error during model inference: Session mismatch
+//
+// 실측: 개발 서버에서 스캔본을 올리면 위 오류가 네 개(파이프라인 2개 × 검출·인식
+// 2단계) 뜨고 인식 결과가 0건이 됐다. React 개발 모드가 effect 를 두 번 실행해
+// 파이프라인이 겹친 탓이다. 프로덕션 빌드에서는 재현되지 않았지만, 사용자가
+// 분석 중에 뒤로 갔다가 다시 들어오면 프로덕션에서도 같은 일이 난다.
+//
+// 앞의 인식이 끝난 뒤에 다음 인식을 시작하도록 줄을 세운다. 실패해도 줄은
+// 이어져야 하므로 대기용 프라미스에서는 오류를 삼킨다.
+let recognizeQueue: Promise<unknown> = Promise.resolve();
+
+function recognizeInTurn(
+  service: { recognize: (canvas: HTMLCanvasElement) => Promise<unknown> },
+  canvas: HTMLCanvasElement,
+): Promise<unknown> {
+  const next = recognizeQueue.then(
+    () => service.recognize(canvas),
+    () => service.recognize(canvas),
+  );
+  recognizeQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
 // 휴대폰 사진은 1200만 화소가 넘는다. 그대로 넣으면 WASM 추론이 몇 분씩 걸려서
 // 화면이 멈춘 것처럼 보인다. 글자를 읽는 데는 긴 변 2000px이면 충분하다(실측 기준
 // 명세서 본문이 이 해상도에서 정확히 인식된다).
@@ -233,7 +265,7 @@ export async function extractTransactionsLocally(
 
     for (let index = 0; index < drawn.length; index += 1) {
       onPhase?.({ phase: "recognizing", done: index, total: drawn.length });
-      const result = await service.recognize(drawn[index]);
+      const result = await recognizeInTurn(service, drawn[index]);
       transactions.push(...rowsFromOcr(result as { lines: [] }));
       collectTerms(termsFromOcr(result as { lines: [] }));
       onProgress?.(index + 1, drawn.length);
