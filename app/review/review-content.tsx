@@ -392,26 +392,26 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
     isFutureDate(String(tx.date.value)),
   ).length;
 
-  // 한 줄이 아직 사용자 확인을 기다리는지. 접힘/펼침을 가르는 기준.
-  const rowNeedsAttention = (tx: Transaction, txIndex: number) =>
-    pendingOf(tx, txIndex) > 0 || !isValidDate(String(tx.date.value));
+  // 이 거래가 원래 확인 대상이었는가(신뢰도 기준). 확인 여부와는 무관하다 —
+  // 확인을 마쳤다고 목록에서 빼면, 방금 확인한 줄이 접힌 영역으로 내려가 버려서
+  // 다시 고치려면 그 안을 뒤져야 한다. 확인 대상이었던 줄은 확인 후에도 자리를
+  // 지키고, 상태 칸만 "확인함"(눌러서 재수정)으로 바뀐다.
+  const rowHadFlag = (tx: Transaction) =>
+    FIELD_META.some(({ key }) => requiresConfirmation(tx[key].confidence));
+
+  // 접힘/펼침을 가르는 기준. 확인이 끝났는지가 아니라 애초에 확인 대상이었는지로 정한다.
+  const rowNeedsAttention = (tx: Transaction) =>
+    rowHadFlag(tx) || !isValidDate(String(tx.date.value));
 
   const indexed = transactions.map((tx, txIndex) => ({ tx, txIndex }));
-  const attentionRows = indexed.filter(({ tx, txIndex }) =>
-    rowNeedsAttention(tx, txIndex),
-  );
-  const autoRows = indexed.filter(
-    ({ tx, txIndex }) => !rowNeedsAttention(tx, txIndex),
-  );
+  const attentionRows = indexed.filter(({ tx }) => rowNeedsAttention(tx));
+  const autoRows = indexed.filter(({ tx }) => !rowNeedsAttention(tx));
 
   const renderRow = ({ tx, txIndex }: { tx: Transaction; txIndex: number }) => {
     const pending = pendingOf(tx, txIndex);
     const rowDateBad = !isValidDate(String(tx.date.value));
     const rowFuture = isFutureDate(String(tx.date.value));
-    const rowHadFlag = FIELD_META.some(({ key }) =>
-      requiresConfirmation(tx[key].confidence),
-    );
-    const rowReviewed = rowHadFlag && pending === 0 && !rowDateBad;
+    const rowReviewed = rowHadFlag(tx) && pending === 0 && !rowDateBad;
 
     return (
       <tr
@@ -453,6 +453,17 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
                   updateValue(txIndex, key, event.target.value)
                 }
                 onFocus={() => reEditField(txIndex, key)}
+                // 품목처럼 긴 값은 입력창 너비를 넘어가 잘린다. 트랙패드는 두
+                // 손가락 가로 스와이프로 잘린 글자를 볼 수 있지만, 마우스 휠은
+                // 위아래(deltaY)만 보내서 아무 반응이 없었다. 휠로도 같은 걸
+                // 할 수 있게, 넘친 입력창에서는 세로 스크롤 양을 가로로 돌려준다.
+                onWheel={(event) => {
+                  const el = event.currentTarget;
+                  if (el.scrollWidth > el.clientWidth) {
+                    event.preventDefault();
+                    el.scrollLeft += event.deltaY;
+                  }
+                }}
                 title={
                   tier === "low"
                     ? "AI가 정확하게 읽지 못했습니다. 값을 확인해 주세요."
@@ -630,9 +641,7 @@ export function ReviewContent({ companyId }: { companyId?: string }) {
       ) : (
         <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-[13px] text-emerald-700">
           <IconCheck className="h-3 w-3" />
-          {needReview > 0
-            ? `확인이 필요한 ${needReview}개 항목을 모두 확인 처리했습니다.`
-            : "확인이 필요한 항목이 없습니다. 모든 값이 자동으로 확인되었습니다."}
+          확인이 필요한 항목이 없습니다. 모든 값이 자동으로 확인되었습니다.
         </div>
       )}
 
