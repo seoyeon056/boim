@@ -109,6 +109,13 @@ export default function CompanyPage() {
         if (requestId === latestRequestId.current) {
           setCompanies(results);
           setErrorMessage("");
+
+          // 결과가 하나뿐이면 사용자가 고를 기업이 정해진 것이나 마찬가지다.
+          // 카드를 읽고 누르기까지의 몇 초를 외부 조회에 쓴다. 여럿이면
+          // 어느 것을 고를지 모르므로 넘겨짚지 않는다.
+          if (results.length === 1) {
+            warmVisibility(results[0].id);
+          }
         }
       } catch {
         if (requestId === latestRequestId.current) {
@@ -209,6 +216,8 @@ export default function CompanyPage() {
                   setSelectedCompany(company);
                   warmVisibility(company.id);
                 }}
+                onMouseEnter={() => warmVisibility(company.id)}
+                onFocus={() => warmVisibility(company.id)}
                 className="w-full text-left"
               >
                 <div className="flex items-start justify-between gap-3">
