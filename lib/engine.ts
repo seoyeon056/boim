@@ -67,12 +67,17 @@ export async function getVisibility(companyId?: string): Promise<Visibility> {
 }
 
 // 기업의 내부 거래만 골라낸다. 거래가 없으면 첫 기업 것으로 대신한다.
+// 거래가 없는 기업에 첫 기업의 거래를 대신 돌려주면 안 된다.
+//
+// 예전에는 그렇게 해서 /api/signals 가 어느 기업으로 물어도 똑같은 값을
+// 내놨다(거래처 증가율 150% · 반복거래율 80% · 집중도 45%). 실제 기업 고유번호로
+// 물어도, 거래 자료가 없는 데모 기업으로 물어도 같았다. 그 기업의 수치가 아닌데
+// 그 기업의 수치인 것처럼 나간 것이다.
+//
+// 내부 성장 신호는 사용자가 올린 문서에서 브라우저가 계산한다(lib/uploaded-signals.ts).
+// 서버가 가진 것은 데모 기업의 예시 거래뿐이고, 없으면 없다고 답해야 한다.
 function transactionsOf(companyId: string): Transaction[] {
-  const owned = transactions.filter((item) => item.companyId === companyId);
-
-  return owned.length > 0
-    ? owned
-    : transactions.filter((item) => item.companyId === DEFAULT_COMPANY.id);
+  return transactions.filter((item) => item.companyId === companyId);
 }
 
 export async function getSignals(companyId?: string) {
