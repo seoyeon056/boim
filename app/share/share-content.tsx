@@ -5,7 +5,7 @@ import {
   readUploadSnapshot,
   serverUploadSnapshot,
   subscribeUpload,
-  uploadedCategoryNames,
+  uploadedCategoryCopies,
 } from "@/lib/uploaded-documents";
 import Link from "next/link";
 
@@ -93,7 +93,7 @@ export function ShareContent({
     readUploadSnapshot,
     serverUploadSnapshot,
   );
-  const evidenceDocs = uploadedCategoryNames(upload);
+  const evidenceDocs = uploadedCategoryCopies(upload);
   const sampleBased = isSampleUpload(upload);
   const [loadFailed, setLoadFailed] = useState(false);
   // LLM이 쓴 종합 진단. 도착 전이거나 실패하면 규칙 기반 문장(가/나/다)을 쓴다.
@@ -485,7 +485,9 @@ export function ShareContent({
           <p className="-indent-4 pl-4 text-[13px] leading-7 text-zinc-900">
             {evidenceDocs.length === 0
               ? "제출된 문서가 없어 내부 성장 신호를 산정하지 못했습니다. 붙임 없음."
-              : `붙임${evidenceDocs.map((doc, i) => `${i + 1}. ${doc}`).join("　")}　각 1부.`}
+              : `붙임${evidenceDocs
+                  .map((doc, i) => `${i + 1}. ${doc.name} ${doc.count}부`)
+                  .join("　")}.`}
           </p>
         </section>
 
