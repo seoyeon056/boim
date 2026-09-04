@@ -16,6 +16,15 @@ export async function generateDiagnosisText(prompt: string): Promise<string> {
     const completion = await getOpenAI().chat.completions.create({
         model: "gpt-5-nano", // 2026-08 기준 가장 저렴한 범용 채팅 모델 (입력 $0.05, 출력 $0.40 / 100만 토큰)
         messages: [{ role: "user", content: prompt }],
+        // 판단은 코드가 이미 끝냈고 여기서 맡기는 일은 "정해진 판정을 문장으로
+        // 옮기는 것"뿐이다. 기본값으로 두면 모델이 필요 이상으로 오래 생각한다.
+        //
+        // 같은 프롬프트로 재보니 가시성 문장 10.8초 → 3.0초, 진단서 종합 의견
+        // 23.8초 → 10.6초였다. 문장 품질은 떨어지지 않았고 오히려 지침을 더 잘
+        // 지켰다(기본값은 "반복거래율"을 "재구매"로 바꿔 쓰는 일이 있었다).
+        //
+        // "minimal" 은 1.2초로 더 빠르지만 근거 없는 문장이 섞여 쓰지 않는다.
+        reasoning_effort: "low",
     });
     return completion.choices[0]?.message?.content ?? "";
 }
