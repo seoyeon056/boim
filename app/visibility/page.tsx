@@ -54,7 +54,11 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     <StepShell
       step="Step 02"
       title="외부 가시성 점수"
-      description={`${visibility.company}의 뉴스·특허·고용·공시 공개 정보를 기반으로 측정합니다.`}
+      description={
+        visibility.company
+          ? `${visibility.company}의 뉴스·특허·고용·공시 공개 정보를 기반으로 측정합니다.`
+          : "기업 정보를 확인하지 못했습니다. 처음 화면에서 기업을 다시 선택해 주세요."
+      }
       backTo="/company"
       companyId={visibility.companyId}
       footer={

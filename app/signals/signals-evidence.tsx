@@ -13,17 +13,34 @@ import { documentCategories } from "@/data/documentCategories";
 
 const DEFAULT_CATEGORY_COUNT = 6;
 
-// 지표 계산에 실제로 쓰이는 카테고리(거래명세서·세금계산서·입금내역).
-// data/documentCategories.ts 의 analyzed 플래그가 그 목록이고,
-// lib/ocr/run-local-ocr.ts 의 TRANSACTION_CATEGORIES 와 같은 세 종류다.
+// 문서마다 역할이 다르다. 화면에 그 역할을 그대로 적는다.
 //
-// 나머지 셋(발주서·견적서·계약서)은 인식 대상이 아니다. 그런데 목록이 여섯 줄
-// 모두에 "N건 반영"이라고 적고 있었다. 파일 개수를 세는 말이라 거짓은 아니지만,
-// 읽는 사람은 "이 문서가 지표에 들어갔다"로 이해한다. 실제로는 진단서 붙임에
-// 이름만 오른다. 무엇에 쓰였는지를 그대로 적는다.
+//   analyzed   거래 실적. 매출·거래처·성장 신호를 여기서 계산한다.
+//   settlement 입금 확인. 매출에 합산하지 않고 입금 여부만 곁들인다.
+//   그 밖      진단서 붙임에 이름만 오른다.
+//
+// 예전에는 여섯 줄 모두 "N건 반영"이라고 적었다. 파일 개수를 세는 말이라 거짓은
+// 아니지만, 읽는 사람은 "이 문서가 지표에 들어갔다"로 이해한다. 그래서 둘로
+// 갈랐는데, 그 뒤 입금내역이 입금 확인 전용으로 분리되면서 둘로는 모자라게 됐다.
+// 입금내역을 "붙임"이라고 적으면 바로 위에서 "입금 22건을 확인했습니다"라고
+// 말하는 화면과 어긋난다. 역할이 셋이므로 라벨도 셋이다.
 const ANALYZED_CATEGORIES = new Set(
   documentCategories.filter((c) => c.analyzed).map((c) => c.id),
 );
+
+const SETTLEMENT_CATEGORIES = new Set(
+  documentCategories.filter((c) => c.settlement).map((c) => c.id),
+);
+
+function roleLabel(categoryId: string, fileCount: number): string {
+  if (ANALYZED_CATEGORIES.has(categoryId)) {
+    return `${fileCount}건 · 지표 반영`;
+  }
+  if (SETTLEMENT_CATEGORIES.has(categoryId)) {
+    return `${fileCount}건 · 입금 확인`;
+  }
+  return `${fileCount}건 · 붙임`;
+}
 
 export function SignalsEvidence({
   customerCount,
@@ -108,11 +125,7 @@ export function SignalsEvidence({
                     </span>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-zinc-400">
-                    {!used
-                      ? "문서 없음"
-                      : ANALYZED_CATEGORIES.has(doc.categoryId)
-                        ? `${doc.fileCount}건 · 지표 반영`
-                        : `${doc.fileCount}건 · 붙임`}
+                    {used ? roleLabel(doc.categoryId, doc.fileCount) : "문서 없음"}
                   </span>
                 </li>
               );
