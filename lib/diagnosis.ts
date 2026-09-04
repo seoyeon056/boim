@@ -1,5 +1,6 @@
 import { josa } from "@/lib/korean";
 import {
+  CONCENTRATION_RISK,
   CONCENTRATION_WATCH,
   CONTINUITY_GOOD,
   REPEAT_GOOD,
@@ -208,9 +209,11 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
   // 밖에서는 안 보이는데 안에서는 신호가 있다 — 이 서비스가 겨냥한 상황이다.
   if (invisible && (growing || repeating)) {
     const risk =
-      share >= 40
+      share >= CONCENTRATION_RISK
         ? ` 다만 매출의 ${share}%가 ${name} 한 곳에 몰려 있어 이 신호를 그대로 성장으로 읽기는 이릅니다.`
-        : "";
+        : share >= CONCENTRATION_WATCH
+          ? ` 다만 ${name} 비중이 ${share}%로 다소 높은 점은 함께 보셔야 합니다.`
+          : "";
     return `공개 정보로는 확인되지 않던 활동이 내부 거래에서는 드러납니다. ${evidence} 있습니다.${risk}`;
   }
 
@@ -225,10 +228,15 @@ function buildHeadline(visibility: Visibility, signals: Signals): string {
   }
 
   // 양쪽 다 신호가 있다.
+  // 집중도 판정은 세 갈래다(lib/signals.ts: >=40 주의, 25~40 보통, <25 긍정).
+  // 문장도 세 갈래여야 한다. 예전에는 40 미만을 전부 "쏠림이 크지 않습니다"로
+  // 묶어서, 카드가 34%를 '보통'으로 표시하는데 문장은 안심시키는 말을 했다.
   const risk =
-    share >= 40
+    share >= CONCENTRATION_RISK
       ? ` 다만 ${name} 비중이 ${share}%로 높아 성장의 기반이 한쪽에 쏠려 있습니다.`
-      : ` ${name} 비중도 ${share}%로 특정 거래처 쏠림이 크지 않습니다.`;
+      : share >= CONCENTRATION_WATCH
+        ? ` 다만 ${name} 비중이 ${share}%로 다소 높은 편이라 이 거래처의 변동은 함께 살펴보시는 편이 좋습니다.`
+        : ` ${name} 비중도 ${share}%로 특정 거래처 쏠림이 크지 않습니다.`;
   return `외부 공개 정보와 내부 거래 양쪽에서 활동이 확인됩니다. ${evidence} 있습니다.${risk}`;
 }
 

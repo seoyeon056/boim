@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { getVisibility } from "@/lib/engine";
 import { readCompanyId, withCompany } from "@/lib/company-link";
@@ -38,12 +39,6 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     );
   }
 
-  // LLM 호출이 실패해도(키 미등록, 네트워크 오류 등) 화면이 깨지지 않도록
-  // 기존 규칙 기반 문장(visibility.summary)을 fallback으로 둔다.
-  const summary = await generateVisibilityInsight(visibility).catch(
-    () => visibility.summary,
-  );
-
   const score = visibility.visibilityScore;
 
   // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·고용·공시로 나눠 보여준다.
@@ -54,7 +49,11 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     <StepShell
       step="Step 02"
       title="외부 가시성 점수"
-      description={`${visibility.company}의 뉴스·특허·고용·공시 공개 정보를 기반으로 측정합니다.`}
+      description={
+        visibility.company
+          ? `${visibility.company}의 뉴스·특허·고용·공시 공개 정보를 기반으로 측정합니다.`
+          : "기업 정보를 확인하지 못했습니다. 처음 화면에서 기업을 다시 선택해 주세요."
+      }
       backTo="/company"
       companyId={visibility.companyId}
       footer={
@@ -104,13 +103,43 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
         </div>
       </div>
 
-      <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-700">
-        {summary}
-      </p>
+      {/*
+        AI 해석 문장만 따로 흘려보낸다. 예전에는 이 한 문장을 기다리느라 페이지
+        전체가 멈췄다. 실측으로 외부 조회가 9초, 그 뒤 LLM 이 다시 15초여서
+        점수는 준비됐는데 화면은 25초 동안 비어 있었다. 점수와 지표부터 보여
+        주고 문장은 도착하는 대로 채운다.
+      */}
+      <Suspense
+        fallback={
+          <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-400">
+            해석 문장을 쓰는 중입니다…
+          </p>
+        }
+      >
+        <VisibilitySummary visibility={visibility} />
+      </Suspense>
 
       <p className="mt-3 max-w-3xl text-[15px] leading-[1.75] text-zinc-600">
         {visibility.notice} 정보가 적다는 것이 성장하지 않는다는 뜻은 아닙니다.
       </p>
     </StepShell>
+  );
+}
+
+// LLM 호출이 실패해도(키 미등록, 네트워크 오류 등) 화면이 깨지지 않도록
+// 기존 규칙 기반 문장(visibility.summary)을 fallback 으로 둔다.
+async function VisibilitySummary({
+  visibility,
+}: {
+  visibility: Awaited<ReturnType<typeof getVisibility>>;
+}) {
+  const summary = await generateVisibilityInsight(visibility).catch(
+    () => visibility.summary,
+  );
+
+  return (
+    <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-700">
+      {summary}
+    </p>
   );
 }

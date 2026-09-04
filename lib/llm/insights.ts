@@ -2,6 +2,7 @@ import type { Visibility } from "@/lib/visibility";
 import type { Signals } from "@/lib/signals";
 import { generateDiagnosisText } from "@/lib/llm/providers";
 import { MASKED_CUSTOMER_LABEL, restoreCustomerName } from "@/lib/llm/customer-mask";
+import { remember } from "@/lib/external/cache";
 
 // Step 02(외부 가시성) 요약. 뉴스·특허·고용·공시는 원래 공개 정보라 마스킹이 필요 없다.
 // 확인하지 못한 축은 0건이라고 적지 않는다. 숫자로 넘기면 LLM이 "특허가 없어"
@@ -41,7 +42,12 @@ export async function generateVisibilityInsight(
 가시성 점수: ${visibility.visibilityScore}점 (${visibility.interpretations.visibility})
 ${describeCounts(visibility)}`;
 
-  return generateDiagnosisText(prompt);
+  // 같은 수치에는 같은 문장이면 된다. 단계를 오가며 Step 02 로 돌아올 때마다
+  // 10초씩 다시 쓰게 두지 않는다. 프롬프트 자체를 키로 삼으므로 수치가 바뀌면
+  // 새로 쓴다(lib/external/cache.ts).
+  return remember(`visibility-insight:${prompt}`, () =>
+    generateDiagnosisText(prompt),
+  );
 }
 
 // Step 05(내부 성장 신호) 요약. 거래처명은 마스킹 후 프롬프트에 넣고, 응답을 되돌린다.
