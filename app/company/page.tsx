@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CompanyResult, searchCompanies } from "@/lib/api";
-import { withCompany } from "@/lib/company-link";
+import { COMPANY_PARAM, withCompany } from "@/lib/company-link";
 import { clearFlowState } from "@/app/flow-reset";
 import { useUploadStore } from "@/app/upload/upload-store";
 import StepShell from "@/app/step-shell";
@@ -47,6 +47,43 @@ export default function CompanyPage() {
 
   const latestRequestId = useRef(0);
 
+  // 기업을 고른 순간부터 다음 화면의 외부 조회를 미리 시작한다.
+  //
+  // 국민연금 사업장명 검색이 8초쯤 걸린다(실측: 검색 8.4초, 나머지 세 축은
+  // 합쳐서 1초, 상세 조회는 100ms). 공공데이터포털 쪽 응답 속도라 우리가 줄일
+  // 수 없다. 대신 고른 기업의 카드를 읽고 [이 기업 진단하기]를 누르기까지의
+  // 몇 초를 그 조회에 쓴다.
+  //
+  // 결과는 서버가 5분 동안 기억하므로(lib/external/cache.ts) 다음 화면은 그걸
+  // 그대로 받는다. 바로 눌러도 손해는 없다 — 같은 조회가 이미 돌고 있으면
+  // 새로 부르지 않고 그 결과를 함께 기다린다.
+  //
+  // 보내는 것은 다음 화면이 어차피 보낼 것과 같고, 받는 것도 공개 정보다.
+  const warmed = useRef(new Set<string>());
+
+  function warmVisibility(id: string) {
+    if (warmed.current.has(id)) return;
+    warmed.current.add(id);
+    fetch(`/api/visibility?${COMPANY_PARAM}=${encodeURIComponent(id)}`).catch(
+      () => {
+        // 미리 부르는 것뿐이라 실패해도 화면은 그대로 간다. 다음 화면이 다시 부른다.
+        warmed.current.delete(id);
+      },
+    );
+  }
+
+  // 검색어를 바꾼다. 같은 값이면 아무것도 지우지 않는다.
+  // 검색어가 그대로면 아래 effect 가 다시 돌지 않아 지운 결과를 다시 채우지
+  // 못한다. "한빛정밀"이 이미 적힌 상태에서 시연용 기업 링크를 누르면
+  // 결과가 사라지고 "정확히 일치하는 기업이 없습니다"가 떴다.
+  function updateQuery(next: string) {
+    if (next === query) return;
+    setQuery(next);
+    setCompanies([]);
+    setSelectedCompany(null);
+    setErrorMessage("");
+  }
+
   const normalizedQuery = query.trim();
   const hasQuery = normalizedQuery !== "";
 
@@ -72,6 +109,13 @@ export default function CompanyPage() {
         if (requestId === latestRequestId.current) {
           setCompanies(results);
           setErrorMessage("");
+
+          // 결과가 하나뿐이면 사용자가 고를 기업이 정해진 것이나 마찬가지다.
+          // 카드를 읽고 누르기까지의 몇 초를 외부 조회에 쓴다. 여럿이면
+          // 어느 것을 고를지 모르므로 넘겨짚지 않는다.
+          if (results.length === 1) {
+            warmVisibility(results[0].id);
+          }
         }
       } catch {
         if (requestId === latestRequestId.current) {
@@ -114,12 +158,7 @@ export default function CompanyPage() {
             id="company-search"
             type="search"
             value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setCompanies([]);
-              setSelectedCompany(null);
-              setErrorMessage("");
-            }}
+            onChange={(event) => updateQuery(event.target.value)}
             placeholder=""
             autoComplete="off"
             className="h-[50px] w-full rounded-md border border-zinc-200 bg-white px-4 text-[16px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
@@ -128,12 +167,7 @@ export default function CompanyPage() {
             시연용 기업은{" "}
             <button
               type="button"
-              onClick={() => {
-                setQuery("한빛정밀");
-                setCompanies([]);
-                setSelectedCompany(null);
-                setErrorMessage("");
-              }}
+              onClick={() => updateQuery("한빛정밀")}
               className="font-medium text-zinc-500 underline decoration-zinc-300 decoration-dotted underline-offset-2 transition-colors hover:text-zinc-800 hover:decoration-zinc-500"
             >
               한빛정밀
@@ -178,7 +212,12 @@ export default function CompanyPage() {
             >
               <button
                 type="button"
-                onClick={() => setSelectedCompany(company)}
+                onClick={() => {
+                  setSelectedCompany(company);
+                  warmVisibility(company.id);
+                }}
+                onMouseEnter={() => warmVisibility(company.id)}
+                onFocus={() => warmVisibility(company.id)}
                 className="w-full text-left"
               >
                 <div className="flex items-start justify-between gap-3">

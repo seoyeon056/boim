@@ -43,6 +43,21 @@ export function uploadedCategoryNames(upload: StoredUpload | null): string[] {
     .map((category) => category.categoryName);
 }
 
+// 진단서 붙임 목록에 적을 "이름 + 부수".
+//
+// 예전에는 이름만 늘어놓고 끝에 "각 1부"를 붙였다. 거래명세서를 4장 올려도
+// 문서에는 1부라고 적혔다. 진단서는 근거로 쓰이는 문서라 실제 부수를 적는다.
+export function uploadedCategoryCopies(
+  upload: StoredUpload | null,
+): { name: string; count: number }[] {
+  return (upload?.categories ?? [])
+    .filter((category) => category.status === "uploaded")
+    .map((category) => ({
+      name: category.categoryName,
+      count: Math.max(1, category.fileCount),
+    }));
+}
+
 // "샘플 문서 불러오기"로 채운 진단인지.
 export function isSampleUpload(upload: StoredUpload | null): boolean {
   return Boolean(upload?.isSample);

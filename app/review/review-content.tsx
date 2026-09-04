@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { withCompany } from "@/lib/company-link";
+import { todayInKorea } from "@/lib/today";
 import {
   buildReviewGuidance,
   type ReviewStats,
@@ -74,7 +75,7 @@ function isValidDate(raw: string): boolean {
   return true;
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = todayInKorea();
 
 // 진단일(오늘) 이후 날짜인지. 과거 실적·성장 지표 계산에서 빠진다.
 function isFutureDate(raw: string): boolean {

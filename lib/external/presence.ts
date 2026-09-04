@@ -9,6 +9,7 @@ import { fetchEmployment } from "@/lib/external/employment";
 import { fetchPatentCount } from "@/lib/external/patents";
 import { fetchDisclosureCount } from "@/lib/external/disclosures";
 import { fetchDartProfile } from "@/lib/external/dart";
+import { remember } from "@/lib/external/cache";
 
 // 네 API를 병렬로 호출한다.
 //
@@ -37,7 +38,9 @@ async function findBizrNo(companyId: string): Promise<string | undefined> {
     return undefined;
   }
 
-  const profile = await fetchDartProfile(companyId);
+  const profile = await remember(`dart-profile:${companyId}`, () =>
+    fetchDartProfile(companyId),
+  );
   return profile?.bizrNo || undefined;
 }
 
@@ -49,8 +52,20 @@ export async function getExternalPresence(
 
   // 기업명을 못 찾은 경우(고유번호만 있고 DART 조회 실패). 빈 이름으로 외부를
   // 검색하면 엉뚱한 결과가 잡히므로 조회 자체를 건너뛴다.
+  //
+  // 건너뛴 것을 0건으로 두면 안 된다. 예전에는 그냥 빈 값(전부 0)을 돌려줘서,
+  // 없는 고유번호로 들어가면 화면이 "뉴스 0건·특허 0건·고용 0명·공시 0건"이라고
+  // 단정하고 AI 문장까지 "외부 노출이 전무하다"라고 적었다. 한 번도 조회하지
+  // 않고 내린 결론이다. 네 축을 모두 "확인 불가"로 둔다.
   if (companyName.trim() === "") {
-    return { ...fallback, companyId };
+    return {
+      companyId,
+      unavailable: ["news", "patent", "employment", "disclosure"],
+      newsCount: 0,
+      patentCount: 0,
+      employeeCount: 0,
+      disclosureCount: 0,
+    };
   }
 
   const isDemoCompany = hasSyntheticPresence(companyId);
@@ -64,11 +79,17 @@ export async function getExternalPresence(
     disclosure: Boolean(process.env.DART_SEARCH_KEY),
   } as const;
 
+  // 축마다 따로 기억한다. 실패한 축은 기억하지 않으므로 다음 화면에서 다시
+  // 물어본다(lib/external/cache.ts).
   const [news, employment, patent, disclosureCount] = await Promise.all([
-    fetchNewsCount(companyName),
-    fetchEmployment(companyName, bizrNo),
-    fetchPatentCount(companyName),
-    fetchDisclosureCount(companyName),
+    remember(`news:${companyName}`, () => fetchNewsCount(companyName)),
+    remember(`employment:${companyName}:${bizrNo ?? ""}`, () =>
+      fetchEmployment(companyName, bizrNo),
+    ),
+    remember(`patent:${companyName}`, () => fetchPatentCount(companyName)),
+    remember(`disclosure:${companyName}`, () =>
+      fetchDisclosureCount(companyName),
+    ),
   ]);
 
   // 값을 못 받은 축을 어떻게 다룰지 한곳에서 정한다.

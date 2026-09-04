@@ -13,6 +13,7 @@ import type {
 import { withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
 import { useUploadStore } from "./upload-store";
+import { setFlowOwner } from "@/lib/flow-owner";
 
 // ─────────────────────────────────────────────
 // 파일 선택 제한값 (실제 서버 업로드는 하지 않지만,
@@ -443,6 +444,10 @@ export function UploadContent({ companyId }: { companyId?: string }) {
     };
 
     sessionStorage.setItem("boimDocumentUpload", JSON.stringify(payload));
+
+    // 이 자료가 어느 기업의 진단에서 나왔는지 적어 둔다. 다른 기업 화면이
+    // 이걸 자기 것처럼 읽는 일을 막는다(lib/flow-owner.ts).
+    setFlowOwner(companyId);
 
     // 인식은 다음 화면(/processing)에서 한다. 파일은 UploadStoreProvider가
     // 들고 있어서 라우트를 옮겨도 살아 있고, 진행률을 실제 인식 진척으로
