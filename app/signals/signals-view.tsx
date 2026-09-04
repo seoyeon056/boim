@@ -62,7 +62,11 @@ function pickNotable(signals: Signals): string {
               ? "첫 거래 이후의 후속 접점을 만들어 두실 필요가 있습니다."
               : "이번 기간에 거래가 끊긴 곳이 있었는지 살펴보시는 편이 좋습니다.";
 
-    return `${josa(caution.label, "이/가")} ${caution.prefix}${caution.value}${caution.suffix}로 ${caution.note}에 해당합니다. ${action}`;
+    // note 는 "특정 거래처 의존 위험" 같은 명사구와 "거래 규모가 줄었음" 같은
+    // 서술형이 섞여 있다. 어느 한쪽에 맞춰 어미를 붙이면 다른 쪽이 깨진다
+    // ("거래 규모가 줄었음에 해당합니다", "거래 관계가 비교적 안정적가
+    // 확인됩니다"). 괄호에 그대로 넣어 문장 문법과 떼어 놓는다.
+    return `${josa(caution.label, "이/가")} ${caution.prefix}${caution.value}${caution.suffix}로 주의 판정을 받았습니다(${caution.note}). ${action}`;
   }
 
   // 주의가 없으면 가장 뚜렷한 긍정을 짚는다.
@@ -70,7 +74,7 @@ function pickNotable(signals: Signals): string {
     (item) => item.evaluable && item.tone === "positive",
   );
   if (best) {
-    return `${best.label} ${best.prefix}${best.value}${best.suffix}로 ${best.note}가 확인됩니다. 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
+    return `${josa(best.label, "이/가")} ${best.prefix}${best.value}${best.suffix}로 긍정 판정을 받았습니다(${best.note}). 이 흐름이 다음 기간에도 이어지는지 같은 기준으로 다시 재보시면 좋습니다.`;
   }
 
   return "여섯 지표 모두 뚜렷한 방향이 확인되지 않습니다. 거래 기록이 더 쌓인 뒤에 다시 보시는 편이 정확합니다.";
