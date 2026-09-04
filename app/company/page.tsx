@@ -47,6 +47,18 @@ export default function CompanyPage() {
 
   const latestRequestId = useRef(0);
 
+  // 검색어를 바꾼다. 같은 값이면 아무것도 지우지 않는다.
+  // 검색어가 그대로면 아래 effect 가 다시 돌지 않아 지운 결과를 다시 채우지
+  // 못한다. "한빛정밀"이 이미 적힌 상태에서 시연용 기업 링크를 누르면
+  // 결과가 사라지고 "정확히 일치하는 기업이 없습니다"가 떴다.
+  function updateQuery(next: string) {
+    if (next === query) return;
+    setQuery(next);
+    setCompanies([]);
+    setSelectedCompany(null);
+    setErrorMessage("");
+  }
+
   const normalizedQuery = query.trim();
   const hasQuery = normalizedQuery !== "";
 
@@ -114,12 +126,7 @@ export default function CompanyPage() {
             id="company-search"
             type="search"
             value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setCompanies([]);
-              setSelectedCompany(null);
-              setErrorMessage("");
-            }}
+            onChange={(event) => updateQuery(event.target.value)}
             placeholder=""
             autoComplete="off"
             className="h-[50px] w-full rounded-md border border-zinc-200 bg-white px-4 text-[16px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100"
@@ -128,12 +135,7 @@ export default function CompanyPage() {
             시연용 기업은{" "}
             <button
               type="button"
-              onClick={() => {
-                setQuery("한빛정밀");
-                setCompanies([]);
-                setSelectedCompany(null);
-                setErrorMessage("");
-              }}
+              onClick={() => updateQuery("한빛정밀")}
               className="font-medium text-zinc-500 underline decoration-zinc-300 decoration-dotted underline-offset-2 transition-colors hover:text-zinc-800 hover:decoration-zinc-500"
             >
               한빛정밀
