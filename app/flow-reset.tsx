@@ -14,6 +14,7 @@ export const FLOW_KEYS = [
   "boimAnalysisResult",
   "boimSettlement",
   "boimAiConsent",
+  "boimFlowCompany",
 ];
 
 // 진단 흐름이 브라우저에 남긴 값을 모두 지운다. 처음 화면과 "새 기업 진단"에서 쓴다.

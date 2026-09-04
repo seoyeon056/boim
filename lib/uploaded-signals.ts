@@ -1,6 +1,7 @@
 import type { Transaction } from "@/data/transactions";
 import { calculateSignals, type Signals } from "@/lib/signals";
 import { todayInKorea } from "@/lib/today";
+import { flowBelongsTo } from "@/lib/flow-owner";
 
 // 사용자가 올린 문서에서 뽑아 Step 04에서 검수까지 마친 거래로 성장 신호를 계산한다.
 //
@@ -79,6 +80,11 @@ export function readUploadedSignals(
     return null;
   }
 
+  // 남의 기업 진단에서 나온 자료면 없는 것으로 본다(lib/flow-owner.ts).
+  if (!flowBelongsTo(companyId)) {
+    return null;
+  }
+
   const raw = sessionStorage.getItem(ANALYSIS_STORAGE_KEY);
   if (!raw) {
     return null;
@@ -116,8 +122,13 @@ export function readUploadedSignals(
 export type SettlementSummary = { count: number; total: number };
 
 // 입금내역에서 확인한 입금 건수·합계. 매출에는 합산하지 않고 곁들여 보여주기만 한다.
-export function readSettlementSummary(): SettlementSummary | null {
+export function readSettlementSummary(
+  companyId: string | undefined,
+): SettlementSummary | null {
   if (typeof window === "undefined") {
+    return null;
+  }
+  if (!flowBelongsTo(companyId)) {
     return null;
   }
   const raw = sessionStorage.getItem(SETTLEMENT_STORAGE_KEY);

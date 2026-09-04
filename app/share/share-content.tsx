@@ -25,6 +25,7 @@ import {
 } from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
+import { flowBelongsTo } from "@/lib/flow-owner";
 
 // LLM에 넘길 판정 표기. 화면의 "긍정/주의"와 같은 말을 쓴다.
 const STATUS_TEXT = { positive: "긍정", neutral: "보통", caution: "주의" } as const;
@@ -77,7 +78,7 @@ export function ShareContent({
   // 업로드·검수한 거래는 브라우저(sessionStorage)에만 있고 서버는 못 본다.
   // 첫 클라이언트 렌더에서 한 번 읽는다(effect 안에서 setState 하지 않는다).
   const [uploaded] = useState(() => readUploadedSignals(companyId ?? ""));
-  const [settlement] = useState(() => readSettlementSummary());
+  const [settlement] = useState(() => readSettlementSummary(companyId));
 
   const signals: SignalsResult = uploaded ? uploaded.signals : EMPTY_SIGNALS;
   const hasData = Boolean(uploaded);
@@ -88,11 +89,16 @@ export function ShareContent({
 
   // 업로드 내역은 브라우저(sessionStorage)에만 있다. Step 05의 근거 문서
   // 목록과 같은 기록을 읽는다.
-  const upload = useSyncExternalStore(
+  const storedUpload = useSyncExternalStore(
     subscribeUpload,
     readUploadSnapshot,
     serverUploadSnapshot,
   );
+
+  // 다른 기업의 진단에서 남은 문서 목록이면 이 진단서의 근거가 아니다.
+  // 예전에는 한빛정밀로 진단을 끝낸 뒤 동일기연을 고르면, 동일기연 진단서
+  // 붙임에 한빛정밀이 올린 문서 10개가 그대로 실렸다(lib/flow-owner.ts).
+  const upload = flowBelongsTo(companyId) ? storedUpload : null;
   const evidenceDocs = uploadedCategoryCopies(upload);
   const sampleBased = isSampleUpload(upload);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -111,7 +117,7 @@ export function ShareContent({
         setVisibility(visibilityResult);
 
         // Step 05에서 이미 동의했고, 산정된 거래가 있을 때만 AI 종합 의견을 부른다.
-        if (!uploaded || !hasAiConsent()) {
+        if (!uploaded || !hasAiConsent(companyId)) {
           return;
         }
 
@@ -174,7 +180,7 @@ export function ShareContent({
   // 값이라, 외부 모델로 보낼지를 사용자가 정하게 한다.
   async function requestLlmDiagnosis() {
     if (!visibility || !signals || !hasData) return;
-    grantAiConsent();
+    grantAiConsent(companyId);
     setLlmState("loading");
     try {
       setLlmDiagnosis(

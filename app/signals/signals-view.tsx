@@ -117,14 +117,14 @@ export function SignalsView({ companyId }: { companyId?: string }) {
     setTransactionCount(uploaded.transactionCount);
     setExcludedCount(uploaded.excludedCount);
     setFutureExcludedCount(uploaded.futureExcludedCount);
-    setSettlement(readSettlementSummary());
+    setSettlement(readSettlementSummary(companyId));
     setView("ok");
   }, [companyId]);
 
   async function requestAiNotice() {
     if (!signals) return;
     // 여기서 한 번 동의하면 리포트에서 다시 묻지 않는다.
-    grantAiConsent();
+    grantAiConsent(companyId);
     setAiState("loading");
     try {
       // 거래처명은 보내지 않는다. 비율 숫자만 나가고, 응답의 마스킹 라벨을
