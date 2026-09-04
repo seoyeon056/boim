@@ -9,6 +9,7 @@ import { fetchEmployment } from "@/lib/external/employment";
 import { fetchPatentCount } from "@/lib/external/patents";
 import { fetchDisclosureCount } from "@/lib/external/disclosures";
 import { fetchDartProfile } from "@/lib/external/dart";
+import { remember } from "@/lib/external/cache";
 
 // 네 API를 병렬로 호출한다.
 //
@@ -37,7 +38,9 @@ async function findBizrNo(companyId: string): Promise<string | undefined> {
     return undefined;
   }
 
-  const profile = await fetchDartProfile(companyId);
+  const profile = await remember(`dart-profile:${companyId}`, () =>
+    fetchDartProfile(companyId),
+  );
   return profile?.bizrNo || undefined;
 }
 
@@ -76,11 +79,17 @@ export async function getExternalPresence(
     disclosure: Boolean(process.env.DART_SEARCH_KEY),
   } as const;
 
+  // 축마다 따로 기억한다. 실패한 축은 기억하지 않으므로 다음 화면에서 다시
+  // 물어본다(lib/external/cache.ts).
   const [news, employment, patent, disclosureCount] = await Promise.all([
-    fetchNewsCount(companyName),
-    fetchEmployment(companyName, bizrNo),
-    fetchPatentCount(companyName),
-    fetchDisclosureCount(companyName),
+    remember(`news:${companyName}`, () => fetchNewsCount(companyName)),
+    remember(`employment:${companyName}:${bizrNo ?? ""}`, () =>
+      fetchEmployment(companyName, bizrNo),
+    ),
+    remember(`patent:${companyName}`, () => fetchPatentCount(companyName)),
+    remember(`disclosure:${companyName}`, () =>
+      fetchDisclosureCount(companyName),
+    ),
   ]);
 
   // 값을 못 받은 축을 어떻게 다룰지 한곳에서 정한다.
