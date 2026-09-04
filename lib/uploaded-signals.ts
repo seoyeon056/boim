@@ -1,6 +1,6 @@
 import type { Transaction } from "@/data/transactions";
 import { calculateSignals, type Signals } from "@/lib/signals";
-import { localToday } from "@/lib/today";
+import { todayInKorea } from "@/lib/today";
 
 // 사용자가 올린 문서에서 뽑아 Step 04에서 검수까지 마친 거래로 성장 신호를 계산한다.
 //
@@ -52,7 +52,7 @@ function toTransaction(raw: unknown, companyId: string): Transaction | null {
 // 진단 시점(오늘) 이후의 거래는 과거 실적이 아니다. YYYY-MM-DD 문자열 비교로
 // 충분하다(둘 다 같은 형식).
 function today(): string {
-  return localToday();
+  return todayInKorea();
 }
 
 export type UploadedSignals = {
