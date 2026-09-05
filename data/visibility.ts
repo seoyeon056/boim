@@ -29,6 +29,8 @@ export type ExternalPresence = {
   // 국민연금 가입자 수. 채용공고 건수를 대신한다. 공고는 회사가 안 올리면
   // 0이지만 가입자 수는 의무 신고라 홍보를 안 하는 회사에도 남는다.
   employeeCount: number;
+  // 사업장이 한 페이지를 넘어 일부만 더한 값. patentCountIsAtLeast와 같은 의미다.
+  employeeCountIsAtLeast?: boolean;
   // 6개월 전 대비 증감(명). 비교할 과거 자료가 없으면 없다.
   employeeChange?: number;
   // 가입자 수의 기준 시점(YYYYMM).

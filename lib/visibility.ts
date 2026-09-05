@@ -33,6 +33,7 @@ export type Visibility = {
   patentCount: number;
   patentCountIsAtLeast?: boolean;
   employeeCount: number;
+  employeeCountIsAtLeast?: boolean;
   employeeChange?: number;
   employmentAsOf?: string;
   disclosureCount: number;
@@ -328,6 +329,7 @@ export function calculateVisibility(
     newsCountIsAtLeast: presence.newsCountIsAtLeast,
     patentCount: presence.patentCount,
     patentCountIsAtLeast: presence.patentCountIsAtLeast,
+    employeeCountIsAtLeast: presence.employeeCountIsAtLeast,
     employeeCount: presence.employeeCount,
     employeeChange: presence.employeeChange,
     employmentAsOf: presence.employmentAsOf,
@@ -373,7 +375,7 @@ export function calculateVisibility(
       metricFor(
         "employment",
         "고용 규모",
-        `${presence.employeeCount.toLocaleString()}명`,
+        `${presence.employeeCount.toLocaleString()}명${presence.employeeCountIsAtLeast ? " 이상" : ""}`,
         employment,
       ),
       metricFor(

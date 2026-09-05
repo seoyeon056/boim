@@ -51,8 +51,11 @@ export type EmploymentLookup =
   | { status: "failed" };
 
 export type Employment = {
-  // 최근 자료생성년월 기준 가입자 수. 같은 사업자번호의 사업장이 여럿이면 합산한다.
+  // 최근 자료생성년월 기준 가입자 수. 사업장이 여럿이면 합산한다.
   employeeCount: number;
+  // 사업장이 한 페이지를 넘어 일부만 더한 값이면 true. 그때 화면은 "N명 이상"
+  // 이라고 적는다. 특허 300건 이상과 같은 취급이다.
+  employeeCountIsAtLeast?: boolean;
   // 6개월 전 대비 증감(명). 비교할 과거 자료가 없으면 undefined.
   employeeChange?: number;
   // 최근 자료생성년월(YYYYMM). 화면에 기준 시점을 적기 위해 들고 다닌다.
@@ -64,6 +67,8 @@ type Row = {
   dataCrtYm: string;
   bizrPrefix: string;
   workplaceName: string;
+  // 이름이 회사명과 똑같은 사업장인지, 뒤에 부문·현장이 붙은 사업장인지.
+  match: "exact" | "division";
 };
 
 // (주)·주식회사·공백 같은 표기 차이를 지운다. 국민연금 쪽은 "(주)동일기연",
@@ -74,6 +79,57 @@ function normalize(name: string): string {
     .replace(/\((?:주|유|재|사)\)|[㈜㈔㈖]/g, "")
     .replace(/[\s·.,\-_'"]/g, "")
     .toLowerCase();
+}
+
+// 이 사업장이 이 회사의 것인지 본다.
+//
+// 국민연금은 법인이 아니라 사업장 단위로 등록된다. 그래서 큰 회사는 이름이
+// 회사명과 정확히 같은 행이 아예 없고, 부문과 현장으로만 흩어져 있다.
+// 실측(삼성물산 435건): 정확히 같은 이름 0건. 대신 이런 것들이 있다.
+//
+//   삼성물산(주) 패션부문                     ← 이 회사다
+//   삼성물산(주)건설부문 정규직                ← 이 회사다
+//   삼성물산(주)/일용/삼성서울병원 리모델링     ← 이 회사의 현장이다
+//   삼성물산강동어린이집                       ← 다른 사업장이다(번호도 다르다)
+//   (주)장원조경/일용/삼성물산_반포아파트...    ← 남의 회사 현장이다
+//
+// 그래서 두 가지만 본다. 회사명이 사업장명의 맨 앞에 오는가, 그리고 그 뒤가
+// 글자·숫자가 아닌가. 뒤에 글자가 바로 이어지면 다른 이름이다(강동어린이집).
+// 이름이 중간에 있으면 남의 현장이다(장원조경).
+const CORPORATE_FORM = /^(?:주식회사|유한회사|유한책임회사|합자회사|합명회사|\((?:주|유|재|사)\)|[㈜㈔㈖])/;
+
+// 앞에 붙은 법인 형태 표기를 지운다. "(주)엘지생활건강" → "엘지생활건강".
+function withoutLeadingForm(name: string): string {
+  return name.replace(/\s/g, "").replace(CORPORATE_FORM, "");
+}
+
+function matchKind(
+  workplaceName: string,
+  wantedNames: Set<string>,
+  wantedRaw: string[],
+): "exact" | "division" | null {
+  if (wantedNames.has(normalize(workplaceName))) {
+    return "exact";
+  }
+
+  const bare = withoutLeadingForm(workplaceName);
+  for (const wanted of wantedRaw) {
+    const head = withoutLeadingForm(wanted);
+    if (head === "" || !bare.startsWith(head)) {
+      continue;
+    }
+    const next = bare.slice(head.length);
+    // 회사명이 전부인데 normalize 로 안 걸렸다면 표기 차이일 뿐이다.
+    if (next === "") {
+      return "exact";
+    }
+    // 뒤에 글자나 숫자가 바로 이어지면 다른 이름이다.
+    if (!/^[\p{L}\p{N}]/u.test(next)) {
+      return "division";
+    }
+  }
+
+  return null;
 }
 
 function tagText(xml: string, tag: string): string {
@@ -170,12 +226,13 @@ async function callTwiceIfSlow(
   operation: string,
   params: Record<string, string>,
   timeoutMs: number,
+  retryAfterMs: number = RETRY_AFTER_MS,
 ): Promise<string | null> {
   const first = call(operation, params, timeoutMs);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const slow = new Promise<typeof SLOW>((resolve) => {
-    timer = setTimeout(() => resolve(SLOW), RETRY_AFTER_MS);
+    timer = setTimeout(() => resolve(SLOW), retryAfterMs);
   });
 
   try {
@@ -204,19 +261,39 @@ function shiftMonth(ym: string, back: number): string {
   return `${Math.floor(total / 12)}${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
-// 같은 사업자번호에 사업장이 여럿일 수 있다(본사·공장). 그 달의 가입자 수를
-// 모두 더해야 회사 전체 고용 규모가 된다.
+// 상세 조회를 한 번에 몇 개까지 띄울지.
+//
+// 사업장이 많은 회사는 이 조회가 수십 개가 된다(실측: 삼성물산 최근 월 기준
+// 30곳 남짓). 전부 한꺼번에 던지면 공공데이터포털 쪽에서 일부가 늦어지고,
+// 하나만 늦어도 합계를 포기하게 되어 고용 축이 통째로 "확인 불가"가 됐다.
+// 실측: 삼성물산 15.3초 뒤 확인 불가, 다른 기업은 모두 정상.
+const DETAIL_BATCH = 6;
+
+// 상세 조회는 60ms 대로 끝난다. 검색과 달리 문턱을 짧게 둬야 의미가 있다.
+const DETAIL_RETRY_AFTER_MS = 1200;
+
+// 같은 사업자번호에 사업장이 여럿일 수 있다(본사·공장·부문). 그 달의 가입자
+// 수를 모두 더해야 회사 전체 고용 규모가 된다.
 async function headcountAt(rows: Row[], ym: string): Promise<number | null> {
   const target = rows.filter((row) => row.dataCrtYm === ym);
   if (target.length === 0) {
     return null;
   }
 
-  const details = await Promise.all(
-    target.map((row) =>
-      call(DETAIL, { seq: row.seq, numOfRows: "1" }, DETAIL_TIMEOUT_MS),
-    ),
-  );
+  const details: (string | null)[] = [];
+  for (let at = 0; at < target.length; at += DETAIL_BATCH) {
+    const batch = await Promise.all(
+      target.slice(at, at + DETAIL_BATCH).map((row) =>
+        callTwiceIfSlow(
+          DETAIL,
+          { seq: row.seq, numOfRows: "1" },
+          DETAIL_TIMEOUT_MS,
+          DETAIL_RETRY_AFTER_MS,
+        ),
+      ),
+    );
+    details.push(...batch);
+  }
 
   let sum = 0;
   for (const body of details) {
@@ -283,9 +360,11 @@ export async function fetchEmployment(
     return params;
   };
 
-  // 한 번 조회해서 이름이 정확히 같은 사업장만 남긴다.
+  // 한 번 조회해서 이 회사의 사업장만 남긴다.
   // 전부 실패하면 null (못 찾은 것과 구분해야 한다).
-  async function lookUp(prefix: string): Promise<Row[] | null> {
+  async function lookUp(
+    prefix: string,
+  ): Promise<{ rows: Row[]; truncated: boolean } | null> {
     const listings = await Promise.all(
       searchNames.map((word) =>
         callTwiceIfSlow(SEARCH, searchParams(word, prefix), SEARCH_TIMEOUT_MS),
@@ -297,27 +376,41 @@ export async function fetchEmployment(
       return null;
     }
 
-    return listings
-      .filter((body): body is string => body !== null)
+    const bodies = listings.filter((body): body is string => body !== null);
+
+    // 한 페이지만 받는다. 사업장이 그보다 많으면 합계가 실제보다 작으므로
+    // "이상"을 붙여 내보낸다(실측: 삼성물산 435건).
+    const truncated = bodies.some((body) => {
+      const total = Number(tagText(body, "totalCount"));
+      return Number.isFinite(total) && total > PAGE_SIZE;
+    });
+
+    const rows = bodies
       .flatMap(itemBlocks)
-      .map((block) => ({
-        seq: tagText(block, "seq"),
-        dataCrtYm: tagText(block, "dataCrtYm"),
-        bizrPrefix: bizrPrefix(tagText(block, "bzowrRgstNo")),
-        workplaceName: tagText(block, "wkplNm"),
-      }))
+      .map((block) => {
+        const workplaceName = tagText(block, "wkplNm");
+        return {
+          seq: tagText(block, "seq"),
+          dataCrtYm: tagText(block, "dataCrtYm"),
+          bizrPrefix: bizrPrefix(tagText(block, "bzowrRgstNo")),
+          workplaceName,
+          match: matchKind(workplaceName, wanted, searchNames),
+        };
+      })
       // wkplNm 은 부분일치 검색이라 "삼성전자"에 협력사 현장명까지 딸려 온다
-      // ("(주)부일건화-(일용)삼성전자 고창 CDC 물류센터"). 이름이 정확히 같은
-      // 사업장만 남긴다.
+      // ("(주)부일건화-(일용)삼성전자 고창 CDC 물류센터"). 남의 현장을 뺀다.
       .filter(
-        (row) => row.seq !== "" && wanted.has(normalize(row.workplaceName)),
+        (row): row is Row => row.seq !== "" && row.match !== null,
       );
+
+    return { rows, truncated };
   }
 
-  let rows = await lookUp(wantedPrefix);
-  if (rows === null) {
+  let found = await lookUp(wantedPrefix);
+  if (found === null) {
     return { status: "failed" };
   }
+  let rows = found.rows;
 
   // 번호로 좁혀서 찾았는지, 번호를 놓고 찾았는지. 아래 소유 판정이 이걸 본다.
   let effectivePrefix = wantedPrefix;
@@ -335,7 +428,8 @@ export async function fetchEmployment(
     if (withoutPrefix === null) {
       return { status: "failed" };
     }
-    rows = withoutPrefix;
+    found = withoutPrefix;
+    rows = withoutPrefix.rows;
     effectivePrefix = "";
   }
 
@@ -346,21 +440,31 @@ export async function fetchEmployment(
   // 두 이름으로 조회했으면 같은 사업장이 두 번 들어올 수 있다. seq 로 접는다.
   const unique = [...new Map(rows.map((row) => [row.seq, row])).values()];
 
+  // 이름이 회사명과 똑같은 사업장이 있으면 그것만 본다. 부문·현장은 그 아래에
+  // 딸린 것이라 함께 더하면 본사 규모를 부풀린다.
+  const exact = unique.filter((row) => row.match === "exact");
+  const candidates = exact.length > 0 ? exact : unique;
+
   // 이름이 같은 별개 회사가 실제로 있다(반도체 소자를 만드는 동일기연과
   // 난방보일러를 만드는 동일기연). DART가 준 사업자등록번호로 가른다.
-  const prefixes = [...new Set(unique.map((row) => row.bizrPrefix))];
+  const prefixes = [...new Set(candidates.map((row) => row.bizrPrefix))];
   const owned =
     effectivePrefix !== ""
-      ? unique.filter((row) => row.bizrPrefix === effectivePrefix)
-      : unique;
+      ? candidates.filter((row) => row.bizrPrefix === effectivePrefix)
+      : candidates;
 
   if (owned.length === 0) {
     return { status: "not-found" };
   }
 
-  // 번호로 가리지 못했는데 후보가 여럿이면 여기서 멈춘다. 아무거나 고르면 다른
-  // 회사의 고용 규모를 이 회사 것인 양 보여주게 된다.
-  if (effectivePrefix === "" && prefixes.length > 1) {
+  // 번호로 가리지 못했는데 이름이 똑같은 후보가 여럿이면 여기서 멈춘다. 아무거나
+  // 고르면 다른 회사의 고용 규모를 이 회사 것인 양 보여주게 된다.
+  //
+  // 부문·현장으로 찾은 경우에는 멈추지 않는다. 이름 뒤에 붙은 것이 서로 달라
+  // 애초에 헷갈릴 대상이 아니고(패션부문·건설부문·에버랜드리조트), 한 법인이
+  // 부문마다 다른 사업자번호를 쓰는 것이 정상이기 때문이다. 실측(삼성물산):
+  // 468850 건설, 135850 리조트, 101854 패션, 791850 상사.
+  if (effectivePrefix === "" && exact.length > 0 && prefixes.length > 1) {
     return { status: "not-found" };
   }
 
@@ -379,6 +483,8 @@ export async function fetchEmployment(
     status: "ok",
     value: {
       employeeCount,
+      // 사업장 목록을 한 페이지만 받았고 실제로 더 있었다면, 더한 값은 하한이다.
+      employeeCountIsAtLeast: found.truncated || undefined,
       employeeChange: past === null ? undefined : employeeCount - past,
       asOf: latest,
     },

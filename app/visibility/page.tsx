@@ -59,6 +59,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const capped = [
     visibility.patentCountIsAtLeast ? "특허 300건" : "",
     visibility.newsCountIsAtLeast ? "뉴스 100건" : "",
+    visibility.employeeCountIsAtLeast ? "국민연금 사업장 100곳" : "",
   ].filter((label) => label !== "");
   const atLeastNote =
     capped.length > 0
@@ -133,7 +134,7 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
           그만큼까지만 실제로 세어 본 값이라는 뜻이지, 그 위를 모른다고 해서
           추정치를 적은 것이 아니다. 한도에 걸리지 않은 기업에는 뜨지 않는다.
         */}
-        {(visibility.patentCountIsAtLeast || visibility.newsCountIsAtLeast) && (
+        {atLeastNote !== "" && (
           <p className="mt-2 px-6 text-[12px] leading-5 text-zinc-400">
             {atLeastNote}
           </p>

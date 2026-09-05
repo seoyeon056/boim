@@ -142,6 +142,7 @@ export async function getExternalPresence(
     newsCount: newsAxis.answered?.count ?? newsAxis.count,
     newsCountIsAtLeast: newsAxis.answered?.isAtLeast,
     employeeCount: employmentAxis.answered?.employeeCount ?? employmentAxis.count,
+    employeeCountIsAtLeast: employmentAxis.answered?.employeeCountIsAtLeast,
     employeeChange: employmentAxis.answered?.employeeChange,
     employmentAsOf: employmentAxis.answered?.asOf,
     patentCount: patentAxis.answered?.count ?? patentAxis.count,
