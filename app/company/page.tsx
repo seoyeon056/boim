@@ -270,9 +270,20 @@ export default function CompanyPage() {
 
               {isSelected && isDiagnosing && (
                 <div className="mt-3">
+                  {/*
+                    안내 문구가 실제 조회보다 훨씬 빨리 지나가면 안 된다.
+                    기본 간격(0.9초)이면 세 문구가 1.8초 만에 끝나고, 그 뒤로
+                    화면이 멈춘 것처럼 보인다. 실측으로 이 조회는 배포본에서
+                    9~30초가 걸린다(국민연금 사업장 조회가 대부분이다).
+                    문구 간격을 늘려 두고, 그래도 끝나지 않으면 기다리는 중임을
+                    직접 알린다.
+                  */}
                   <LoadingSteps
                     title="외부 가시성 점수 분석 중"
                     steps={DIAGNOSE_STEPS}
+                    stepMs={3500}
+                    slowAfterMs={12000}
+                    slowNote="국민연금 사업장 조회가 길어지고 있습니다. 공공데이터 응답을 기다리는 중이며, 곧 결과 화면으로 넘어갑니다."
                   />
                 </div>
               )}
