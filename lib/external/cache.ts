@@ -30,9 +30,29 @@ function sweep(now: number) {
   }
 }
 
+// 기억해도 되는 값인지 판단한다.
+//
+// null·undefined 는 "못 받았다"는 뜻이라 기억하지 않는다. 그런데 고용 조회는
+// null 대신 { status: "failed" } 같은 객체를 돌려주게 바뀌었고, 객체는 null 이
+// 아니므로 실패가 5분 동안 캐시에 굳었다. 위의 "실패는 기억하지 않는다"가 그
+// 순간부터 사실이 아니게 된 것이다.
+//
+// 증상: 국민연금이 한 번 대답하지 않으면 그 뒤 5분간 어느 화면에서 물어도
+// 곧바로 "확인 불가"가 나온다. 다시 부르지 않으므로 응답이 0.1초 만에 오고,
+// 사용자에게는 조회가 아주 빨리 끝난 것처럼 보인다.
+function worthKeeping(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === "object" && "status" in value) {
+    return (value as { status: unknown }).status !== "failed";
+  }
+  return true;
+}
+
 /**
- * `load()` 의 결과를 `key` 로 기억한다. null·undefined 는 기억하지 않는다.
- * 조회에 실패했다는 뜻이므로 다음에 다시 물어봐야 한다.
+ * `load()` 의 결과를 `key` 로 기억한다. 조회에 실패한 결과는 기억하지 않는다
+ * (null·undefined, 그리고 `status: "failed"`). 다음에 다시 물어봐야 한다.
  */
 export async function remember<T>(
   key: string,
@@ -52,7 +72,7 @@ export async function remember<T>(
 
   const pending = load()
     .then((value) => {
-      if (value !== null && value !== undefined) {
+      if (worthKeeping(value)) {
         sweep(now);
         store.set(key, { value, expiresAt: Date.now() + TTL_MS });
       }

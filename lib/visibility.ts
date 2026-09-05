@@ -24,6 +24,10 @@ export type Visibility = {
   // 읽으면 안 된다.
   unavailable: ExternalSource[];
 
+  // 확인하지 못한 축의 사유. 화면 표와 AI 문장이 같은 사유를 쓰게 하려고
+  // 여기까지 들고 온다("찾지 못함"과 "응답 없음"은 다른 말이다).
+  unavailableReason?: Partial<Record<ExternalSource, "failed" | "not-found">>;
+
   newsCount: number;
   newsCountIsAtLeast?: boolean;
   patentCount: number;
@@ -318,6 +322,7 @@ export function calculateVisibility(
     companyId: presence.companyId,
     company: companyName,
     unavailable,
+    unavailableReason: presence.unavailableReason,
 
     newsCount: presence.newsCount,
     newsCountIsAtLeast: presence.newsCountIsAtLeast,

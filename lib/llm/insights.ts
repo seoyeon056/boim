@@ -9,6 +9,20 @@ import { remember } from "@/lib/external/cache";
 // 같은 문장을 만들어 버리고, 그 문장이 화면과 진단서에 그대로 실린다.
 function describeCounts(visibility: Visibility): string {
   const unavailable = new Set(visibility.unavailable);
+
+  // 사유를 그대로 넘긴다. 예전에는 어느 축이든 "외부 서비스 응답 없음"이라고
+  // 적어 보냈다. 그래서 화면 오른쪽 표에는 "국민연금 가입 사업장에서 찾지 못함"
+  // 이라고 적혀 있는데 바로 아래 AI 문장은 "외부 서비스 응답 불가"라고 말하는,
+  // 한 화면 안에서 서로 어긋나는 일이 실제로 있었다(삼성물산).
+  const reasonText = (key: "news" | "patent" | "employment" | "disclosure") => {
+    if (visibility.unavailableReason?.[key] === "failed") {
+      return "조회 실패";
+    }
+    if (key === "employment") return "조회했으나 해당 사업장을 찾지 못함";
+    if (key === "disclosure") return "조회했으나 등록 법인에서 찾지 못함";
+    return "조회 실패";
+  };
+
   const value = (
     key: "news" | "patent" | "employment" | "disclosure",
     label: string,
@@ -17,7 +31,7 @@ function describeCounts(visibility: Visibility): string {
     isAtLeast?: boolean,
   ) =>
     unavailable.has(key)
-      ? `${label} 확인 불가(외부 서비스 응답 없음, 값을 추측하지 마세요)`
+      ? `${label} 확인 불가(${reasonText(key)}, 값을 추측하지 말고 사유를 바꿔 쓰지 마세요)`
       : `${label} ${count.toLocaleString()}${unit}${isAtLeast ? " 이상" : ""}`;
 
   return [

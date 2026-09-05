@@ -270,44 +270,74 @@ export async function fetchEmployment(
   // 이름이 일치하는 사업장 수는 같거나 더 많다). 전체 번호(10자리)로는 0건이
   // 나오므로 공개되는 앞 6자리를 쓴다.
   const wantedPrefix = bizrPrefix(bizrNo ?? "");
-  const searchParams = (word: string): Record<string, string> => {
+  const wanted = new Set(searchNames.map(normalize));
+
+  const searchParams = (word: string, prefix: string): Record<string, string> => {
     const params: Record<string, string> = {
       wkplNm: word,
       numOfRows: String(PAGE_SIZE),
     };
-    if (wantedPrefix !== "") {
-      params.bzowrRgstNo = wantedPrefix;
+    if (prefix !== "") {
+      params.bzowrRgstNo = prefix;
     }
     return params;
   };
 
-  const listings = await Promise.all(
-    searchNames.map((word) =>
-      callTwiceIfSlow(SEARCH, searchParams(word), SEARCH_TIMEOUT_MS),
-    ),
-  );
+  // 한 번 조회해서 이름이 정확히 같은 사업장만 남긴다.
+  // 전부 실패하면 null (못 찾은 것과 구분해야 한다).
+  async function lookUp(prefix: string): Promise<Row[] | null> {
+    const listings = await Promise.all(
+      searchNames.map((word) =>
+        callTwiceIfSlow(SEARCH, searchParams(word, prefix), SEARCH_TIMEOUT_MS),
+      ),
+    );
 
-  // 둘 다 실패했을 때만 포기한다. 하나라도 대답했으면 그걸로 판단한다.
-  if (listings.every((body) => body === null)) {
+    // 둘 다 실패했을 때만 포기한다. 하나라도 대답했으면 그걸로 판단한다.
+    if (listings.every((body) => body === null)) {
+      return null;
+    }
+
+    return listings
+      .filter((body): body is string => body !== null)
+      .flatMap(itemBlocks)
+      .map((block) => ({
+        seq: tagText(block, "seq"),
+        dataCrtYm: tagText(block, "dataCrtYm"),
+        bizrPrefix: bizrPrefix(tagText(block, "bzowrRgstNo")),
+        workplaceName: tagText(block, "wkplNm"),
+      }))
+      // wkplNm 은 부분일치 검색이라 "삼성전자"에 협력사 현장명까지 딸려 온다
+      // ("(주)부일건화-(일용)삼성전자 고창 CDC 물류센터"). 이름이 정확히 같은
+      // 사업장만 남긴다.
+      .filter(
+        (row) => row.seq !== "" && wanted.has(normalize(row.workplaceName)),
+      );
+  }
+
+  let rows = await lookUp(wantedPrefix);
+  if (rows === null) {
     return { status: "failed" };
   }
 
-  const wanted = new Set(searchNames.map(normalize));
-  const rows: Row[] = listings
-    .filter((body): body is string => body !== null)
-    .flatMap(itemBlocks)
-    .map((block) => ({
-      seq: tagText(block, "seq"),
-      dataCrtYm: tagText(block, "dataCrtYm"),
-      bizrPrefix: bizrPrefix(tagText(block, "bzowrRgstNo")),
-      workplaceName: tagText(block, "wkplNm"),
-    }))
-    // wkplNm 은 부분일치 검색이라 "삼성전자"에 협력사 현장명까지 딸려 온다
-    // ("(주)부일건화-(일용)삼성전자 고창 CDC 물류센터"). 이름이 정확히 같은
-    // 사업장만 남긴다.
-    .filter(
-      (row) => row.seq !== "" && wanted.has(normalize(row.workplaceName)),
-    );
+  // 번호로 좁혀서 찾았는지, 번호를 놓고 찾았는지. 아래 소유 판정이 이걸 본다.
+  let effectivePrefix = wantedPrefix;
+
+  // 번호로 걸렀는데 한 건도 안 남으면, 번호 없이 한 번 더 본다.
+  //
+  // 전자공시가 주는 사업자등록번호는 법인 본사 번호인데, 국민연금은 사업장별로
+  // 등록되고 그 번호가 본사와 다를 수 있다. 실측(삼성물산): 전자공시 104812·
+  // 202814, 국민연금 사업장 135850·468850. 번호를 걸면 435건이 0건이 되고
+  // 0.16초 만에 "찾지 못함"이 나온다 — 부르지도 않고 없다고 답한 셈이다.
+  //
+  // 번호가 맞는 흔한 경우에는 이 두 번째 조회가 아예 일어나지 않는다.
+  if (rows.length === 0 && wantedPrefix !== "") {
+    const withoutPrefix = await lookUp("");
+    if (withoutPrefix === null) {
+      return { status: "failed" };
+    }
+    rows = withoutPrefix;
+    effectivePrefix = "";
+  }
 
   if (rows.length === 0) {
     return { status: "not-found" };
@@ -320,16 +350,17 @@ export async function fetchEmployment(
   // 난방보일러를 만드는 동일기연). DART가 준 사업자등록번호로 가른다.
   const prefixes = [...new Set(unique.map((row) => row.bizrPrefix))];
   const owned =
-    wantedPrefix !== ""
-      ? unique.filter((row) => row.bizrPrefix === wantedPrefix)
+    effectivePrefix !== ""
+      ? unique.filter((row) => row.bizrPrefix === effectivePrefix)
       : unique;
 
   if (owned.length === 0) {
     return { status: "not-found" };
   }
 
-  // 번호를 못 받았는데 후보가 여럿이면 여기서 멈춘다.
-  if (wantedPrefix === "" && prefixes.length > 1) {
+  // 번호로 가리지 못했는데 후보가 여럿이면 여기서 멈춘다. 아무거나 고르면 다른
+  // 회사의 고용 규모를 이 회사 것인 양 보여주게 된다.
+  if (effectivePrefix === "" && prefixes.length > 1) {
     return { status: "not-found" };
   }
 
