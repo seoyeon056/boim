@@ -12,6 +12,7 @@
 // 형태소 단위로 느슨하게 매칭하는 듯) 응답의 Applicant 필드가 검색어를 실제로
 // 포함하는 항목만 다시 한번 걸러서 센다.
 import { toKoreanLetterSpelling } from "@/lib/korean";
+import { runTwiceIfSlow } from "@/lib/external/retry";
 
 function normalizeCompanyName(value: string): string {
   return value.replace(/\s+/g, "").toLowerCase();
@@ -48,6 +49,17 @@ const MAX_COUNTED = 300;
 
 // 한 번에 상한까지 받으므로 예전 페이지 단위보다 넉넉히 잡는다.
 const REQUEST_TIMEOUT_MS = 20000;
+
+// 이 시간 안에 답이 없으면 같은 요청을 한 번 더 띄운다(lib/external/retry.ts).
+//
+// 실측(같은 요청 12회): 엘지전자 1.0~1.4초, 동일기연 0.44~0.75초로 평소에는
+// 매우 안정적이다. 그런데 같은 요청이 20초 시간 초과로 끝난 적도 있었다.
+// 왜 그런지는 KIPRIS 쪽 사정이라 알 수 없으므로, 느릴 때를 전제로 둔다.
+//
+// 평소 응답보다 세 배쯤 위에 둬서 보통은 두 번째 요청이 나가지 않는다.
+// 첫 요청이 멈추면 4초 뒤 두 번째가 나가고 1초 안팎에 답이 온다. 20초를
+// 통째로 기다리던 것이 5초 안팎으로 줄어든다.
+const RETRY_AFTER_MS = 4000;
 
 export type PatentCountResult = {
   count: number;
@@ -108,7 +120,7 @@ export async function fetchPatentCount(
   };
 
   try {
-    const page = await readPage(1);
+    const page = await runTwiceIfSlow(() => readPage(1), RETRY_AFTER_MS);
 
     // 총건수를 못 읽었으면 본 것만 말한다.
     if (!Number.isFinite(page.total)) {
