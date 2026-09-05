@@ -45,7 +45,9 @@ export type SignalItem = {
 // 2026년 상반기였기 때문인데, 사용자가 8월 거래명세서를 올리면 전부 "최근"으로
 // 몰려 이전 기간이 비고 증가율이 늘 0이 된다.
 // 가장 최근 거래일을 기준으로 3개월씩 끊으면 어떤 기간의 문서든 동작한다.
-const WINDOW_MONTHS = 3;
+// 프롬프트에도 이 값을 그대로 넘긴다(app/api/*). 문장이 "전년 대비"처럼
+// 없는 기간을 지어내지 않도록, 비교 구간을 코드와 같은 값으로 알려 준다.
+export const WINDOW_MONTHS = 3;
 
 function monthIndex(date: string): number {
   const [year, month] = date.split("-").map(Number);

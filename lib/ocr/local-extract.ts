@@ -237,20 +237,45 @@ function findHeader(lines: Cell[][]): { index: number; columns: ColumnRanges } {
 }
 
 // 헤더 셀과 가로로 가장 많이 겹치는 셀을 그 열의 값으로 본다.
-function cellForColumn(row: Cell[], header: Cell | undefined): Cell | undefined {
+// 이 열의 값으로 쓸 셀 하나. 없으면 undefined.
+//
+// "가장 가까운 셀"만으로는 부족하다. 어떤 칸이 비어 있으면 옆 열의 값이 그
+// 자리로 끌려온다. 실측: 거래처를 비워 둔 엑셀 행에서 거래처명 헤더(중심 150)
+// 기준으로 날짜 셀(50)과 품목 셀(250)이 똑같이 100만큼 떨어져 있어, 먼저 만난
+// 날짜가 거래처로 뽑혔다. 화면에는 거래처가 "2026-08-10"인 거래가 생겼고 확인
+// 대상으로도 걸리지 않아, 없는 거래처 한 곳이 지표에 그대로 들어갔다.
+//
+// 그래서 셀마다 "가장 가까운 헤더"를 먼저 정하고, 그게 이 열일 때만 값으로
+// 쓴다. 자기 열에 이미 속한 셀은 다른 열이 데려가지 못한다.
+function cellForColumn(
+  row: Cell[],
+  header: Cell | undefined,
+  allHeaders: Cell[] = [],
+): Cell | undefined {
   if (!header) {
     return undefined;
   }
   const headerCenter = centerX(header);
+  const others = allHeaders.filter((other) => other !== header);
+
   let best: Cell | undefined;
   let bestDistance = Infinity;
   for (const cell of row) {
     const distance = Math.abs(centerX(cell) - headerCenter);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = cell;
+    if (distance >= bestDistance) {
+      continue;
     }
+    // 다른 열의 머리글에 더 가까우면 그 열의 값이다.
+    const closerElsewhere = others.some(
+      (other) => Math.abs(centerX(cell) - centerX(other)) < distance,
+    );
+    if (closerElsewhere) {
+      continue;
+    }
+    bestDistance = distance;
+    best = cell;
   }
+
   // 헤더 폭의 1.5배보다 멀면 다른 열이다.
   return best && bestDistance <= header.box.width * 1.5 ? best : undefined;
 }
@@ -351,9 +376,14 @@ function findCustomer(lines: Cell[][]): { value: string; confidence: number } {
           confidence: cell.confidence,
         };
       }
-      // 라벨 옆 셀에 값이 있는 경우
+      // 라벨 옆 셀에 값이 있는 경우.
+      //
+      // 표의 머리글 줄은 걸러야 한다. "거래일자 | 거래처명 | 적요 | 공급가액"
+      // 처럼 열 이름이 늘어선 줄에서는 "거래처명" 다음 칸이 옆 열의 이름("적요")
+      // 이지 거래처가 아니다. 실측: 거래처를 비워 둔 행이 이 값을 물려받아
+      // 거래처가 "적요"인 거래가 생겼고, 없는 거래처 한 곳이 지표에 들어갔다.
       const next = row[row.indexOf(cell) + 1];
-      if (next && looksLikeCompany(next.text)) {
+      if (next && !isLabelLike(next.text) && looksLikeCompany(next.text)) {
         return {
           value: cleanCompanyName(
             stripCustomerDecoration(next.text + wrappedTail(lines, index, next)),
@@ -522,6 +552,11 @@ export function termsFromOcr(result: OcrResult): DocumentTerms {
 export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
   const lines = result.lines ?? [];
   const { index: headerIndex, columns } = findHeader(lines);
+
+  // 셀이 어느 열에 속하는지 가리려면 열 머리글 전부를 알아야 한다.
+  const headerCells = Object.values(columns).filter(
+    (cell): cell is Cell => cell !== undefined,
+  );
   const customer = findCustomer(lines);
 
   // 헤더가 없으면 표가 아니다. 억지로 훑으면 "거래일자: 2026-03-02" 한 줄에서
@@ -540,7 +575,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
     //   2) "08/25"처럼 연도가 빠진 값 + 문서 날짜의 연도
     //   3) 행에 날짜가 아예 없으면 문서 날짜 (견적서처럼 날짜 열이 없는 표)
     const dateCell =
-      cellForColumn(row, columns.date) ??
+      cellForColumn(row, columns.date, headerCells) ??
       row.find((cell) => parseDate(cell.text) !== null);
     const date =
       (dateCell ? parseDate(dateCell.text) : null) ??
@@ -550,7 +585,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
       continue;
     }
 
-    const amountCell = cellForColumn(row, columns.amount);
+    const amountCell = cellForColumn(row, columns.amount, headerCells);
     // 금액 열을 못 찾으면 그 행에서 가장 큰 숫자를 금액으로 본다(단가·수량보다 크다).
     const amount =
       (amountCell ? parseAmount(amountCell.text) : null) ??
@@ -559,7 +594,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
         .map((cell) => parseAmount(cell.text) ?? 0)
         .reduce((max, value) => Math.max(max, value), 0);
 
-    const itemCell = cellForColumn(row, columns.item);
+    const itemCell = cellForColumn(row, columns.item, headerCells);
 
     // 품목이 비어 있는 행은 표의 장식 줄이거나 세금계산서의 요약 칸이다.
     // 실측에서 세금계산서 텍스트 레이어가 품목 없이 금액만 든 행을 5개 만들었다.
@@ -589,7 +624,7 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
     // 없는 거래처가 됐다(실측: 파일에는 94건·6곳인데 화면은 73건·5곳이었다).
     //
     // 행에 거래처 열이 없으면 예전처럼 문서 상단 라벨을 쓴다.
-    const customerCell = cellForColumn(row, columns.customer);
+    const customerCell = cellForColumn(row, columns.customer, headerCells);
     const rowCustomer =
       customerCell && looksLikeCompany(customerCell.text)
         ? {
@@ -598,8 +633,8 @@ export function rowsFromOcr(result: OcrResult): ExtractedTransactionRow[] {
           }
         : customer;
 
-    const quantityCell = cellForColumn(row, columns.quantity);
-    const unitPriceCell = cellForColumn(row, columns.unitPrice);
+    const quantityCell = cellForColumn(row, columns.quantity, headerCells);
+    const unitPriceCell = cellForColumn(row, columns.unitPrice, headerCells);
     const quantity = quantityCell ? parseAmount(quantityCell.text) : null;
     const unitPrice = unitPriceCell ? parseAmount(unitPriceCell.text) : null;
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateDiagnosisText } from "@/lib/llm/providers";
 import { MASKED_CUSTOMER_LABEL } from "@/lib/llm/customer-mask";
+import { WINDOW_MONTHS } from "@/lib/signals";
 
 // 성장 리포트의 종합 의견.
 //
@@ -103,6 +104,9 @@ ${describeExternalCounts(body)}
 - 4문장: 다음에 확인하거나 보완해야 할 것을 한 가지만 제시하세요.
 - 수치를 단순히 나열하지 말고, 그 수치가 무엇을 뜻하는지 해석하세요.
 - 신용평가처럼 단정하지 말고 참고 자료의 어조를 유지하세요.
+- 비교 구간을 지어내지 마세요. 증가율과 추세는 모두 최근 ${WINDOW_MONTHS}개월과 그
+  직전 ${WINDOW_MONTHS}개월을 견준 값입니다. "전년 대비", "작년보다", "분기 대비"처럼
+  주어지지 않은 기간 표현을 쓰면 근거가 틀린 문장이 됩니다.
 - 지표 이름은 위에 적힌 그대로 쓰세요. "반복거래율"을 "재구매율"이나 "재방문율"로
   바꾸지 마세요. 화면·진단서와 같은 말을 써야 읽는 사람이 같은 지표로 알아봅니다.
 - 번호나 기호를 붙이지 말고 줄글로 이어 쓰세요.

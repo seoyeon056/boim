@@ -29,6 +29,26 @@ function getOpenAI(): OpenAI {
     return openai;
 }
 
+// 화면에 없는 지표 이름을 쓰지 못하게 한다.
+//
+// 프롬프트에 "지표 이름은 적힌 그대로 쓰라"고 적어 두었지만 이 모델은 자주
+// 어겼다(진단서 프롬프트 3회 중 2회가 "반복거래율"을 "재구매율"·"재방문"으로
+// 바꿔 썼다). 심사자가 진단서와 화면을 나란히 놓고 보면 없는 지표를 본 셈이
+// 되므로, 모델의 준수 여부에 맡기지 않고 받은 문장에서 되돌린다.
+//
+// 긴 것부터 바꾼다("재구매율"을 "재구매"보다 먼저 처리해야 한다).
+const TERM_FIXES: [RegExp, string][] = [
+    [/재구매율|재방문율|재구매 비율/g, "반복거래율"],
+    [/재구매|재방문/g, "반복 거래"],
+];
+
+function toScreenTerms(text: string): string {
+    return TERM_FIXES.reduce(
+        (out, [pattern, term]) => out.replace(pattern, term),
+        text,
+    );
+}
+
 export async function generateDiagnosisText(prompt: string): Promise<string> {
     const completion = await getOpenAI().chat.completions.create({
         model: "gpt-5-nano", // 2026-08 기준 가장 저렴한 범용 채팅 모델 (입력 $0.05, 출력 $0.40 / 100만 토큰)
@@ -43,5 +63,5 @@ export async function generateDiagnosisText(prompt: string): Promise<string> {
         // "minimal" 은 1.2초로 더 빠르지만 근거 없는 문장이 섞여 쓰지 않는다.
         reasoning_effort: "low",
     });
-    return completion.choices[0]?.message?.content ?? "";
+    return toScreenTerms(completion.choices[0]?.message?.content ?? "");
 }

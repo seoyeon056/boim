@@ -72,6 +72,9 @@ function itemBlocks(xml: string): string[] {
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) => m[1]);
 }
 
+// "아직 안 왔다"를 나타내는 표식. null 은 이미 "못 받았다"는 뜻으로 쓰고 있다.
+const SLOW = Symbol("slow");
+
 async function call(
   operation: string,
   params: Record<string, string>,
@@ -102,6 +105,75 @@ async function call(
     return tagText(body, "resultCode") === "00" ? body : null;
   } catch {
     return null;
+  }
+}
+
+// 여러 요청 중 값을 먼저 주는 것 하나. 전부 실패하면 null.
+function firstAnswer(
+  attempts: Promise<string | null>[],
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let remaining = attempts.length;
+    let done = false;
+
+    for (const attempt of attempts) {
+      attempt.then(
+        (value) => {
+          if (done) return;
+          if (value !== null) {
+            done = true;
+            resolve(value);
+          } else if (--remaining === 0) {
+            done = true;
+            resolve(null);
+          }
+        },
+        () => {
+          if (done) return;
+          if (--remaining === 0) {
+            done = true;
+            resolve(null);
+          }
+        },
+      );
+    }
+  });
+}
+
+// 같은 검색을 한 번 더 띄우기까지 기다리는 시간.
+//
+// 국민연금 검색은 오류를 내지 않는다. 실측 10회 모두 200/정상코드였고, 다만
+// 7.4초에 오기도 하고 16.0초가 걸리기도 했다(중앙값 9.7초). 실패한 뒤에 다시
+// 부르는 방식은 이 경우 도움이 안 된다. 실패를 확인하려면 제한 시간까지
+// 기다려야 하고, 그러고 나서 다시 부르면 총 대기가 두 배가 된다.
+//
+// 그래서 첫 요청을 취소하지 않고, 이 시간 안에 답이 없으면 한 번 더 띄워
+// 먼저 오는 쪽을 쓴다. 늦은 요청이 끝내 답하지 않아도 두 번째가 대신 답한다.
+// 중앙값보다 조금 뒤에 두어, 보통은 두 번째 요청 자체가 나가지 않는다.
+const RETRY_AFTER_MS = 11000;
+
+// 첫 요청이 늦으면 한 번 더 띄우고, 먼저 오는 답을 쓴다.
+async function callTwiceIfSlow(
+  operation: string,
+  params: Record<string, string>,
+  timeoutMs: number,
+): Promise<string | null> {
+  const first = call(operation, params, timeoutMs);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const slow = new Promise<typeof SLOW>((resolve) => {
+    timer = setTimeout(() => resolve(SLOW), RETRY_AFTER_MS);
+  });
+
+  try {
+    const early = await Promise.race([first, slow]);
+    if (early !== SLOW) {
+      return early;
+    }
+    return await firstAnswer([first, call(operation, params, timeoutMs)]);
+  } finally {
+    // 서버리스 환경에서 남은 타이머가 함수 종료를 늦추지 않도록 정리한다.
+    clearTimeout(timer);
   }
 }
 
@@ -172,13 +244,33 @@ export async function fetchEmployment(
   const spelled = toKoreanLetterSpelling(name);
   const searchNames = spelled === name ? [name] : [name, spelled];
 
+  // 사업자등록번호를 함께 넘기면 조회가 완전히 달라진다.
+  //
+  // wkplNm 은 부분 일치라, 이름이 널리 쓰이는 회사일수록 협력사 현장명이
+  // 먼저 잡힌다. "삼성전자"로 찾으면 2,107건이 걸리고 첫 100건이 전부
+  // "주식회사 유일이엔지/상용/평택 삼성전자 P4 Hook up" 같은 공사 현장이라,
+  // 정작 삼성전자(주)는 뒤로 밀려 이름이 정확히 같은 사업장을 하나도 못 찾았다.
+  // 그래서 고용 축이 늘 "확인 불가"였다.
+  //
+  // 번호를 같이 넘기면 그 회사의 사업장만 남아 첫 페이지 안에 들어온다.
+  // 게다가 훨씬 빠르다(실측: 삼성전자 14,246ms → 144ms, 동일기연 8,762ms → 586ms,
+  // 이름이 일치하는 사업장 수는 같거나 더 많다). 전체 번호(10자리)로는 0건이
+  // 나오므로 공개되는 앞 6자리를 쓴다.
+  const wantedPrefix = bizrPrefix(bizrNo ?? "");
+  const searchParams = (word: string): Record<string, string> => {
+    const params: Record<string, string> = {
+      wkplNm: word,
+      numOfRows: String(PAGE_SIZE),
+    };
+    if (wantedPrefix !== "") {
+      params.bzowrRgstNo = wantedPrefix;
+    }
+    return params;
+  };
+
   const listings = await Promise.all(
     searchNames.map((word) =>
-      call(
-        SEARCH,
-        { wkplNm: word, numOfRows: String(PAGE_SIZE) },
-        SEARCH_TIMEOUT_MS,
-      ),
+      callTwiceIfSlow(SEARCH, searchParams(word), SEARCH_TIMEOUT_MS),
     ),
   );
 
@@ -214,7 +306,6 @@ export async function fetchEmployment(
   // 이름이 같은 별개 회사가 실제로 있다(반도체 소자를 만드는 동일기연과
   // 난방보일러를 만드는 동일기연). DART가 준 사업자등록번호로 가른다.
   const prefixes = [...new Set(unique.map((row) => row.bizrPrefix))];
-  const wantedPrefix = bizrPrefix(bizrNo ?? "");
   const owned =
     wantedPrefix !== ""
       ? unique.filter((row) => row.bizrPrefix === wantedPrefix)
