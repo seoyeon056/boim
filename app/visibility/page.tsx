@@ -55,6 +55,16 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     () => visibility.summary,
   );
 
+  // 조회 한도에 걸린 축이 있으면 그 사실을 화면에 적는다.
+  const capped = [
+    visibility.patentCountIsAtLeast ? "특허 300건" : "",
+    visibility.newsCountIsAtLeast ? "뉴스 100건" : "",
+  ].filter((label) => label !== "");
+  const atLeastNote =
+    capped.length > 0
+      ? `${capped.join("·")}까지 실제로 확인한 값입니다. 그보다 많으면 '이상'으로 표시하며, 넘는 만큼은 세지 않습니다.`
+      : "";
+
   const score = visibility.visibilityScore;
 
   // 상단 점수 카드는 종합 점수만 쓰고, 아래 목록은 뉴스·특허·고용·공시로 나눠 보여준다.
@@ -117,6 +127,17 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
             </div>
           ))}
         </div>
+
+        {/*
+          "N건 이상"이 왜 붙었는지 그 자리에서 말해 준다. 조회에 한도가 있어
+          그만큼까지만 실제로 세어 본 값이라는 뜻이지, 그 위를 모른다고 해서
+          추정치를 적은 것이 아니다. 한도에 걸리지 않은 기업에는 뜨지 않는다.
+        */}
+        {(visibility.patentCountIsAtLeast || visibility.newsCountIsAtLeast) && (
+          <p className="mt-2 px-6 text-[12px] leading-5 text-zinc-400">
+            {atLeastNote}
+          </p>
+        )}
       </div>
 
       <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-700">
