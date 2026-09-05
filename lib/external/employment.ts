@@ -37,6 +37,19 @@ const CHANGE_WINDOW_MONTHS = 6;
 const SEARCH_TIMEOUT_MS = 20000;
 const DETAIL_TIMEOUT_MS = 4000;
 
+// 조회 결과. "못 찾았다"와 "부르지 못했다"는 다른 상태다.
+//
+// 예전에는 둘 다 null 이라, 국민연금이 시간 초과로 대답하지 않은 경우에도
+// 화면이 "국민연금 가입 사업장에서 찾지 못함"이라고 적었다. 조회를 못 한 것을
+// 조회해 봤더니 없더라고 말한 셈이다. 사유를 함께 돌려준다.
+export type EmploymentLookup =
+  // 조회에 성공했고 값이 있다.
+  | { status: "ok"; value: Employment }
+  // 조회는 됐는데 해당 사업장이 없거나(3인 미만 등) 동명 회사를 가리지 못했다.
+  | { status: "not-found" }
+  // 호출 자체가 실패했다(시간 초과·오류). 값이 없다는 뜻이 아니다.
+  | { status: "failed" };
+
 export type Employment = {
   // 최근 자료생성년월 기준 가입자 수. 같은 사업자번호의 사업장이 여럿이면 합산한다.
   employeeCount: number;
@@ -232,10 +245,10 @@ async function headcountAt(rows: Row[], ym: string): Promise<number | null> {
 export async function fetchEmployment(
   companyName: string,
   bizrNo?: string,
-): Promise<Employment | null> {
+): Promise<EmploymentLookup> {
   const name = companyName.trim();
   if (name === "") {
-    return null;
+    return { status: "not-found" };
   }
 
   // 사업장명은 한글로 등록된다("LG생활건강" → "(주)엘지생활건강"). 특허 쪽에서
@@ -276,7 +289,7 @@ export async function fetchEmployment(
 
   // 둘 다 실패했을 때만 포기한다. 하나라도 대답했으면 그걸로 판단한다.
   if (listings.every((body) => body === null)) {
-    return null;
+    return { status: "failed" };
   }
 
   const wanted = new Set(searchNames.map(normalize));
@@ -297,7 +310,7 @@ export async function fetchEmployment(
     );
 
   if (rows.length === 0) {
-    return null;
+    return { status: "not-found" };
   }
 
   // 두 이름으로 조회했으면 같은 사업장이 두 번 들어올 수 있다. seq 로 접는다.
@@ -312,12 +325,12 @@ export async function fetchEmployment(
       : unique;
 
   if (owned.length === 0) {
-    return null;
+    return { status: "not-found" };
   }
 
   // 번호를 못 받았는데 후보가 여럿이면 여기서 멈춘다.
   if (wantedPrefix === "" && prefixes.length > 1) {
-    return null;
+    return { status: "not-found" };
   }
 
   const months = [...new Set(owned.map((row) => row.dataCrtYm))].sort();
@@ -325,14 +338,18 @@ export async function fetchEmployment(
 
   const employeeCount = await headcountAt(owned, latest);
   if (employeeCount === null) {
-    return null;
+    // 사업장은 찾았는데 상세 조회가 대답하지 않았다. 없는 게 아니다.
+    return { status: "failed" };
   }
 
   const past = await headcountAt(owned, shiftMonth(latest, CHANGE_WINDOW_MONTHS));
 
   return {
-    employeeCount,
-    employeeChange: past === null ? undefined : employeeCount - past,
-    asOf: latest,
+    status: "ok",
+    value: {
+      employeeCount,
+      employeeChange: past === null ? undefined : employeeCount - past,
+      asOf: latest,
+    },
   };
 }

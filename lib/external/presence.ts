@@ -99,6 +99,10 @@ export async function getExternalPresence(
   //   키가 없다 + 실제 기업   → 채울 값이 없다. 역시 "확인 불가".
   const unavailable: ExternalSource[] = [];
 
+  // 확인하지 못한 축의 사유. "부르지 못했다"와 "불렀는데 없다"를 갈라 화면이
+  // 서로 다른 문구를 쓸 수 있게 한다. 적지 않으면 화면이 기본 사유를 쓴다.
+  const unavailableReason: Partial<Record<ExternalSource, "failed" | "not-found">> = {};
+
   function resolve<T>(
     source: ExternalSource,
     answer: T | null | undefined,
@@ -116,11 +120,15 @@ export async function getExternalPresence(
 
   const newsAxis = resolve("news", news, fallback.newsCount);
   const patentAxis = resolve("patent", patent, fallback.patentCount);
+  // 고용은 사유를 함께 받는다. 조회를 못 한 것과 조회했는데 없는 것은 다르다.
   const employmentAxis = resolve(
     "employment",
-    employment,
+    employment.status === "ok" ? employment.value : null,
     fallback.employeeCount,
   );
+  if (unavailable.includes("employment") && employment.status !== "ok") {
+    unavailableReason.employment = employment.status;
+  }
   const disclosureAxis = resolve(
     "disclosure",
     disclosureCount,
@@ -130,6 +138,7 @@ export async function getExternalPresence(
   return {
     companyId,
     unavailable,
+    unavailableReason,
     newsCount: newsAxis.answered?.count ?? newsAxis.count,
     newsCountIsAtLeast: newsAxis.answered?.isAtLeast,
     employeeCount: employmentAxis.answered?.employeeCount ?? employmentAxis.count,

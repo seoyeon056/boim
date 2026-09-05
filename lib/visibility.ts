@@ -215,7 +215,18 @@ const UNAVAILABLE_DISCLOSURE = {
   tone: "warn" as const,
 };
 
-function unavailableFor(key: ExternalSource) {
+// 부르지 못한 것과 불러 봤는데 없는 것은 다르다.
+//
+// 예전에는 고용 축이 실패하면 사유와 무관하게 "국민연금 가입 사업장에서 찾지
+// 못함"이라고 적었다. 국민연금이 시간 초과로 대답하지 않았을 때도 그렇게 적혀,
+// 조회하지 못한 것을 조회해 봤더니 없더라고 말하는 셈이었다.
+function unavailableFor(
+  key: ExternalSource,
+  reason?: "failed" | "not-found",
+) {
+  if (reason === "failed") {
+    return UNAVAILABLE_METRIC;
+  }
   if (key === "employment") return UNAVAILABLE_EMPLOYMENT;
   if (key === "disclosure") return UNAVAILABLE_DISCLOSURE;
   return UNAVAILABLE_METRIC;
@@ -278,7 +289,7 @@ export function calculateVisibility(
     read: { interpretation: string; tone: MetricTone },
   ): VisibilityMetric =>
     missing.has(key)
-      ? { key, label, ...unavailableFor(key) }
+      ? { key, label, ...unavailableFor(key, presence.unavailableReason?.[key]) }
       : { key, label, value, ...read };
 
   const news = interpretNews(presence.newsCount);
@@ -316,10 +327,12 @@ export function calculateVisibility(
         ? UNAVAILABLE_METRIC.interpretation
         : patent.interpretation,
       employment: missing.has("employment")
-        ? UNAVAILABLE_EMPLOYMENT.interpretation
+        ? unavailableFor("employment", presence.unavailableReason?.employment)
+            .interpretation
         : employment.interpretation,
       disclosure: missing.has("disclosure")
-        ? UNAVAILABLE_DISCLOSURE.interpretation
+        ? unavailableFor("disclosure", presence.unavailableReason?.disclosure)
+            .interpretation
         : disclosure.interpretation,
       visibility: visibility.interpretation,
     },
