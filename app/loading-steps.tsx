@@ -11,12 +11,18 @@ export function LoadingSteps({
   title,
   steps,
   stepMs = 900,
+  slowAfterMs,
+  slowNote,
 }: {
   title: string;
   steps: string[];
   stepMs?: number;
+  // 이 시간을 넘기면 아래에 덧붙일 안내. 없으면 아무것도 붙이지 않는다.
+  slowAfterMs?: number;
+  slowNote?: string;
 }) {
   const [index, setIndex] = useState(0);
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -26,6 +32,15 @@ export function LoadingSteps({
 
     return () => clearInterval(timer);
   }, [steps.length, stepMs]);
+
+  // 문구가 다 지나갔는데도 끝나지 않으면, 멈춘 게 아니라 기다리는 중임을 알린다.
+  useEffect(() => {
+    if (!slowAfterMs || !slowNote) {
+      return;
+    }
+    const timer = setTimeout(() => setSlow(true), slowAfterMs);
+    return () => clearTimeout(timer);
+  }, [slowAfterMs, slowNote]);
 
   return (
     <div
@@ -74,6 +89,12 @@ export function LoadingSteps({
           );
         })}
       </ol>
+
+      {slow && slowNote && (
+        <p className="mt-3 border-t border-zinc-100 pt-2.5 text-[12px] leading-5 text-zinc-500">
+          {slowNote}
+        </p>
+      )}
     </div>
   );
 }
