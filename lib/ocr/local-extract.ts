@@ -90,7 +90,19 @@ function looksLikeCompany(value: string): boolean {
     return false;
   }
   const bare = cleaned.replace(/[()（）㈜\s]/g, "");
-  return bare.length >= 2 && !CUSTOMER_REJECT.some((word) => bare.includes(word));
+  if (bare.length < 2) {
+    return false;
+  }
+  // 숫자와 기호만 남으면 회사 이름이 아니다.
+  //
+  // 라벨 옆 칸을 값으로 집는 경로가 있어서, 라벨처럼 읽힌 셀 뒤에 금액이 오면
+  // 그 금액이 거래처가 됐다. 실측: 거래처를 비운 행의 품목이 "빈거래처 A"라
+  // 라벨로 걸렸고, 그 옆의 500000 이 세 행의 거래처명으로 들어갔다. 화면에는
+  // "500000"이라는 거래처가 생기고 지표에도 한 곳으로 세어졌다.
+  if (!/[가-힣A-Za-z]/.test(bare)) {
+    return false;
+  }
+  return !CUSTOMER_REJECT.some((word) => bare.includes(word));
 }
 
 // "㈜"는 한 글자짜리 조합 문자라 OCR이 자주 흘린다. 실측에서 "(쥐)"로 읽히거나
