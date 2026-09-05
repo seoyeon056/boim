@@ -31,11 +31,23 @@ function normalizeCompanyName(value: string): string {
 // "N건 이상"으로 말한다. 이 서비스의 대상인 중소기업은 대부분 상한 안에
 // 들어와서 추론 없는 정확한 값이 나온다(실측: 한빛정밀 12건 0.3초,
 // 동일기연 106건 9.5초 / 상한을 넘는 건 아모텍 885건·대기업 정도다).
-const PAGE_SIZE = 30;
+// 상한까지 한 번에 받는다.
+//
+// 예전에는 30건씩 나눠 최대 10번을 동시에 불렀다. KIPRIS 는 같은 요청이
+// 0.6초에서 20초 시간 초과까지 흔들려서, 열 번 중 하나만 늦어도 화면 전체가
+// 그만큼 늦어졌다(실측: 삼성전자 가시성 조회 15~29초, 대부분이 이 축이었다).
+//
+// docsCount 를 키울 수 있는지 재보니 500까지 받아 준다. 게다가 더 빠르다.
+//
+//   동일기연   30건씩 4번(각 2.5초)  →  300건 한 번 536ms (106건 전부)
+//   삼성전자   30건씩 10번(각 2.2초) →  300건 한 번 2.7초
+//
+// 한 번만 부르므로 흔들림에 걸릴 확률도 10분의 1이 된다. 세는 방식은 그대로다
+// — 받은 항목 중 출원인이 실제로 일치하는 것만 센다.
 const MAX_COUNTED = 300;
 
-// 페이지당 1~5초인데 느린 날이 있다. 상한까지 받아도 실측 10초 안쪽이었다.
-const REQUEST_TIMEOUT_MS = 15000;
+// 한 번에 상한까지 받으므로 예전 페이지 단위보다 넉넉히 잡는다.
+const REQUEST_TIMEOUT_MS = 20000;
 
 export type PatentCountResult = {
   count: number;
@@ -72,7 +84,7 @@ export async function fetchPatentCount(
   ): Promise<{ matching: number; read: number; total: number }> => {
     const pageUrl = new URL(url);
     pageUrl.searchParams.set("docsStart", String(start));
-    pageUrl.searchParams.set("docsCount", String(PAGE_SIZE));
+    pageUrl.searchParams.set("docsCount", String(MAX_COUNTED));
 
     const response = await fetch(pageUrl, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -96,32 +108,16 @@ export async function fetchPatentCount(
   };
 
   try {
-    const first = await readPage(1);
+    const page = await readPage(1);
 
     // 총건수를 못 읽었으면 본 것만 말한다.
-    if (!Number.isFinite(first.total)) {
-      return { count: first.matching, isAtLeast: first.read > 0 };
+    if (!Number.isFinite(page.total)) {
+      return { count: page.matching, isAtLeast: page.read > 0 };
     }
-
-    // 첫 페이지에서 이미 다 봤다.
-    if (first.total <= first.read) {
-      return { count: first.matching, isAtLeast: false };
-    }
-
-    // 나머지 페이지. 첫 페이지에서 총건수를 알았으니 한꺼번에 받는다.
-    const countUpTo = Math.min(first.total, MAX_COUNTED);
-    const starts: number[] = [];
-    for (let start = first.read + 1; start <= countUpTo; start += PAGE_SIZE) {
-      starts.push(start);
-    }
-
-    const rest = await Promise.all(starts.map(readPage));
-    const matching =
-      first.matching + rest.reduce((sum, page) => sum + page.matching, 0);
 
     // 상한을 넘겨 다 못 본 경우에만 "이상"이다. 상한 안이면 전수 확인이라
     // 정확한 수치다.
-    return { count: matching, isAtLeast: first.total > MAX_COUNTED };
+    return { count: page.matching, isAtLeast: page.total > page.read };
   } catch {
     return null;
   }
