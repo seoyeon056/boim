@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: #1d4533; } a:hover { color: #12301f; }
+    .sm-root {
+      width: 1280px; height: 820px; position: relative; overflow: hidden;
+      background: #f6f1ed; color: #2a211c;
+      font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+      font-size: 15px; line-height: 1.75; letter-spacing: -0.005em;
+    }
+    .sm-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .sm-card {
+      border: 1px solid #ece5df; border-radius: 8px; background: #fff;
+      padding: 14px 16px;
+    }
+    .sm-name { font-size: 14px; font-weight: 600; margin: 0; }
+    .sm-sub { font-size: 12px; color: #8b8078; margin: 2px 0 0; }
+  </style>
+</helmet>
+
+<div class="sm-root">
+
+  <!-- 헤더 -->
+  <div style="display: flex; align-items: center; height: 48px; padding: 0 24px; border-bottom: 1px solid #ece5df; background: rgba(255,255,255,0.9);">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="width: 22px; height: 22px; border-radius: 5px; background: linear-gradient(135deg, #2e2419, #0e0a06); position: relative;">
+        <div style="position: absolute; left: 2px; right: 2px; top: 10px; height: 1px; background: #9b9189; opacity: 0.45;"></div>
+        <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; line-height: 1;">B</div>
+      </div>
+      <span class="sm-mono" style="font-size: 13px; font-weight: 600; letter-spacing: 0.15em;">BO<span style="color: #d4cdc7;">:</span>IM</span>
+    </div>
+  </div>
+
+  <!-- 본문 -->
+  <div style="padding: 28px 56px 0; display: flex; gap: 48px;">
+
+    <div style="width: 240px; flex-shrink: 0;">
+      <p class="sm-mono" style="margin: 0; font-size: 11px; letter-spacing: 0.2em; color: #a2978f;">STEP 01</p>
+      <h1 style="margin: 8px 0 0; font-size: 27px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;">진단할 기업을<br>검색하세요</h1>
+      <p style="margin: 14px 0 0; font-size: 13px; color: #5f554e;">기업명을 정확하게 입력해 주세요. 등록된 사업자명과 일치해야 검색됩니다.</p>
+    </div>
+
+    <div style="flex-grow: 1; max-width: 672px; display: flex; flex-direction: column; gap: 8px;">
+      <label style="font-size: 12px; font-weight: 500; color: #5f554e;">기업명</label>
+      <div style="height: 50px; border: 1px solid #ded5cf; border-radius: 6px; background: #fff; display: flex; align-items: center; padding: 0 16px; font-size: 16px;">삼성</div>
+      <div style="height: 4px;"></div>
+      <div class="sm-card"><p class="sm-name">삼성수산</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성물산</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card" style="border-color: #2a211c; background: #faf7f4;"><p class="sm-name">삼성전기</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성공조</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성카드</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성제약</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성중공업</p><p class="sm-sub">상장 기업</p></div>
+    </div>
+  </div>
+
+  <!-- 모달 — 화면을 가리지 않는 하단 도크. 목록이 길어져도 자리가 고정된다. -->
+  <div style="position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); width: 560px;">
+    <div style="border-radius: 12px; background: #fff; border: 1px solid #ece5df; overflow: hidden; box-shadow: 0 20px 44px -16px rgba(42,33,28,0.26), 0 4px 12px -4px rgba(42,33,28,0.10);">
+      <div style="height: 2px; background: #efe9e4; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 38%; height: 2px; background: #1d4533; border-radius: 1px;"></div>
+      </div>
+      <div style="padding: 15px 20px; display: flex; align-items: center; gap: 14px;">
+        <div style="width: 16px; height: 16px; border-radius: 50%; border: 2px solid #e4ded8; border-top-color: #1d4533; flex-shrink: 0;"></div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+          <p style="margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;">뉴스·특허·고용 공개 정보를 모으는 중</p>
+          <p style="margin: 0; font-size: 11.5px; color: #7d726b;">KIPRIS 특허정보넷 응답이 늦어지고 있습니다. 받는 대로 넘어갑니다.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+          <span style="display: flex; gap: 4px; align-items: center;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #bcb0a9;"></span>
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #1d4533; box-shadow: 0 0 0 3px rgba(29,69,51,0.12);"></span>
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #e9e2dd;"></span>
+          </span>
+          <span class="sm-mono" style="font-size: 11.5px; color: #a2978f; font-variant-numeric: tabular-nums;">14초째</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,11 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 
-// 시간이 걸리는 작업의 진행 상태를 그 작업이 일어난 자리에 그대로 보여준다.
+// 시간이 걸리는 작업의 진행 상태를 보여준다.
 //
-// 화면 전체를 덮는 모달은 배경이 탁해지고, 작업과 상관없는 영역까지 못 쓰게 만든다.
-// 여기서는 오버레이 없이 카드 하나만 자리에 끼워 넣어 흐름이 끊기지 않게 한다.
+// 기본은 작업이 일어난 자리에 그대로 끼워 넣는 카드다. overlay 를 켜면 화면
+// 가운데에 띄운다.
+
+// 서버 렌더에서는 document 가 없어 포털을 만들 수 없다. 이 훅은 서버에서 false,
+// 브라우저에서 true 를 준다. effect 안에서 setState 하지 않으므로
+// react-hooks/set-state-in-effect 에 걸리지 않는다(docs/UI-HANDOFF.md 4장).
+const subscribeToNothing = () => () => {};
+
+function useIsBrowser() {
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
+}
 
 export function LoadingSteps({
   title,
@@ -29,6 +43,7 @@ export function LoadingSteps({
   // 할 수 있는 일이 없을 때만 쓴다.
   overlay?: boolean;
 }) {
+  const isBrowser = useIsBrowser();
   const [index, setIndex] = useState(0);
   const [slow, setSlow] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -64,10 +79,39 @@ export function LoadingSteps({
     <div
       role="status"
       aria-live="polite"
-      className={`animate-fade-in rounded-md border border-zinc-100 bg-white px-4 py-3.5 ${
-        overlay ? "w-full max-w-sm shadow-xl" : ""
+      className={`animate-fade-in overflow-hidden border bg-white ${
+        overlay
+          ? "w-full max-w-sm rounded-[14px]"
+          : "rounded-md border-zinc-100 px-4 py-3.5"
       }`}
+      style={
+        overlay
+          ? {
+              borderColor: "#ece5df",
+              // 덮는 면을 없앴으므로 카드가 떠 있다는 느낌은 그림자가 진다.
+              // 넓고 옅은 것 하나, 좁고 진한 것 하나를 겹친다.
+              boxShadow:
+                "0 32px 64px -20px rgba(42,33,28,0.30), 0 6px 18px -6px rgba(42,33,28,0.14)",
+            }
+          : undefined
+      }
     >
+      {/* 문구가 다 지나간 뒤에도 이 선이 남아 카드가 살아 있음을 보인다. */}
+      {overlay && (
+        <div aria-hidden style={{ height: 2, background: "#efe9e4" }}>
+          <div
+            style={{
+              height: 2,
+              borderRadius: 1,
+              background: "#1D4533",
+              width: `${Math.round(((index + 1) / steps.length) * 100)}%`,
+              transition: "width 400ms cubic-bezier(0.22, 0.61, 0.36, 1)",
+            }}
+          />
+        </div>
+      )}
+
+      <div className={overlay ? "px-[22px] pt-5" : ""}>
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden
@@ -107,6 +151,7 @@ export function LoadingSteps({
                     : current
                       ? "#1D4533"
                       : "#E9E2DD",
+                  boxShadow: current ? "0 0 0 3px rgba(29,69,51,0.12)" : undefined,
                 }}
               />
               {step}
@@ -120,6 +165,8 @@ export function LoadingSteps({
           {slowNote}
         </p>
       )}
+      </div>
+      {overlay && <div className="h-[18px]" />}
     </div>
   );
 
@@ -127,28 +174,42 @@ export function LoadingSteps({
     return card;
   }
 
-  return (
+  if (!isBrowser) {
+    return null;
+  }
+
+  // body 로 옮겨서 띄운다.
+  //
+  // 예전에는 이 자리에 그대로 두고 position: fixed 만 걸었다. 그런데 결과 목록을
+  // 감싼 .step-enter 에 등장 애니메이션이 남긴 transform 이 있고(animation ...
+  // both), transform 이 걸린 요소는 그 안의 fixed 요소에게 화면 대신 자기 자신이
+  // 기준이 된다. 그래서 덮은 영역이 화면이 아니라 목록 칸 크기가 됐고(실측
+  // 776×1775, 뷰포트 1377×901), 카드도 그 칸의 한가운데인 y≈960 — 화면 밖 —
+  // 에 놓였다. 목록이 길수록 더 내려갔다.
+  //
+  // 예전에 이걸 "inset-0 클래스가 안 먹는다"로 보고 인라인 style 로 바꿨는데,
+  // 원인이 아니었으므로 증상이 그대로 남아 있었다. body 로 옮기면 사이에
+  // transform 을 가진 요소가 없어 화면이 기준이 된다.
+  return createPortal(
     <div
       aria-modal
       role="dialog"
-      // 위치를 클래스에 맡기지 않는다. inset-0 이 적용되지 않아 카드가 원래
-      // 자리에 그대로 떠 있고 화면을 덮지 못한 적이 있다(실측: 뷰포트
-      // 1280×720 인데 덮은 영역이 776×336).
       style={{
         position: "fixed",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
+        inset: 0,
         zIndex: 50,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "0 1.5rem",
-        background: "rgba(24, 24, 27, 0.25)",
+        // 어둡게 덮는 사각형 대신, 카드에서 배경색이 타원으로 번지게 해
+        // 주변을 지운다. 가장자리가 완전히 투명해서 경계선이 보이지 않는다.
+        background:
+          "radial-gradient(ellipse 1000px 760px at center, rgba(246,241,237,0.97) 0%, rgba(246,241,237,0.86) 34%, rgba(246,241,237,0.42) 58%, rgba(246,241,237,0) 76%)",
       }}
     >
       {card}
-    </div>
+    </div>,
+    document.body,
   );
 }

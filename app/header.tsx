@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LogoMark from "./logo-mark";
 
 const TOTAL_STEPS = 6;
 
@@ -27,9 +28,13 @@ export default function Header() {
     <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-zinc-100 bg-white/90 px-6 backdrop-blur-sm">
       <Link
         href="/"
-        className="font-mono text-sm font-semibold tracking-widest text-zinc-900 transition-opacity hover:opacity-70"
+        aria-label="BO:IM 홈"
+        className="flex items-center gap-2 transition-opacity hover:opacity-70"
       >
-        BO<span className="text-zinc-300">:</span>IM
+        <LogoMark />
+        <span className="font-mono text-sm font-semibold tracking-widest text-zinc-900">
+          BO<span className="text-zinc-300">:</span>IM
+        </span>
       </Link>
       {inFlow && (
         <div className="flex items-center gap-1.5 md:hidden">

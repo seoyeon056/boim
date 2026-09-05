@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: #1d4533; } a:hover { color: #12301f; }
+    .sm-root {
+      width: 1280px; height: 820px; position: relative; overflow: hidden;
+      background: #f6f1ed; color: #2a211c;
+      font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+      font-size: 15px; line-height: 1.75; letter-spacing: -0.005em;
+    }
+    .sm-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .sm-card {
+      border: 1px solid #ece5df; border-radius: 8px; background: #fff;
+      padding: 14px 16px;
+    }
+    .sm-name { font-size: 14px; font-weight: 600; margin: 0; }
+    .sm-sub { font-size: 12px; color: #8b8078; margin: 2px 0 0; }
+  </style>
+</helmet>
+
+<div class="sm-root">
+
+  <!-- 헤더 -->
+  <div style="display: flex; align-items: center; height: 48px; padding: 0 24px; border-bottom: 1px solid #ece5df; background: rgba(255,255,255,0.9);">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="width: 22px; height: 22px; border-radius: 5px; background: linear-gradient(135deg, #2e2419, #0e0a06); position: relative;">
+        <div style="position: absolute; left: 2px; right: 2px; top: 10px; height: 1px; background: #9b9189; opacity: 0.45;"></div>
+        <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 15px; line-height: 1;">B</div>
+      </div>
+      <span class="sm-mono" style="font-size: 13px; font-weight: 600; letter-spacing: 0.15em;">BO<span style="color: #d4cdc7;">:</span>IM</span>
+    </div>
+  </div>
+
+  <!-- 본문 -->
+  <div style="padding: 28px 56px 0; display: flex; gap: 48px;">
+
+    <div style="width: 240px; flex-shrink: 0;">
+      <p class="sm-mono" style="margin: 0; font-size: 11px; letter-spacing: 0.2em; color: #a2978f;">STEP 01</p>
+      <h1 style="margin: 8px 0 0; font-size: 27px; line-height: 1.35; font-weight: 700; letter-spacing: -0.02em;">진단할 기업을<br>검색하세요</h1>
+      <p style="margin: 14px 0 0; font-size: 13px; color: #5f554e;">기업명을 정확하게 입력해 주세요. 등록된 사업자명과 일치해야 검색됩니다.</p>
+    </div>
+
+    <div style="flex-grow: 1; max-width: 672px; display: flex; flex-direction: column; gap: 8px;">
+      <label style="font-size: 12px; font-weight: 500; color: #5f554e;">기업명</label>
+      <div style="height: 50px; border: 1px solid #ded5cf; border-radius: 6px; background: #fff; display: flex; align-items: center; padding: 0 16px; font-size: 16px;">삼성</div>
+      <div style="height: 4px;"></div>
+      <div class="sm-card"><p class="sm-name">삼성수산</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성물산</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card" style="border-color: #2a211c; background: #faf7f4;"><p class="sm-name">삼성전기</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성공조</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성카드</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성제약</p><p class="sm-sub">상장 기업</p></div>
+      <div class="sm-card"><p class="sm-name">삼성중공업</p><p class="sm-sub">상장 기업</p></div>
+    </div>
+  </div>
+
+  <!-- 모달 — 사각 스크림 대신 카드에서 번지는 타원형 광원 -->
+  <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 1000px; height: 760px; background: radial-gradient(ellipse at center, rgba(246,241,237,0.97) 0%, rgba(246,241,237,0.86) 34%, rgba(246,241,237,0.42) 58%, rgba(246,241,237,0) 76%); pointer-events: none;"></div>
+  <!-- 모달 — 스크림 없음. 화면 정중앙에 카드 하나만 뜬다. -->
+  <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 384px;">
+    <div style="border-radius: 14px; background: #fff; border: 1px solid #ece5df; overflow: hidden; box-shadow: 0 32px 64px -20px rgba(42,33,28,0.30), 0 6px 18px -6px rgba(42,33,28,0.14), 0 0 0 1px rgba(42,33,28,0.02);">
+
+      <!-- 상단 진행 실선 — 카드 자체가 살아 있다는 신호 -->
+      <div style="height: 2px; background: #efe9e4; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 38%; height: 2px; background: #1d4533; border-radius: 1px;"></div>
+      </div>
+
+      <div style="padding: 20px 22px 18px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 15px; height: 15px; border-radius: 50%; border: 2px solid #e4ded8; border-top-color: #1d4533; flex-shrink: 0;"></div>
+          <p style="margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;">외부 가시성 점수 분석 중</p>
+          <span class="sm-mono" style="margin-left: auto; font-size: 11.5px; color: #a2978f; font-variant-numeric: tabular-nums;">14초째</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 9px; margin-top: 16px;">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #a89d95;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #bcb0a9; flex-shrink: 0;"></span>기업 정보를 확인하는 중
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #2a211c; font-weight: 500;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #1d4533; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(29,69,51,0.12);"></span>뉴스·특허·고용 공개 정보를 모으는 중
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #cec5be;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: #e9e2dd; flex-shrink: 0;"></span>외부 가시성 점수를 분석하는 중
+          </div>
+        </div>
+
+        <p style="margin: 16px 0 0; padding-top: 13px; border-top: 1px solid #f2ece7; font-size: 12px; line-height: 1.65; color: #7d726b;">
+          KIPRIS 특허정보넷 응답이 늦어지고 있습니다. 기다리는 중이며, 받는 대로 결과 화면으로 넘어갑니다.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
