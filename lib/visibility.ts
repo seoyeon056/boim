@@ -190,12 +190,24 @@ function interpretDisclosure(count: number) {
   return { interpretation: "공시 기록 다수 확인", tone: "muted" as const };
 }
 
-// 확인하지 못한 축은 건수 해석 대신 이 문구를 쓴다.
-const UNAVAILABLE_METRIC = {
-  value: "확인 불가",
-  interpretation: "외부 서비스 응답 없음",
-  tone: "warn" as const,
+// 어느 서비스가 대답하지 않았는지 이름을 적는다.
+//
+// "외부 서비스 응답 없음"만으로는 우리 쪽이 고장 난 것처럼 읽힌다. 축마다
+// 부르는 곳이 다르고, 이름을 알면 사용자가 잠시 뒤 다시 시도할지 판단할 수 있다.
+const SOURCE_NAMES: Record<ExternalSource, string> = {
+  news: "네이버 뉴스 검색",
+  patent: "KIPRIS 특허정보넷",
+  employment: "국민연금공단",
+  disclosure: "전자공시(DART)",
 };
+
+function noAnswerFrom(key: ExternalSource) {
+  return {
+    value: "확인 불가",
+    interpretation: `${SOURCE_NAMES[key]} 응답 없음`,
+    tone: "warn" as const,
+  };
+}
 
 // 고용만 사유가 다르다. 국민연금 자료는 가입자 3인 이상 법인사업장부터 들어오고,
 // 같은 이름의 회사가 둘 이상이면 어느 쪽인지 가릴 수 없어 판단을 접는다. 그런
@@ -215,10 +227,21 @@ const UNAVAILABLE_DISCLOSURE = {
   tone: "warn" as const,
 };
 
-function unavailableFor(key: ExternalSource) {
+// 부르지 못한 것과 불러 봤는데 없는 것은 다르다.
+//
+// 예전에는 고용 축이 실패하면 사유와 무관하게 "국민연금 가입 사업장에서 찾지
+// 못함"이라고 적었다. 국민연금이 시간 초과로 대답하지 않았을 때도 그렇게 적혀,
+// 조회하지 못한 것을 조회해 봤더니 없더라고 말하는 셈이었다.
+function unavailableFor(
+  key: ExternalSource,
+  reason?: "failed" | "not-found",
+) {
+  if (reason === "failed") {
+    return noAnswerFrom(key);
+  }
   if (key === "employment") return UNAVAILABLE_EMPLOYMENT;
   if (key === "disclosure") return UNAVAILABLE_DISCLOSURE;
-  return UNAVAILABLE_METRIC;
+  return noAnswerFrom(key);
 }
 
 // 60점 위가 전부 한 구간이라 100점에도 "일부 확인"이 붙었다. 네 축이 다 차서
@@ -278,7 +301,7 @@ export function calculateVisibility(
     read: { interpretation: string; tone: MetricTone },
   ): VisibilityMetric =>
     missing.has(key)
-      ? { key, label, ...unavailableFor(key) }
+      ? { key, label, ...unavailableFor(key, presence.unavailableReason?.[key]) }
       : { key, label, value, ...read };
 
   const news = interpretNews(presence.newsCount);
@@ -310,16 +333,19 @@ export function calculateVisibility(
       // 해석 문구도 같이 덮는다. 여기만 "공개 기술 흔적 없음"으로 남으면
       // LLM 프롬프트와 진단서가 그 문장을 사실로 받아 적는다.
       news: missing.has("news")
-        ? UNAVAILABLE_METRIC.interpretation
+        ? unavailableFor("news", presence.unavailableReason?.news).interpretation
         : news.interpretation,
       patent: missing.has("patent")
-        ? UNAVAILABLE_METRIC.interpretation
+        ? unavailableFor("patent", presence.unavailableReason?.patent)
+            .interpretation
         : patent.interpretation,
       employment: missing.has("employment")
-        ? UNAVAILABLE_EMPLOYMENT.interpretation
+        ? unavailableFor("employment", presence.unavailableReason?.employment)
+            .interpretation
         : employment.interpretation,
       disclosure: missing.has("disclosure")
-        ? UNAVAILABLE_DISCLOSURE.interpretation
+        ? unavailableFor("disclosure", presence.unavailableReason?.disclosure)
+            .interpretation
         : disclosure.interpretation,
       visibility: visibility.interpretation,
     },

@@ -12,6 +12,10 @@ export type ExternalPresence = {
   // 사실이 아닌 진단이 그대로 진단서까지 실린다(실측: LG생활건강 특허 5,282건이
   // KIPRIS 타임아웃 한 번에 0건으로 표시됨).
   unavailable?: ExternalSource[];
+  // 확인하지 못한 사유. "failed"는 부르지 못한 것(시간 초과·오류)이고,
+  // "not-found"는 불러 봤는데 해당 자료가 없거나 특정하지 못한 것이다.
+  // 화면이 이 둘에 서로 다른 문구를 쓴다. 없으면 기본 문구를 쓴다.
+  unavailableReason?: Partial<Record<ExternalSource, "failed" | "not-found">>;
   newsCount: number;
   // 네이버는 한 번에 최대 100건만 내려준다. total이 그보다 크고 표본에 무관
   // 기사가 섞여 있으면 전체를 검증할 방법이 없어, 확인된 건수만 "이상"으로
