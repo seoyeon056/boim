@@ -13,6 +13,14 @@
 // 안 된다. 찾지 못하면 null 을 돌려주고, 화면은 "확인 불가"로 표시한다.
 
 import { toKoreanLetterSpelling } from "@/lib/korean";
+import {
+  isTripped,
+  recordFailure,
+  recordSuccess,
+} from "@/lib/external/circuit";
+
+// 회로 차단기에서 이 축을 부르는 이름.
+const CIRCUIT = "nps";
 
 const BASE = "https://apis.data.go.kr/B552015/NpsBplcInfoInqireServiceV2";
 
@@ -347,6 +355,31 @@ async function headcountAt(
  * 아무거나 고르면 다른 회사의 고용 규모를 이 회사 것인 양 보여주게 된다.
  */
 export async function fetchEmployment(
+  companyName: string,
+  bizrNo?: string,
+): Promise<EmploymentLookup> {
+  // 연달아 대답하지 않는 시간대에는 부르지 않고 곧바로 넘긴다. 기다려 봐야 같은
+  // 결과인데 화면만 20초씩 늦어진다(lib/external/circuit.ts).
+  //
+  // 건너뛴 것은 회로에 세지 않는다. 세면 쉬는 시간이 끝없이 늘어나 그쪽이
+  // 복구돼도 영영 안 부르게 된다.
+  if (isTripped(CIRCUIT)) {
+    return { status: "failed" };
+  }
+
+  const result = await lookUpEmployment(companyName, bizrNo);
+
+  // 부르지 못한 것만 회로에 센다. "불렀는데 없다"는 그쪽이 살아 있다는 뜻이다.
+  if (result.status === "failed") {
+    recordFailure(CIRCUIT);
+  } else {
+    recordSuccess(CIRCUIT);
+  }
+
+  return result;
+}
+
+async function lookUpEmployment(
   companyName: string,
   bizrNo?: string,
 ): Promise<EmploymentLookup> {

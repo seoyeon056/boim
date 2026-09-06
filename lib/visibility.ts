@@ -30,6 +30,7 @@ export type Visibility = {
 
   newsCount: number;
   newsCountIsAtLeast?: boolean;
+  newsChecked?: { sampled: number; matched: number };
   patentCount: number;
   patentCountIsAtLeast?: boolean;
   employeeCount: number;
@@ -327,6 +328,7 @@ export function calculateVisibility(
 
     newsCount: presence.newsCount,
     newsCountIsAtLeast: presence.newsCountIsAtLeast,
+    newsChecked: presence.newsChecked,
     patentCount: presence.patentCount,
     patentCountIsAtLeast: presence.patentCountIsAtLeast,
     employeeCountIsAtLeast: presence.employeeCountIsAtLeast,

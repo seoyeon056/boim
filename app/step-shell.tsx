@@ -1,6 +1,25 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { withCompany } from "@/lib/company-link";
+import { WaitingLink } from "@/app/waiting-link";
+
+// 서버에서 외부 공개 API 를 확인하고 오는 화면. 이쪽으로 가는 이동은 기다림이
+// 있으므로 안내 카드를 띄운다. 나머지 화면은 브라우저 안에서 바로 그려지므로
+// 그냥 링크로 둔다(카드를 띄우면 깜빡이기만 한다).
+const SLOW_ROUTES = ["/visibility", "/compare"];
+
+const WAIT_STEPS = [
+  "기업 정보를 확인하는 중",
+  "뉴스·특허·고용·공시 공개 정보를 모으는 중",
+  "결과를 정리하는 중",
+];
+
+const WAIT_NOTE =
+  "공개 데이터 응답이 늦어지고 있습니다. 기다리는 중이며, 받는 대로 화면이 표시됩니다.";
+
+function isSlow(path: string): boolean {
+  return SLOW_ROUTES.some((route) => path.startsWith(route));
+}
 
 // 상단 가로 절차 바 + 짧은 좌측 표제 + 하단 우측 액션.
 // 진단 흐름(STEP 1~6)의 모든 화면이 이 껍데기를 공유한다.
@@ -42,12 +61,25 @@ export default function StepShell({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col px-10 py-8">
-      <Link
-        href={backTo}
-        className="inline-flex items-center gap-1.5 self-start text-[13px] text-zinc-500 transition-colors hover:text-zinc-900"
-      >
-        ← {backLabel}
-      </Link>
+      {isSlow(backTo) ? (
+        <WaitingLink
+          href={backTo}
+          title="이전 화면을 불러오는 중"
+          steps={WAIT_STEPS}
+          slowNote={WAIT_NOTE}
+          className="inline-flex items-center gap-1.5 self-start text-[13px] text-zinc-500 transition-colors hover:text-zinc-900 disabled:opacity-70"
+        >
+          ← {backLabel}
+        </WaitingLink>
+      ) : (
+        <Link
+          href={backTo}
+          prefetch
+          className="inline-flex items-center gap-1.5 self-start text-[13px] text-zinc-500 transition-colors hover:text-zinc-900"
+        >
+          ← {backLabel}
+        </Link>
+      )}
 
       {/* 절차 — 가로 바 */}
       <nav className="mt-5 hidden border-t border-zinc-900 md:flex">
@@ -99,11 +131,32 @@ export default function StepShell({
             );
           }
 
+          const href = withCompany(flowStep.path, companyId);
+          const barClass =
+            "flex flex-1 items-center gap-2 py-3.5 transition-colors hover:bg-zinc-50";
+
+          if (isSlow(flowStep.path)) {
+            return (
+              <div key={flowStep.no} className="flex flex-1" style={barStyle}>
+                <WaitingLink
+                  href={href}
+                  title="이전 화면을 불러오는 중"
+                  steps={WAIT_STEPS}
+                  slowNote={WAIT_NOTE}
+                  className={`${barClass} disabled:opacity-70`}
+                >
+                  {content}
+                </WaitingLink>
+              </div>
+            );
+          }
+
           return (
             <Link
               key={flowStep.no}
-              href={withCompany(flowStep.path, companyId)}
-              className="flex flex-1 items-center gap-2 py-3.5 transition-colors hover:bg-zinc-50"
+              href={href}
+              prefetch
+              className={barClass}
               style={barStyle}
             >
               {content}

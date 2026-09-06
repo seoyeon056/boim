@@ -59,13 +59,25 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
   // 조회 한도에 걸린 축이 있으면 그 사실을 화면에 적는다.
   const capped = [
     visibility.patentCountIsAtLeast ? "특허 300건" : "",
-    visibility.newsCountIsAtLeast ? "뉴스 100건" : "",
     visibility.employeeCountIsAtLeast ? "국민연금 사업장 100곳" : "",
   ].filter((label) => label !== "");
-  const atLeastNote =
+
+  // 뉴스는 한도가 아니라 표본이다. 상위 몇 건을 확인했고 그중 몇 건이 이 기업
+  // 기사였는지, 그래서 전체 건수를 얼마나 낮춰 적었는지를 그대로 밝힌다.
+  const checked = visibility.newsChecked;
+  const newsNote =
+    checked && checked.matched < checked.sampled
+      ? `뉴스는 상위 ${checked.sampled}건을 확인한 결과 ${checked.matched}건이 이 기업 기사였습니다. 검색 전체 건수를 그 비율로 낮춰 적은 값입니다.`
+      : "";
+
+  const atLeastNote = [
     capped.length > 0
       ? `${capped.join("·")}까지 실제로 확인한 값입니다. 그보다 많으면 '이상'으로 표시하며, 넘는 만큼은 세지 않습니다.`
-      : "";
+      : "",
+    newsNote,
+  ]
+    .filter((line) => line !== "")
+    .join(" ");
 
   const score = visibility.visibilityScore;
 
