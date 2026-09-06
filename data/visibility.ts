@@ -12,6 +12,10 @@ export type ExternalPresence = {
   // 사실이 아닌 진단이 그대로 진단서까지 실린다(실측: LG생활건강 특허 5,282건이
   // KIPRIS 타임아웃 한 번에 0건으로 표시됨).
   unavailable?: ExternalSource[];
+  // 확인하지 못한 사유. "failed"는 부르지 못한 것(시간 초과·오류)이고,
+  // "not-found"는 불러 봤는데 해당 자료가 없거나 특정하지 못한 것이다.
+  // 화면이 이 둘에 서로 다른 문구를 쓴다. 없으면 기본 문구를 쓴다.
+  unavailableReason?: Partial<Record<ExternalSource, "failed" | "not-found">>;
   newsCount: number;
   // 네이버는 한 번에 최대 100건만 내려준다. total이 그보다 크고 표본에 무관
   // 기사가 섞여 있으면 전체를 검증할 방법이 없어, 확인된 건수만 "이상"으로
@@ -25,6 +29,8 @@ export type ExternalPresence = {
   // 국민연금 가입자 수. 채용공고 건수를 대신한다. 공고는 회사가 안 올리면
   // 0이지만 가입자 수는 의무 신고라 홍보를 안 하는 회사에도 남는다.
   employeeCount: number;
+  // 사업장이 한 페이지를 넘어 일부만 더한 값. patentCountIsAtLeast와 같은 의미다.
+  employeeCountIsAtLeast?: boolean;
   // 6개월 전 대비 증감(명). 비교할 과거 자료가 없으면 없다.
   employeeChange?: number;
   // 가입자 수의 기준 시점(YYYYMM).

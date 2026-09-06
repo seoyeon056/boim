@@ -1,22 +1,32 @@
 import Link from "next/link";
-import { getVisibility } from "@/lib/engine";
+import { getVisibilityWithSummary } from "@/lib/visibility-view";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
 import { ScoreCard } from "./score-card";
-import { generateVisibilityInsight } from "@/lib/llm/insights";
 
-// 국민연금 사업장명 검색이 9초 안팎으로 고정 지연이 있다(공공데이터포털 쪽
-// 응답 속도이고, 페이지 크기를 줄여도 같다). 배포 환경의 기본 함수 타임아웃에
-// 걸리면 고용 축만 "확인 불가"가 되는 게 아니라 화면 전체가 죽는다.
-export const maxDuration = 30;
+// 국민연금 사업장명 검색이 공공데이터포털 쪽 사정으로 느려질 때가 있다.
+// 배포본 실측(2026-09-05): LG전자 29.6초, SK하이닉스 19.2초, 삼성전자 17.2초.
+// 상한이 30초면 가장 느린 조회가 상한에 닿아 고용 축만 "확인 불가"가 되는 게
+// 아니라 화면 전체가 죽는다. 여유를 조금 두되, 사람이 기다릴 수 있는 선을
+// 넘지 않도록 40초로 둔다.
+//
+// 이 값은 상한일 뿐이라 평소 속도에는 영향이 없다. 3초에 끝나는 조회는 3초에
+// 끝난다.
+export const maxDuration = 40;
 
 export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const companyId = readCompanyId((await props.searchParams).company);
 
   let visibility;
+  let summary;
 
   try {
-    visibility = await getVisibility(companyId);
+    // 외부 조회와 AI 문장을 함께 받는다. 둘을 더한 시간이 아래 maxDuration 을
+    // 넘지 않도록 문장 쪽 상한을 줄이는 계산이 그 안에 있다(lib/visibility-view.ts).
+    ({ visibility, summary } = await getVisibilityWithSummary(
+      companyId,
+      maxDuration * 1000,
+    ));
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-12">
@@ -38,17 +48,24 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     );
   }
 
-  // LLM 호출이 실패해도(키 미등록, 네트워크 오류 등) 화면이 깨지지 않도록
-  // 기존 규칙 기반 문장(visibility.summary)을 fallback 으로 둔다.
+  // 문장을 이 화면과 함께 받는 이유.
   //
   // 예전에는 이 문장만 <Suspense> 로 흘려보내 점수부터 보여 줬는데, 그러면
   // 라우트가 스트리밍으로 쪼개진다. 이 Next 버전에서는 쪼개진 조각을 화면에
   // 붙이는 단계가 끝내 실행되지 않아, 주소를 직접 열거나 새로고침하면 화면이
   // "불러오는 중"에서 멈췄다(내용은 DOM 안에 숨어 있었다). 링크로 이동할 때만
-  // 정상이었다. 쪼개지지 않게 여기서 함께 기다린다.
-  const summary = await generateVisibilityInsight(visibility).catch(
-    () => visibility.summary,
-  );
+  // 정상이었다. 쪼개지지 않게 위에서 함께 기다린다.
+
+  // 조회 한도에 걸린 축이 있으면 그 사실을 화면에 적는다.
+  const capped = [
+    visibility.patentCountIsAtLeast ? "특허 300건" : "",
+    visibility.newsCountIsAtLeast ? "뉴스 100건" : "",
+    visibility.employeeCountIsAtLeast ? "국민연금 사업장 100곳" : "",
+  ].filter((label) => label !== "");
+  const atLeastNote =
+    capped.length > 0
+      ? `${capped.join("·")}까지 실제로 확인한 값입니다. 그보다 많으면 '이상'으로 표시하며, 넘는 만큼은 세지 않습니다.`
+      : "";
 
   const score = visibility.visibilityScore;
 
@@ -112,6 +129,17 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
             </div>
           ))}
         </div>
+
+        {/*
+          "N건 이상"이 왜 붙었는지 그 자리에서 말해 준다. 조회에 한도가 있어
+          그만큼까지만 실제로 세어 본 값이라는 뜻이지, 그 위를 모른다고 해서
+          추정치를 적은 것이 아니다. 한도에 걸리지 않은 기업에는 뜨지 않는다.
+        */}
+        {atLeastNote !== "" && (
+          <p className="mt-2 px-6 text-[12px] leading-5 text-zinc-400">
+            {atLeastNote}
+          </p>
+        )}
       </div>
 
       <p className="mt-5 max-w-3xl text-[16px] leading-[1.75] text-zinc-700">

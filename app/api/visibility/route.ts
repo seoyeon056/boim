@@ -3,10 +3,15 @@ import { getCorseHeaders } from "@/lib/cors";
 import { getVisibility } from "@/lib/engine";
 import { COMPANY_PARAM, readCompanyId } from "@/lib/company-link";
 
-// 국민연금 사업장명 검색이 9초 안팎으로 고정 지연이 있다(공공데이터포털 쪽
-// 응답 속도이고, 페이지 크기를 줄여도 같다). 배포 환경의 기본 함수 타임아웃에
-// 걸리면 고용 축만 "확인 불가"가 되는 게 아니라 화면 전체가 죽는다.
-export const maxDuration = 30;
+// 국민연금 사업장명 검색이 공공데이터포털 쪽 사정으로 느려질 때가 있다.
+// 배포본 실측(2026-09-05): LG전자 29.6초, SK하이닉스 19.2초, 삼성전자 17.2초.
+// 상한이 30초면 가장 느린 조회가 상한에 닿아 고용 축만 "확인 불가"가 되는 게
+// 아니라 화면 전체가 죽는다. 여유를 조금 두되, 사람이 기다릴 수 있는 선을
+// 넘지 않도록 40초로 둔다.
+//
+// 이 값은 상한일 뿐이라 평소 속도에는 영향이 없다. 3초에 끝나는 조회는 3초에
+// 끝난다.
+export const maxDuration = 40;
 
 export async function GET(request: NextRequest) {
     // 응답 데이터는 lib/engine.ts 에 있다. 서버 컴포넌트도 같은 함수를 쓴다.
