@@ -28,6 +28,8 @@ export type Diagnosis = {
 // isAtLeast는 "적어도 이만큼"이라는 뜻이다. 화면 카드가 "300건 이상"이라고
 // 적는 값을 진단서만 "300건"으로 쓰면, 하한을 확정 수치로 바꿔 말하게 된다.
 type Axis = {
+  // 어느 축인지. 확인하지 못한 축의 사유를 찾을 때 쓴다.
+  key: "news" | "patent" | "employment" | "disclosure";
   label: string;
   count: number;
   unit: string;
@@ -95,10 +97,22 @@ function describeExternal(visibility: Visibility): string {
 
   // 못 부른 축이 있으면 문장 끝에 그대로 밝힌다. 침묵하면 읽는 사람은 남은
   // 축만 보고 "이 회사는 그게 없구나"로 읽는다.
+  //
+  // 사유를 갈라 적는다. 예전에는 어느 축이든 "외부 서비스가 응답하지 않아"로
+  // 적었는데, 화면 표는 "전자공시 등록 법인에서 찾지 못함"이라고 하는데 같은
+  // 흐름의 진단서는 "응답하지 않아"라고 말하는 일이 실제로 있었다(한빛정밀
+  // 공시 축). 부르지 못한 것과 불러 봤는데 없는 것은 다른 말이다.
+  const reasonOf = (key: Axis["key"]) => visibility.unavailableReason?.[key];
+  const notFound = unknown.filter((axis) => reasonOf(axis.key) === "not-found");
+  const failed = unknown.filter((axis) => reasonOf(axis.key) !== "not-found");
+
   const unknownTail =
-    unknown.length === 0
+    (failed.length === 0
       ? ""
-      : ` ${josa(listAxes(unknown, false), "은/는")} 외부 서비스가 응답하지 않아 이번 진단에서 확인하지 못했습니다.`;
+      : ` ${josa(listAxes(failed, false), "은/는")} 외부 서비스가 응답하지 않아 이번 진단에서 확인하지 못했습니다.`) +
+    (notFound.length === 0
+      ? ""
+      : ` ${josa(listAxes(notFound, false), "은/는")} 해당 공개 자료에서 이 기업을 찾지 못했습니다.`);
 
   if (found.length === 0 && missing.length === 0) {
     return `외부 공개 정보를 이번 진단에서는 확인하지 못했습니다.${unknownTail}`;
