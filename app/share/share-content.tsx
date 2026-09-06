@@ -25,6 +25,7 @@ import {
 } from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
 import { LoadingSteps } from "@/app/loading-steps";
+import { WaitingLink } from "@/app/waiting-link";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 import { flowBelongsTo } from "@/lib/flow-owner";
 
@@ -65,6 +66,11 @@ const wonText = (amount: number): string => {
   if (amount >= 10000) return Math.round(amount / 10000).toLocaleString() + "만";
   return amount.toLocaleString();
 };
+
+const BACK_STEPS = [
+  "외부 공개 정보를 다시 확인하는 중",
+  "내부 신호와 나란히 맞추는 중",
+];
 
 const REPORT_STEPS = [
   "내부 거래에서 계산한 신호를 불러오는 중",
@@ -291,12 +297,20 @@ export function ShareContent({
       <div className="mx-auto w-full max-w-[840px] px-6 py-12 print:max-w-full print:px-0 print:py-0">
       {/* 화면 전용 네비 */}
       <div className="print:hidden">
-        <Link
+        {/*
+          되돌아가는 길도 기다림이 있다. 비교 화면은 서버에서 외부 공개 API 를
+          다시 확인하고 오므로, 링크로 두면 누른 뒤 멈춘 것처럼 보인다.
+        */}
+        <WaitingLink
           href={withCompany("/compare", companyId)}
-          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
+          title="비교 화면으로 돌아가는 중"
+          steps={BACK_STEPS}
+          slowNote="공개 데이터 응답이 늦어지고 있습니다. 기다리는 중이며, 받는 대로 비교 화면이 표시됩니다."
+          overlayTint="233,226,221"
+          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-600 disabled:opacity-70"
         >
           ← 이전으로
-        </Link>
+        </WaitingLink>
       </div>
 
       {/* ───── 문서 본체 ───── */}
