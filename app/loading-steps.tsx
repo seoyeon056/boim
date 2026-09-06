@@ -29,6 +29,7 @@ export function LoadingSteps({
   slowNote,
   showElapsed = false,
   overlay = false,
+  overlayTint = "246,241,237",
 }: {
   title: string;
   steps: string[];
@@ -42,6 +43,10 @@ export function LoadingSteps({
   // 화면 가운데에 띄운다. 다음 화면으로 넘어가는 동안처럼, 기다리는 것 말고
   // 할 수 있는 일이 없을 때만 쓴다.
   overlay?: boolean;
+  // 카드 주위로 번지는 빛의 색. 그 화면의 배경색과 같아야 가장자리가 보이지
+  // 않는다. 기본값은 앱 기본 배경(--background)이다. 진단서처럼 배경이 다른
+  // 화면은 자기 배경색을 넘긴다.
+  overlayTint?: string;
 }) {
   const isBrowser = useIsBrowser();
   const [index, setIndex] = useState(0);
@@ -204,8 +209,7 @@ export function LoadingSteps({
         padding: "0 1.5rem",
         // 어둡게 덮는 사각형 대신, 카드에서 배경색이 타원으로 번지게 해
         // 주변을 지운다. 가장자리가 완전히 투명해서 경계선이 보이지 않는다.
-        background:
-          "radial-gradient(ellipse 1000px 760px at center, rgba(246,241,237,0.97) 0%, rgba(246,241,237,0.86) 34%, rgba(246,241,237,0.42) 58%, rgba(246,241,237,0) 76%)",
+        background: `radial-gradient(ellipse 1000px 760px at center, rgba(${overlayTint},0.97) 0%, rgba(${overlayTint},0.86) 34%, rgba(${overlayTint},0.42) 58%, rgba(${overlayTint},0) 76%)`,
       }}
     >
       {card}
