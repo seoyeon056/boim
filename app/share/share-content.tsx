@@ -24,6 +24,7 @@ import {
   readUploadedSignals,
 } from "@/lib/uploaded-signals";
 import { restoreCustomerName } from "@/lib/llm/customer-mask";
+import { LoadingSteps } from "@/app/loading-steps";
 import { grantAiConsent, hasAiConsent } from "@/lib/ai-consent";
 import { flowBelongsTo } from "@/lib/flow-owner";
 
@@ -64,6 +65,12 @@ const wonText = (amount: number): string => {
   if (amount >= 10000) return Math.round(amount / 10000).toLocaleString() + "만";
   return amount.toLocaleString();
 };
+
+const REPORT_STEPS = [
+  "내부 거래에서 계산한 신호를 불러오는 중",
+  "외부 공개 정보를 확인하는 중",
+  "진단서 항목을 정리하는 중",
+];
 
 export function ShareContent({
   companyId,
@@ -215,18 +222,23 @@ export function ShareContent({
               </Link>
             </>
           ) : (
-            <>
-              <span
-                aria-hidden
-                className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600"
-              />
-              <p className="text-sm text-zinc-600">
-                진단서를 준비하는 중입니다…
-              </p>
-              <p className="text-xs text-zinc-500">
-                기업 정보와 성장 신호가 모두 준비되면 표시됩니다.
-              </p>
-            </>
+            /*
+              기다리는 동안 무엇을 하고 있는지, 몇 초가 지났는지 보여 준다.
+              이 화면도 외부 공개 API 를 다시 확인하고 오므로 캐시에 없으면
+              십수 초가 걸린다. 예전에는 돌아가는 원 하나와 "준비하는 중입니다…"
+              뿐이라 멈춘 것으로 보였다. Step 01·05 와 같은 카드를 쓴다.
+            */
+            <LoadingSteps
+              title="성장 진단서를 준비하는 중"
+              steps={REPORT_STEPS}
+              stepMs={3500}
+              slowAfterMs={12000}
+              slowNote="공개 데이터 응답이 늦어지고 있습니다. 기다리는 중이며, 받는 대로 진단서가 표시됩니다."
+              showElapsed
+              overlay
+              // 이 화면의 배경색. 번지는 빛이 배경과 같아야 경계가 안 보인다.
+              overlayTint="233,226,221"
+            />
           )}
         </div>
       </div>
