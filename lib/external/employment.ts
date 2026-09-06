@@ -35,6 +35,19 @@ const CHANGE_WINDOW_MONTHS = 6;
 // 그때마다 고용 축이 "확인 불가"가 되면서 가시성 점수가 25점과 30점을 오갔다.
 // 라우트에 maxDuration 30 을 걸어 두었으므로 20초까지는 안전하다.
 const SEARCH_TIMEOUT_MS = 20000;
+
+// 이 조회 하나가 통째로 쓸 수 있는 시간.
+//
+// 개별 상한만으로는 모자란다. 사업자번호로 못 찾아 한 번 더 검색하면 20초가 두
+// 번이 되고, 사업장이 많으면 상세 조회 묶음이 그 위에 또 얹힌다. 화면은 그 뒤에
+// AI 문장까지 기다리므로(12초), 라우트 상한 40초를 넘겨 화면 전체가 죽을 수
+// 있다. 고용 축 하나가 늦어서 나머지 세 축까지 못 보게 되는 것은 바꾼 적 없는
+// 원칙에 어긋난다 — 못 받은 축은 "확인 불가"로 빠지고 화면은 나와야 한다.
+//
+// 이 안에 못 끝내면 고용 축만 "확인 불가"가 되고 나머지 세 축은 그대로 나온다.
+// 뒤에 오는 AI 문장은 남은 시간만 쓰도록 되어 있어(app/visibility/page.tsx),
+// 이 값을 넉넉히 잡아도 라우트 상한을 넘기지 않는다.
+const LOOKUP_BUDGET_MS = 26000;
 const DETAIL_TIMEOUT_MS = 4000;
 
 // 조회 결과. "못 찾았다"와 "부르지 못했다"는 다른 상태다.
@@ -274,7 +287,11 @@ const DETAIL_RETRY_AFTER_MS = 1200;
 
 // 같은 사업자번호에 사업장이 여럿일 수 있다(본사·공장·부문). 그 달의 가입자
 // 수를 모두 더해야 회사 전체 고용 규모가 된다.
-async function headcountAt(rows: Row[], ym: string): Promise<number | null> {
+async function headcountAt(
+  rows: Row[],
+  ym: string,
+  msLeft: () => number,
+): Promise<number | null> {
   const target = rows.filter((row) => row.dataCrtYm === ym);
   if (target.length === 0) {
     return null;
@@ -282,12 +299,16 @@ async function headcountAt(rows: Row[], ym: string): Promise<number | null> {
 
   const details: (string | null)[] = [];
   for (let at = 0; at < target.length; at += DETAIL_BATCH) {
+    const budget = Math.min(DETAIL_TIMEOUT_MS, msLeft());
+    if (budget <= 0) {
+      return null;
+    }
     const batch = await Promise.all(
       target.slice(at, at + DETAIL_BATCH).map((row) =>
         callTwiceIfSlow(
           DETAIL,
           { seq: row.seq, numOfRows: "1" },
-          DETAIL_TIMEOUT_MS,
+          budget,
           DETAIL_RETRY_AFTER_MS,
         ),
       ),
@@ -328,6 +349,9 @@ export async function fetchEmployment(
     return { status: "not-found" };
   }
 
+  const deadline = Date.now() + LOOKUP_BUDGET_MS;
+  const msLeft = () => deadline - Date.now();
+
   // 사업장명은 한글로 등록된다("LG생활건강" → "(주)엘지생활건강"). 특허 쪽에서
   // 쓰는 것과 같은 변환이다. 어느 쪽으로 등록돼 있는지는 회사마다 달라서 두 이름을
   // 나란히 조회한다. 검색 호출이 9초쯤 걸리는데 병렬이라 벽시계 시간은 그대로다.
@@ -367,7 +391,11 @@ export async function fetchEmployment(
   ): Promise<{ rows: Row[]; truncated: boolean } | null> {
     const listings = await Promise.all(
       searchNames.map((word) =>
-        callTwiceIfSlow(SEARCH, searchParams(word, prefix), SEARCH_TIMEOUT_MS),
+        callTwiceIfSlow(
+          SEARCH,
+          searchParams(word, prefix),
+          Math.min(SEARCH_TIMEOUT_MS, Math.max(msLeft(), 0)),
+        ),
       ),
     );
 
@@ -471,13 +499,17 @@ export async function fetchEmployment(
   const months = [...new Set(owned.map((row) => row.dataCrtYm))].sort();
   const latest = months[months.length - 1];
 
-  const employeeCount = await headcountAt(owned, latest);
+  const employeeCount = await headcountAt(owned, latest, msLeft);
   if (employeeCount === null) {
     // 사업장은 찾았는데 상세 조회가 대답하지 않았다. 없는 게 아니다.
     return { status: "failed" };
   }
 
-  const past = await headcountAt(owned, shiftMonth(latest, CHANGE_WINDOW_MONTHS));
+  const past = await headcountAt(
+    owned,
+    shiftMonth(latest, CHANGE_WINDOW_MONTHS),
+    msLeft,
+  );
 
   return {
     status: "ok",

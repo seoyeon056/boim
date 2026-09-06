@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { getVisibility } from "@/lib/engine";
+import { getVisibilityWithSummary } from "@/lib/visibility-view";
 import { readCompanyId, withCompany } from "@/lib/company-link";
 import StepShell from "@/app/step-shell";
 import { ScoreCard } from "./score-card";
-import { generateVisibilityInsight } from "@/lib/llm/insights";
 
 // 국민연금 사업장명 검색이 공공데이터포털 쪽 사정으로 느려질 때가 있다.
 // 배포본 실측(2026-09-05): LG전자 29.6초, SK하이닉스 19.2초, 삼성전자 17.2초.
@@ -19,9 +18,15 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
   const companyId = readCompanyId((await props.searchParams).company);
 
   let visibility;
+  let summary;
 
   try {
-    visibility = await getVisibility(companyId);
+    // 외부 조회와 AI 문장을 함께 받는다. 둘을 더한 시간이 아래 maxDuration 을
+    // 넘지 않도록 문장 쪽 상한을 줄이는 계산이 그 안에 있다(lib/visibility-view.ts).
+    ({ visibility, summary } = await getVisibilityWithSummary(
+      companyId,
+      maxDuration * 1000,
+    ));
   } catch {
     return (
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-12">
@@ -43,17 +48,13 @@ export default async function VisibilityPage(props: PageProps<"/visibility">) {
     );
   }
 
-  // LLM 호출이 실패해도(키 미등록, 네트워크 오류 등) 화면이 깨지지 않도록
-  // 기존 규칙 기반 문장(visibility.summary)을 fallback 으로 둔다.
+  // 문장을 이 화면과 함께 받는 이유.
   //
   // 예전에는 이 문장만 <Suspense> 로 흘려보내 점수부터 보여 줬는데, 그러면
   // 라우트가 스트리밍으로 쪼개진다. 이 Next 버전에서는 쪼개진 조각을 화면에
   // 붙이는 단계가 끝내 실행되지 않아, 주소를 직접 열거나 새로고침하면 화면이
   // "불러오는 중"에서 멈췄다(내용은 DOM 안에 숨어 있었다). 링크로 이동할 때만
-  // 정상이었다. 쪼개지지 않게 여기서 함께 기다린다.
-  const summary = await generateVisibilityInsight(visibility).catch(
-    () => visibility.summary,
-  );
+  // 정상이었다. 쪼개지지 않게 위에서 함께 기다린다.
 
   // 조회 한도에 걸린 축이 있으면 그 사실을 화면에 적는다.
   const capped = [

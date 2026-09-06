@@ -50,6 +50,8 @@ function describeCounts(visibility: Visibility): string {
 
 export async function generateVisibilityInsight(
   visibility: Visibility,
+  // 이 문장에 쓸 수 있는 시간. 외부 조회가 오래 걸린 화면은 짧게 넘긴다.
+  timeoutMs?: number,
 ): Promise<string> {
   const prompt = `다음은 한 기업의 외부 가시성(공개 정보) 지표입니다. 이 수치만 근거로 2문장 이내로 해석 문장을 작성하세요. 숫자를 새로 만들지 마세요.
 
@@ -60,7 +62,7 @@ ${describeCounts(visibility)}`;
   // 10초씩 다시 쓰게 두지 않는다. 프롬프트 자체를 키로 삼으므로 수치가 바뀌면
   // 새로 쓴다(lib/external/cache.ts).
   return remember(`visibility-insight:${prompt}`, () =>
-    generateDiagnosisText(prompt),
+    generateDiagnosisText(prompt, timeoutMs),
   );
 }
 

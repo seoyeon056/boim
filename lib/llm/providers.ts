@@ -49,7 +49,12 @@ function toScreenTerms(text: string): string {
     );
 }
 
-export async function generateDiagnosisText(prompt: string): Promise<string> {
+export async function generateDiagnosisText(
+    prompt: string,
+    // 이 호출에 쓸 수 있는 시간. 화면이 이미 오래 기다린 뒤라면 짧게 넘긴다.
+    // 문장은 있으면 좋은 것이라, 시간이 모자라면 규칙 기반 문장으로 넘어간다.
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<string> {
     const completion = await getOpenAI().chat.completions.create({
         model: "gpt-5-nano", // 2026-08 기준 가장 저렴한 범용 채팅 모델 (입력 $0.05, 출력 $0.40 / 100만 토큰)
         messages: [{ role: "user", content: prompt }],
@@ -62,6 +67,9 @@ export async function generateDiagnosisText(prompt: string): Promise<string> {
         //
         // "minimal" 은 1.2초로 더 빠르지만 근거 없는 문장이 섞여 쓰지 않는다.
         reasoning_effort: "low",
+    }, {
+        // 클라이언트 기본 상한 대신 이 호출에만 쓰는 상한.
+        timeout: Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, timeoutMs)),
     });
     return toScreenTerms(completion.choices[0]?.message?.content ?? "");
 }
