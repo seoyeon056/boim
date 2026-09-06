@@ -21,6 +21,9 @@ export type ExternalPresence = {
   // 기사가 섞여 있으면 전체를 검증할 방법이 없어, 확인된 건수만 "이상"으로
   // 표시한다. patentCountIsAtLeast와 같은 의미다.
   newsCountIsAtLeast?: boolean;
+  // 상위 몇 건을 확인했고 그중 몇 건이 이 기업 기사였는지. 전체 건수를 비율로
+  // 낮춰 적은 경우, 화면이 그 근거를 그대로 보여 준다.
+  newsChecked?: { sampled: number; matched: number };
   patentCount: number;
   // KIPRIS는 한 번에 최대 500건만 내려준다. 이 값이 true면 patentCount는
   // "정확한 수치"가 아니라 "적어도 이만큼은 있다"는 뜻이다. 합성 데이터는

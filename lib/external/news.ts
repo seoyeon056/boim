@@ -23,6 +23,9 @@ const MAX_DISPLAY = 100;
 export type NewsCountResult = {
   count: number;
   isAtLeast: boolean;
+  // 상위 몇 건을 확인했고 그중 몇 건이 이 기업 기사였는지. 전체 건수를 비율로
+  // 낮춰 적었을 때, 화면이 그 근거를 그대로 보여 줄 수 있도록 함께 돌려준다.
+  checked?: { sampled: number; matched: number };
 };
 
 function toExactPhraseQuery(companyName: string): string {
@@ -97,18 +100,27 @@ export async function fetchNewsCount(
       return { count: matchingCount, isAtLeast: false };
     }
 
-    // total이 100을 넘으면 나머지는 못 본다. 대신 받은 100건이 전부 실제로 그
-    // 회사 기사라면 따옴표 필터가 이 검색어에서는 깨끗하게 동작한다는 뜻이라
-    // total을 그대로 신뢰한다. 실측한 100건 초과 사례(LG생활건강·LG CNS·
-    // LG유플러스·동일기연·아모텍·성우전자·한국첨단소재·제이앤티씨·코아스템켐온)는
-    // 전부 100/100이었다.
-    if (matchingCount === items.length) {
-      return { count: data.total, isAtLeast: false };
-    }
+    // total이 100을 넘으면 나머지는 못 본다. 확인한 비율만큼 전체 건수를 낮춘다.
+    //
+    // 예전에는 100건이 전부 그 회사 기사이면 total 을 그대로 쓰고, 한 건이라도
+    // 섞이면 확인된 건수만 "이상"으로 적었다. 그러면 한 건 차이로 값이 통째로
+    // 바뀐다. 실측: 삼성물산 100/100 → 682,401건, LG헬로비전 99/100 → 99건.
+    // 같은 축이 여섯 자리와 두 자리를 오가는데, 그 차이가 실제 노출량이 아니라
+    // 상호가 얼마나 흔한지에서 온다.
+    //
+    // 확인한 비율을 전체에 곱하면 값이 이어진다(99/100 이면 total 의 99%).
+    // 상위 100건은 관련도순이라 뒤로 갈수록 더 섞일 수 있으므로 이 값은 여전히
+    // 위쪽으로 치우친 추정이다. 그래서 몇 건 중 몇 건을 확인했는지를 함께
+    // 돌려주고, 화면이 그 근거를 적는다.
+    const checked = { sampled: items.length, matched: matchingCount };
+    const estimated = Math.round(data.total * (matchingCount / items.length));
 
-    // 표본이 오염됐는데 전체는 볼 수 없는 경우. total을 그대로 쓰면 부풀린 값을
-    // 정확한 수치인 양 내보내게 되니, 확인된 건수만 "이상"으로 표시한다.
-    return { count: matchingCount, isAtLeast: true };
+    return {
+      // 확인한 것보다 작게 적지는 않는다.
+      count: Math.max(estimated, matchingCount),
+      isAtLeast: false,
+      checked,
+    };
   } catch {
     // 네트워크 오류, 타임아웃 등 — 화면은 합성 데이터로 계속 동작해야 한다.
     return null;
